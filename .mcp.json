@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "ctx7sk-1690b56a-b884-4096-a945-caa6e6039a4b"
+      }
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "@playwright/mcp@latest"
+      ],
+      "env": {}
+    }
+  }
+}
