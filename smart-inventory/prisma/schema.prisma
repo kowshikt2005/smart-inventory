@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id              Int      @id @default(autoincrement())
+  name            String
+  email           String?
+  phone           String?  @db.VarChar(20)
+  gstin           String   @unique @db.Char(15)
+  state           String
+  stateCode       String   @db.Char(2)
+  city            String
+  addressLine1    String
+  addressLine2    String?
+  openingBalance  Decimal  @default(0.00) @db.Decimal(12, 2)
+  openingAsOfDate DateTime
+  creditDays      Int      @default(0)
+  creditLimit     Decimal  @default(0.00) @db.Decimal(12, 2)
+  hasPriceList    Boolean  @default(false)
+  rateSheet       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([name])
+  @@index([gstin])
+  @@index([city])
+}

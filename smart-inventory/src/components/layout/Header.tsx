@@ -25,31 +25,6 @@ export function Header() {
           </div>
 
           {/* Add Button */}
-          <Button size="icon" className="bg-green-600 hover:bg-green-700">
-            <Plus className="h-5 w-5" />
-          </Button>
-        </div>
-
-        {/* Right Section */}
-        <div className="flex items-center gap-4">
-          {/* Company Name */}
-          <div className="flex flex-col items-end">
-            <h2 className="text-sm font-semibold text-gray-900">
-              Raga Bakery & Restaurant
-            </h2>
-            <span className="text-xs text-gray-500">Kerala</span>
-          </div>
-
-          {/* Profile Icons */}
-          <div className="flex items-center gap-2">
-            <button className="rounded-full bg-teal-600 p-2 text-white hover:bg-teal-700">
-              <span className="text-xs font-medium">OB</span>
-            </button>
-
-            <button className="rounded-full border border-gray-300 p-2 hover:bg-gray-50">
-              <User className="h-4 w-4 text-gray-600" />
-            </button>
-          </div>
         </div>
       </div>
     </header>

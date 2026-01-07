@@ -45,7 +45,7 @@ export function Sidebar() {
           </svg>
         </div>
         <div>
-          <h1 className="text-gray-900 font-bold text-lg">LedgerZen</h1>
+          <h1 className="text-gray-900 font-bold text-lg"></h1>
         </div>
       </div>
 
@@ -156,18 +156,6 @@ export function Sidebar() {
         </div>
       </nav>
 
-      {/* User Profile at Bottom */}
-      <div className="border-t border-gray-200 p-4">
-        <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 hover:bg-gray-100 transition-colors">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800 text-white">
-            <span className="text-sm font-semibold">N</span>
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-medium text-gray-900">Admin</p>
-            <p className="text-xs text-gray-500">Administrator</p>
-          </div>
-        </button>
-      </div>
     </aside>
   );
 }
