@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-// GET /api/customers - Get all customers with optional search and pagination
+// GET /api/vendors - Get all vendors with optional search and pagination
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -19,24 +19,23 @@ export async function GET(request: Request) {
             { city: { contains: search } },
             { state: { contains: search } },
             { email: { contains: search } },
-            { customerNumber: { contains: search } },
           ],
         }
       : {};
 
-    // Get customers with pagination
-    const [customers, total] = await Promise.all([
-      db.customer.findMany({
+    // Get vendors with pagination
+    const [vendors, total] = await Promise.all([
+      db.vendor.findMany({
         where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
       }),
-      db.customer.count({ where }),
+      db.vendor.count({ where }),
     ]);
 
     return NextResponse.json({
-      customers,
+      vendors,
       pagination: {
         page,
         limit,
@@ -45,26 +44,21 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    console.error('Error fetching customers:', error);
+    console.error('Error fetching vendors:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch customers' },
+      { error: 'Failed to fetch vendors' },
       { status: 500 }
     );
   }
 }
 
-// POST /api/customers - Create a new customer
+// POST /api/vendors - Create a new vendor
 export async function POST(request: Request) {
   try {
     const body = await request.json();
 
     // Validate required fields
-    const requiredFields = [
-      'name',
-      'gstin',
-      'state',
-      'city',
-    ];
+    const requiredFields = ['name'];
 
     for (const field of requiredFields) {
       if (!body[field]) {
@@ -75,7 +69,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Validate GSTIN format (15 characters)
+    // Validate GSTIN format if provided (15 characters)
     if (body.gstin && body.gstin.length !== 15) {
       return NextResponse.json(
         { error: 'GSTIN must be exactly 15 characters' },
@@ -83,39 +77,55 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create customer
-    const customer = await db.customer.create({
+    // Generate vendor number (VEN-xxxx format)
+    // Get the latest vendor number
+    const latestVendor = await db.vendor.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: { vendorNumber: true },
+    });
+
+    let nextNumber = 1;
+    if (latestVendor && latestVendor.vendorNumber) {
+      const match = latestVendor.vendorNumber.match(/VEN-(\d+)/);
+      if (match) {
+        nextNumber = parseInt(match[1]) + 1;
+      }
+    }
+
+    const vendorNumber = `VEN-${nextNumber.toString().padStart(4, '0')}`;
+
+    // Create vendor
+    const vendor = await db.vendor.create({
       data: {
-        customerNumber: `customer-${Date.now()}`, // Generate customer number
+        vendorNumber,
         name: body.name,
         email: body.email || null,
         phone: body.phone || null,
-        gstin: body.gstin,
-        state: body.state,
-        city: body.city,
-        address: `${body.addressLine1}${body.addressLine2 ? ', ' + body.addressLine2 : ''}`,
+        gstin: body.gstin || null,
+        state: body.state || null,
+        city: body.city || null,
+        address: body.address || null,
         pincode: body.pincode || null,
-        openingBalance: body.openingBalance || 0,
         creditDays: body.creditDays || 0,
-        creditLimit: body.creditLimit || 0,
-        status: 'ACTIVE',
+        openingBalance: body.openingBalance || 0,
+        isActive: body.isActive ?? true,
       },
     });
 
-    return NextResponse.json(customer, { status: 201 });
+    return NextResponse.json(vendor, { status: 201 });
   } catch (error: any) {
-    console.error('Error creating customer:', error);
+    console.error('Error creating vendor:', error);
 
-    // Handle unique constraint violation (duplicate GSTIN)
+    // Handle unique constraint violation
     if (error.code === 'P2002') {
       return NextResponse.json(
-        { error: 'A customer with this GSTIN already exists' },
+        { error: 'A vendor with this information already exists' },
         { status: 409 }
       );
     }
 
     return NextResponse.json(
-      { error: 'Failed to create customer' },
+      { error: 'Failed to create vendor' },
       { status: 500 }
     );
   }

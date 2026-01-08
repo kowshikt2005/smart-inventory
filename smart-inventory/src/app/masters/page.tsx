@@ -93,11 +93,36 @@ export default function MastersPage() {
                 {category.description}
               </p>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="flex-1">
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => {
+                    if (category.name === 'Customers') {
+                      window.location.href = '/masters/customers';
+                    } else if (category.name === 'Suppliers') {
+                      window.location.href = '/masters/vendors';
+                    } else if (category.name === 'Items/Products') {
+                      window.location.href = '/masters/items';
+                    }
+                  }}
+                >
                   <Search className="h-4 w-4 mr-1" />
                   View
                 </Button>
-                <Button size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700">
+                <Button 
+                  size="sm" 
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  onClick={() => {
+                    if (category.name === 'Customers') {
+                      window.location.href = '/masters/customers';
+                    } else if (category.name === 'Suppliers') {
+                      window.location.href = '/masters/vendors';
+                    } else if (category.name === 'Items/Products') {
+                      window.location.href = '/masters/items/new';
+                    }
+                  }}
+                >
                   <Plus className="h-4 w-4 mr-1" />
                   Add New
                 </Button>

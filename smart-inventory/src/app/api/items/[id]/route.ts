@@ -1,0 +1,177 @@
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+
+// GET /api/items/[id] - Get a specific item
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const item = await db.item.findUnique({
+      where: { id },
+      include: {
+        brand: true,
+        subBrand: true,
+        inventory: true,
+      },
+    });
+
+    if (!item) {
+      return NextResponse.json(
+        { error: 'Item not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(item);
+  } catch (error) {
+    console.error('Error fetching item:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch item' },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT /api/items/[id] - Update an item
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+
+    // Check if item exists
+    const existingItem = await db.item.findUnique({
+      where: { id },
+    });
+
+    if (!existingItem) {
+      return NextResponse.json(
+        { error: 'Item not found' },
+        { status: 404 }
+      );
+    }
+
+    // Check if item code is being changed and if it already exists
+    if (body.itemCode && body.itemCode !== existingItem.itemCode) {
+      const duplicateItem = await db.item.findUnique({
+        where: { itemCode: body.itemCode },
+      });
+
+      if (duplicateItem) {
+        return NextResponse.json(
+          { error: 'Item code already exists' },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Update item and inventory
+    const updatedItem = await db.$transaction(async (tx) => {
+      // Update the item
+      const item = await tx.item.update({
+        where: { id },
+        data: {
+          itemCode: body.itemCode || existingItem.itemCode,
+          name: body.name || existingItem.name,
+          description: body.description !== undefined ? body.description : existingItem.description,
+          brandId: body.brandId !== undefined ? body.brandId : existingItem.brandId,
+          subBrandId: body.subBrandId !== undefined ? body.subBrandId : existingItem.subBrandId,
+          hsnCode: body.hsnCode !== undefined ? body.hsnCode : existingItem.hsnCode,
+          gstRate: body.gstRate !== undefined ? body.gstRate : existingItem.gstRate,
+          standardPrice: body.standardPrice !== undefined ? body.standardPrice : existingItem.standardPrice,
+          purchasePrice: body.purchasePrice !== undefined ? body.purchasePrice : existingItem.purchasePrice,
+          minStock: body.minStock !== undefined ? body.minStock : existingItem.minStock,
+          unit: body.unit || existingItem.unit,
+          isActive: body.isActive !== undefined ? body.isActive : existingItem.isActive,
+        },
+        include: {
+          brand: true,
+          subBrand: true,
+        },
+      });
+
+      // Update inventory min stock level if changed
+      if (body.minStock !== undefined) {
+        await tx.inventory.update({
+          where: { itemId: id },
+          data: {
+            minStockLevel: body.minStock,
+          },
+        });
+      }
+
+      return item;
+    });
+
+    return NextResponse.json(updatedItem);
+  } catch (error: any) {
+    console.error('Error updating item:', error);
+
+    if (error.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'Item code already exists' },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: 'Failed to update item' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/items/[id] - Delete an item
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    // Check if item exists
+    const existingItem = await db.item.findUnique({
+      where: { id },
+      include: {
+        salesOrderItems: true,
+        purchaseOrderItems: true,
+        rateSheets: true,
+      },
+    });
+
+    if (!existingItem) {
+      return NextResponse.json(
+        { error: 'Item not found' },
+        { status: 404 }
+      );
+    }
+
+    // Check if item is being used in any transactions
+    if (
+      existingItem.salesOrderItems.length > 0 ||
+      existingItem.purchaseOrderItems.length > 0 ||
+      existingItem.rateSheets.length > 0
+    ) {
+      return NextResponse.json(
+        { error: 'Cannot delete item that is being used in transactions' },
+        { status: 400 }
+      );
+    }
+
+    // Delete item (inventory will be deleted due to cascade)
+    await db.item.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ message: 'Item deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting item:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete item' },
+      { status: 500 }
+    );
+  }
+}

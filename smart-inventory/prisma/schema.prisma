@@ -1,3 +1,6 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma"
@@ -8,27 +11,512 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  SALESMAN
+  BILLING_OPERATOR
+  ACCOUNTANT
+  MANAGER
+  ADMIN
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum SalesOrderStatus {
+  OPEN
+  DELIVER
+  HOLD
+  REJECT
+  DELIVERED
+}
+
+enum StockMovementType {
+  PURCHASE
+  SALE
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  RETURN
+  DAMAGE
+  TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+}
+
+enum PaymentMode {
+  CASH
+  BANK_TRANSFER
+  CHEQUE
+  UPI
+  CARD
+  OTHER
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      UserRole @default(SALESMAN)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  salesOrders       SalesOrder[]
+  stockJournals     StockJournal[]
+  orderStatusHistory OrderStatusHistory[]
+
+  @@map("users")
+}
+
+// ============================================
+// CUSTOMER MANAGEMENT
+// ============================================
+
 model Customer {
-  id              Int      @id @default(autoincrement())
-  name            String
-  email           String?
-  phone           String?  @db.VarChar(20)
-  gstin           String   @unique @db.Char(15)
-  state           String
-  stateCode       String   @db.Char(2)
-  city            String
-  addressLine1    String
-  addressLine2    String?
-  openingBalance  Decimal  @default(0.00) @db.Decimal(12, 2)
-  openingAsOfDate DateTime
-  creditDays      Int      @default(0)
-  creditLimit     Decimal  @default(0.00) @db.Decimal(12, 2)
-  hasPriceList    Boolean  @default(false)
-  rateSheet       String?
+  id             String         @id @default(uuid())
+  customerNumber String         @unique // customer-xxxx
+  name           String
+  gstin          String?        @db.VarChar(15) // 15-digit GST number
+  email          String?
+  phone          String?
+  address        String?        @db.Text
+  city           String?
+  state          String?
+  pincode        String?
+  creditLimit    Decimal        @default(0) @db.Decimal(15, 2)
+  creditDays     Int            @default(0)
+  openingBalance Decimal        @default(0) @db.Decimal(15, 2)
+  status         CustomerStatus @default(ACTIVE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // Relations
+  salesOrders SalesOrder[]
+  invoices    Invoice[]
+  payments    Payment[]
+  rateSheets  RateSheet[]
+
+  @@index([customerNumber])
+  @@index([gstin])
+  @@map("customers")
+}
+
+// ============================================
+// VENDOR/SUPPLIER MANAGEMENT
+// ============================================
+
+model Vendor {
+  id             String   @id @default(uuid())
+  vendorNumber   String   @unique // vendor-xxxx
+  name           String
+  gstin          String?  @db.VarChar(15)
+  email          String?
+  phone          String?
+  address        String?  @db.Text
+  city           String?
+  state          String?
+  pincode        String?
+  creditDays     Int      @default(0)
+  openingBalance Decimal  @default(0) @db.Decimal(15, 2)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  purchaseOrders PurchaseOrder[]
+
+  @@index([vendorNumber])
+  @@index([gstin])
+  @@map("vendors")
+}
+
+// ============================================
+// ITEM/PRODUCT MANAGEMENT
+// ============================================
+
+model Brand {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  items     Item[]
+  subBrands SubBrand[]
+
+  @@map("brands")
+}
+
+model SubBrand {
+  id        String   @id @default(uuid())
+  name      String
+  brandId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  brand Brand  @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  items Item[]
+
+  @@unique([name, brandId])
+  @@index([brandId])
+  @@map("sub_brands")
+}
+
+model Item {
+  id            String   @id @default(uuid())
+  itemCode      String   @unique // item-xxxx
+  name          String
+  description   String?  @db.Text
+  brandId       String?
+  subBrandId    String?
+  hsnCode       String?  @db.VarChar(8) // HSN/SAC code for GST
+  gstRate       Decimal  @default(0) @db.Decimal(5, 2) // GST percentage
+  standardPrice Decimal  @default(0) @db.Decimal(15, 2)
+  purchasePrice Decimal  @default(0) @db.Decimal(15, 2)
+  minStock      Decimal  @default(0) @db.Decimal(15, 3)
+  unit          String   @default("PCS") // PCS, KG, LTR, etc.
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  brand            Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  subBrand         SubBrand?           @relation(fields: [subBrandId], references: [id], onDelete: SetNull)
+  inventory        Inventory?
+  salesOrderItems  SalesOrderItem[]
+  rateSheets       RateSheet[]
+  stockMovements   StockMovement[]
+  purchaseOrderItems PurchaseOrderItem[]
+
+  @@index([itemCode])
+  @@index([brandId])
+  @@index([subBrandId])
+  @@index([hsnCode])
+  @@map("items")
+}
+
+// ============================================
+// INVENTORY MANAGEMENT (Virtual Counter System)
+// ============================================
+
+model Inventory {
+  id                String   @id @default(uuid())
+  itemId            String   @unique
+  physicalStock     Decimal  @default(0) @db.Decimal(15, 3) // Actual warehouse stock
+  reservedQuantity  Decimal  @default(0) @db.Decimal(15, 3) // Reserved by sales orders
+  // virtualAvailable = physicalStock - reservedQuantity (computed in application)
+  minStockLevel     Decimal  @default(0) @db.Decimal(15, 3)
+  lastUpdated       DateTime @updatedAt
+
+  // Relations
+  item           Item            @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  stockMovements StockMovement[]
+
+  @@index([itemId])
+  @@map("inventory")
+}
+
+model StockMovement {
+  id            String            @id @default(uuid())
+  inventoryId   String
+  itemId        String
+  quantity      Decimal           @db.Decimal(15, 3)
+  type          StockMovementType
+  referenceType String? // e.g., "SALES_ORDER", "PURCHASE_ORDER", "STOCK_JOURNAL"
+  referenceId   String? // ID of the related document
+  notes         String?           @db.Text
+  createdAt     DateTime          @default(now())
+  createdBy     String?
+
+  // Relations
+  inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  item      Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryId])
+  @@index([itemId])
+  @@index([referenceType, referenceId])
+  @@map("stock_movements")
+}
+
+model StockJournal {
+  id            String            @id @default(uuid())
+  journalNumber String            @unique // SJ-xxxx
+  date          DateTime
+  itemId        String
+  quantity      Decimal           @db.Decimal(15, 3)
+  type          StockMovementType
+  reason        String?           @db.Text
+  createdAt     DateTime          @default(now())
+  createdBy     String
+
+  // Relations
+  user User @relation(fields: [createdBy], references: [id])
+
+  @@index([journalNumber])
+  @@index([date])
+  @@map("stock_journals")
+}
+
+// ============================================
+// SALES ORDER MANAGEMENT (4-State Workflow)
+// ============================================
+
+model SalesOrder {
+  id               String            @id @default(uuid())
+  orderNumber      String            @unique // SO-xxxx
+  orderDate        DateTime
+  customerId       String
+  expectedDelivery DateTime?
+  referenceNumber  String?
+  status           SalesOrderStatus  @default(OPEN)
+  subtotal         Decimal           @default(0) @db.Decimal(15, 2)
+  discountAmount   Decimal           @default(0) @db.Decimal(15, 2)
+  taxAmount        Decimal           @default(0) @db.Decimal(15, 2)
+  totalAmount      Decimal           @default(0) @db.Decimal(15, 2)
+  notes            String?           @db.Text
+  terms            String?           @db.Text
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  createdBy        String
+
+  // Relations
+  customer       Customer             @relation(fields: [customerId], references: [id])
+  user           User                 @relation(fields: [createdBy], references: [id])
+  items          SalesOrderItem[]
+  invoice        Invoice?
+  statusHistory  OrderStatusHistory[]
+
+  @@index([orderNumber])
+  @@index([customerId])
+  @@index([status])
+  @@index([orderDate])
+  @@map("sales_orders")
+}
+
+model SalesOrderItem {
+  id            String  @id @default(uuid())
+  salesOrderId  String
+  itemId        String
+  quantity      Decimal @db.Decimal(15, 3)
+  rate          Decimal @db.Decimal(15, 2)
+  discountPercent Decimal @default(0) @db.Decimal(5, 2)
+  taxRate       Decimal @default(0) @db.Decimal(5, 2)
+  taxAmount     Decimal @default(0) @db.Decimal(15, 2)
+  amount        Decimal @default(0) @db.Decimal(15, 2)
+
+  // Relations
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  item       Item       @relation(fields: [itemId], references: [id])
+
+  @@index([salesOrderId])
+  @@index([itemId])
+  @@map("sales_order_items")
+}
+
+model OrderStatusHistory {
+  id           String            @id @default(uuid())
+  salesOrderId String
+  fromStatus   SalesOrderStatus?
+  toStatus     SalesOrderStatus
+  reason       String?           @db.Text
+  changedAt    DateTime          @default(now())
+  changedBy    String
+
+  // Relations
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [changedBy], references: [id])
+
+  @@index([salesOrderId])
+  @@index([changedAt])
+  @@map("order_status_history")
+}
+
+// ============================================
+// PURCHASE ORDER MANAGEMENT
+// ============================================
+
+model PurchaseOrder {
+  id              String   @id @default(uuid())
+  orderNumber     String   @unique // PO-xxxx
+  orderDate       DateTime
+  vendorId        String
+  expectedDelivery DateTime?
+  status          String   @default("PENDING") // PENDING, RECEIVED, PARTIAL, CANCELLED
+  subtotal        Decimal  @default(0) @db.Decimal(15, 2)
+  taxAmount       Decimal  @default(0) @db.Decimal(15, 2)
+  totalAmount     Decimal  @default(0) @db.Decimal(15, 2)
+  notes           String?  @db.Text
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  @@index([name])
-  @@index([gstin])
-  @@index([city])
+  // Relations
+  vendor Vendor              @relation(fields: [vendorId], references: [id])
+  items  PurchaseOrderItem[]
+
+  @@index([orderNumber])
+  @@index([vendorId])
+  @@index([orderDate])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String  @id @default(uuid())
+  purchaseOrderId String
+  itemId          String
+  quantity        Decimal @db.Decimal(15, 3)
+  rate            Decimal @db.Decimal(15, 2)
+  taxRate         Decimal @default(0) @db.Decimal(5, 2)
+  taxAmount       Decimal @default(0) @db.Decimal(15, 2)
+  amount          Decimal @default(0) @db.Decimal(15, 2)
+
+  // Relations
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  item          Item          @relation(fields: [itemId], references: [id])
+
+  @@index([purchaseOrderId])
+  @@index([itemId])
+  @@map("purchase_order_items")
+}
+
+// ============================================
+// RATE SHEET MANAGEMENT (Customer-specific Pricing)
+// ============================================
+
+model RateSheet {
+  id         String    @id @default(uuid())
+  customerId String
+  itemId     String
+  rate       Decimal   @db.Decimal(15, 2)
+  discount   Decimal   @default(0) @db.Decimal(5, 2)
+  validFrom  DateTime
+  validTo    DateTime?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  item     Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, itemId, validFrom])
+  @@index([customerId])
+  @@index([itemId])
+  @@index([validFrom, validTo])
+  @@map("rate_sheets")
+}
+
+// ============================================
+// INVOICE & PAYMENT MANAGEMENT
+// ============================================
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique // INV-xxxx
+  invoiceDate   DateTime
+  salesOrderId  String        @unique
+  customerId    String
+  subtotal      Decimal       @default(0) @db.Decimal(15, 2)
+  taxAmount     Decimal       @default(0) @db.Decimal(15, 2)
+  totalAmount   Decimal       @default(0) @db.Decimal(15, 2)
+  paidAmount    Decimal       @default(0) @db.Decimal(15, 2)
+  balanceAmount Decimal       @default(0) @db.Decimal(15, 2)
+  paymentStatus PaymentStatus @default(PENDING)
+  dueDate       DateTime?
+  notes         String?       @db.Text
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id])
+  customer   Customer   @relation(fields: [customerId], references: [id])
+  payments   Payment[]
+
+  @@index([invoiceNumber])
+  @@index([customerId])
+  @@index([invoiceDate])
+  @@index([paymentStatus])
+  @@map("invoices")
+}
+
+model Payment {
+  id              String      @id @default(uuid())
+  paymentNumber   String      @unique // PAY-xxxx
+  paymentDate     DateTime
+  customerId      String
+  invoiceId       String?
+  amount          Decimal     @db.Decimal(15, 2)
+  mode            PaymentMode
+  referenceNumber String? // Cheque number, transaction ID, etc.
+  notes           String?     @db.Text
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id])
+  invoice  Invoice? @relation(fields: [invoiceId], references: [id])
+
+  @@index([paymentNumber])
+  @@index([customerId])
+  @@index([invoiceId])
+  @@index([paymentDate])
+  @@map("payments")
+}
+
+// ============================================
+// EMPLOYEE MANAGEMENT
+// ============================================
+
+model Employee {
+  id          String   @id @default(uuid())
+  employeeNumber String @unique // EMP-xxxx
+  name        String
+  email       String?  @unique
+  phone       String?
+  designation String?
+  department  String?
+  salary      Decimal? @db.Decimal(15, 2)
+  joinDate    DateTime
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([employeeNumber])
+  @@map("employees")
+}
+
+// ============================================
+// BANK ACCOUNT MANAGEMENT
+// ============================================
+
+model BankAccount {
+  id            String   @id @default(uuid())
+  accountName   String
+  accountNumber String   @unique
+  bankName      String
+  ifscCode      String
+  branch        String?
+  balance       Decimal  @default(0) @db.Decimal(15, 2)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([accountNumber])
+  @@map("bank_accounts")
 }

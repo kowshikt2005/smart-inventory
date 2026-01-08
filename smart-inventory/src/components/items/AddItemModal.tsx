@@ -1,0 +1,499 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { X } from "lucide-react";
+
+interface Brand {
+  id: string;
+  name: string;
+}
+
+interface SubBrand {
+  id: string;
+  name: string;
+  brandId: string;
+}
+
+interface AddItemModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess?: () => void;
+}
+
+export function AddItemModal({
+  isOpen,
+  onClose,
+  onSuccess,
+}: AddItemModalProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [subBrands, setSubBrands] = useState<SubBrand[]>([]);
+  const [filteredSubBrands, setFilteredSubBrands] = useState<SubBrand[]>([]);
+  const firstInputRef = useRef<HTMLInputElement>(null);
+
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    brandId: "",
+    subBrandId: "",
+    hsnCode: "",
+    gstRate: "18",
+    standardPrice: "0",
+    purchasePrice: "0",
+    minStock: "0",
+    unit: "PCS",
+  });
+
+  // Fetch brands and sub-brands when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchBrands();
+      fetchAllSubBrands();
+    }
+  }, [isOpen]);
+
+  // Filter sub-brands when brand changes
+  useEffect(() => {
+    if (formData.brandId) {
+      const filtered = subBrands.filter(sb => sb.brandId === formData.brandId);
+      setFilteredSubBrands(filtered);
+      // Reset sub-brand selection if current selection doesn't belong to selected brand
+      if (formData.subBrandId && !filtered.find(sb => sb.id === formData.subBrandId)) {
+        setFormData(prev => ({ ...prev, subBrandId: "" }));
+      }
+    } else {
+      setFilteredSubBrands([]);
+      setFormData(prev => ({ ...prev, subBrandId: "" }));
+    }
+  }, [formData.brandId, subBrands]);
+
+  const fetchBrands = async () => {
+    try {
+      const response = await fetch("/api/brands");
+      if (response.ok) {
+        const data = await response.json();
+        setBrands(data.brands || []);
+      }
+    } catch (error) {
+      console.error("Error fetching brands:", error);
+    }
+  };
+
+  const fetchAllSubBrands = async () => {
+    try {
+      // Fetch sub-brands for all brands
+      const response = await fetch("/api/brands");
+      if (response.ok) {
+        const brandsData = await response.json();
+        const allSubBrands: SubBrand[] = [];
+
+        for (const brand of brandsData.brands || []) {
+          try {
+            const subBrandResponse = await fetch(`/api/brands/${brand.id}/sub-brands`);
+            if (subBrandResponse.ok) {
+              const subBrandData = await subBrandResponse.json();
+              allSubBrands.push(...subBrandData.subBrands);
+            }
+          } catch (error) {
+            console.error(`Error fetching sub-brands for brand ${brand.id}:`, error);
+          }
+        }
+
+        setSubBrands(allSubBrands);
+      }
+    } catch (error) {
+      console.error("Error fetching sub-brands:", error);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/items", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description || null,
+          brandId: formData.brandId || null,
+          subBrandId: formData.subBrandId || null,
+          hsnCode: formData.hsnCode || null,
+          gstRate: parseFloat(formData.gstRate) || 0,
+          standardPrice: parseFloat(formData.standardPrice) || 0,
+          purchasePrice: parseFloat(formData.purchasePrice) || 0,
+          minStock: parseFloat(formData.minStock) || 0,
+          unit: formData.unit,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to create item");
+      }
+
+      // Success
+      onSuccess?.();
+      onClose();
+
+      // Reset form
+      setFormData({
+        name: "",
+        description: "",
+        brandId: "",
+        subBrandId: "",
+        hsnCode: "",
+        gstRate: "18",
+        standardPrice: "0",
+        purchasePrice: "0",
+        minStock: "0",
+        unit: "PCS",
+      });
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleSelectChange = (name: string, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // Handle Escape key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isOpen) {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [isOpen, onClose]);
+
+  // Focus first input when modal opens
+  useEffect(() => {
+    if (isOpen && firstInputRef.current) {
+      setTimeout(() => {
+        firstInputRef.current?.focus();
+      }, 100);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-gray-900">Add New Item</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+              {error}
+            </div>
+          )}
+
+          {/* Basic Information */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              Basic Information
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label
+                  htmlFor="item-name"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Item Name <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  id="item-name"
+                  ref={firstInputRef}
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  placeholder="Enter item name"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label
+                  htmlFor="item-description"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Description
+                </label>
+                <Input
+                  id="item-description"
+                  type="text"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  placeholder="Enter item description (optional)"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Brand & Category */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              Brand & Category
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Brand
+                </label>
+                <Select
+                  value={formData.brandId || undefined}
+                  onValueChange={(value) => handleSelectChange("brandId", value || "")}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a brand" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {brands.map((brand) => (
+                      <SelectItem key={brand.id} value={brand.id}>
+                        {brand.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Sub-brand
+                </label>
+                <Select
+                  value={formData.subBrandId || undefined}
+                  onValueChange={(value) => handleSelectChange("subBrandId", value || "")}
+                  disabled={!formData.brandId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={formData.brandId ? "Select a sub-brand" : "Select brand first"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredSubBrands.map((subBrand) => (
+                      <SelectItem key={subBrand.id} value={subBrand.id}>
+                        {subBrand.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* Tax & HSN */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              Tax Details
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label
+                  htmlFor="item-hsn"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  HSN/SAC Code
+                </label>
+                <Input
+                  id="item-hsn"
+                  type="text"
+                  name="hsnCode"
+                  value={formData.hsnCode}
+                  onChange={handleChange}
+                  maxLength={8}
+                  placeholder="e.g., 1234"
+                />
+                <p className="text-xs text-gray-500 mt-1">Up to 8 characters</p>
+              </div>
+              <div>
+                <label
+                  htmlFor="item-gst"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  GST Rate (%) <span className="text-red-500">*</span>
+                </label>
+                <Select
+                  value={formData.gstRate}
+                  onValueChange={(value) => handleSelectChange("gstRate", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">0%</SelectItem>
+                    <SelectItem value="5">5%</SelectItem>
+                    <SelectItem value="12">12%</SelectItem>
+                    <SelectItem value="18">18%</SelectItem>
+                    <SelectItem value="28">28%</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* Pricing */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              Pricing
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label
+                  htmlFor="item-standard-price"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Standard Price (₹) <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  id="item-standard-price"
+                  type="number"
+                  name="standardPrice"
+                  value={formData.standardPrice}
+                  onChange={handleChange}
+                  step="0.01"
+                  min="0"
+                  required
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="item-purchase-price"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Purchase Price (₹) <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  id="item-purchase-price"
+                  type="number"
+                  name="purchasePrice"
+                  value={formData.purchasePrice}
+                  onChange={handleChange}
+                  step="0.01"
+                  min="0"
+                  required
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Inventory */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              Inventory
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label
+                  htmlFor="item-unit"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Unit of Measurement <span className="text-red-500">*</span>
+                </label>
+                <Select
+                  value={formData.unit}
+                  onValueChange={(value) => handleSelectChange("unit", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PCS">PCS (Pieces)</SelectItem>
+                    <SelectItem value="KG">KG (Kilograms)</SelectItem>
+                    <SelectItem value="LTR">LTR (Liters)</SelectItem>
+                    <SelectItem value="MTR">MTR (Meters)</SelectItem>
+                    <SelectItem value="BOX">BOX (Boxes)</SelectItem>
+                    <SelectItem value="SET">SET (Sets)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label
+                  htmlFor="item-min-stock"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Minimum Stock Level
+                </label>
+                <Input
+                  id="item-min-stock"
+                  type="number"
+                  name="minStock"
+                  value={formData.minStock}
+                  onChange={handleChange}
+                  step="0.001"
+                  min="0"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="bg-teal-500 hover:bg-teal-600 text-white"
+            >
+              {isSubmitting ? "Creating..." : "Create Item"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

@@ -4,9 +4,17 @@
       "mcp__playwright__browser_click",
       "mcp__playwright__browser_resize",
       "mcp__playwright__browser_snapshot",
-      "Bash(npx prisma generate:*)"
+      "mcp__playwright__browser_navigate",
+      "mcp__context7__query-docs",
+      "Bash(npx prisma generate:*)",
+      "Bash(npm run dev:*)",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_close",
+      "Bash(ping:*)"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "context7",
     "playwright"
