@@ -54,8 +54,9 @@ export default function BrandsPage() {
 
       const data = await response.json();
       setBrands(data.brands || []);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
       console.error("Error fetching brands:", err);
     } finally {
       setIsLoading(false);
@@ -298,7 +299,7 @@ export default function BrandsPage() {
                 </Button>
               </div>
               <p className="text-gray-600 mb-4">
-                Enter the name of the new brand below. Click save when you're done.
+                Enter the name of the new brand below. Click save when you&apos;re done.
               </p>
 
               <div className="space-y-4">

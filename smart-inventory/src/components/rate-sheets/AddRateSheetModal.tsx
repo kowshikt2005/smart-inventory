@@ -17,7 +17,6 @@ import {
   Search,
   Calendar,
   Percent,
-  DollarSign,
   Calculator,
 } from "lucide-react";
 
@@ -244,8 +243,9 @@ export function AddRateSheetModal({
 
       onSuccess();
       handleClose();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }

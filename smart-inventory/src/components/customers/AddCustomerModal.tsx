@@ -19,7 +19,6 @@ export function AddCustomerModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -86,8 +85,9 @@ export function AddCustomerModal({
         hasPriceList: false,
         rateSheet: "",
       });
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }

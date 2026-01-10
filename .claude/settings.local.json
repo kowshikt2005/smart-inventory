@@ -11,7 +11,12 @@
       "mcp__playwright__browser_type",
       "mcp__playwright__browser_take_screenshot",
       "mcp__playwright__browser_close",
-      "Bash(ping:*)"
+      "Bash(ping:*)",
+      "Bash(dir:*)",
+      "mcp__context7__resolve-library-id",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run lint)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -33,7 +33,7 @@ import {
   CheckCircle,
   XCircle,
 } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 
 interface Customer {
   id: string;
@@ -71,11 +71,7 @@ export default function RateSheetsPage() {
   const itemsPerPage = 15;
 
   // Fetch rate sheets from API
-  useEffect(() => {
-    fetchRateSheets();
-  }, [showActiveOnly]);
-
-  const fetchRateSheets = async () => {
+  const fetchRateSheets = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -93,13 +89,18 @@ export default function RateSheetsPage() {
 
       const data = await response.json();
       setRateSheets(data.rateSheets || []);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
       console.error("Error fetching rate sheets:", err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [showActiveOnly]);
+
+  useEffect(() => {
+    fetchRateSheets();
+  }, [fetchRateSheets]);
 
   // Filter rate sheets based on search query
   const filteredRateSheets = useMemo(() => {
@@ -150,9 +151,10 @@ export default function RateSheetsPage() {
 
       // Refresh the list
       fetchRateSheets();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error deleting rate sheet:", err);
-      alert("Failed to delete rate sheet: " + err.message);
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      alert("Failed to delete rate sheet: " + errorMessage);
     }
   };
 
@@ -185,7 +187,7 @@ export default function RateSheetsPage() {
     return Math.round((100 - effectiveRate) * 100) / 100;
   };
 
-  const activeCount = rateSheets.filter((rs) => rs.isActive).length;
+  const _activeCount = rateSheets.filter((rs) => rs.isActive).length;
   const validCount = rateSheets.filter((rs) => isRateSheetValid(rs)).length;
 
   return (
@@ -371,7 +373,7 @@ export default function RateSheetsPage() {
                 </TableRow>
               ) : (
                 paginatedRateSheets.map((rateSheet) => {
-                  const isValid = isRateSheetValid(rateSheet);
+                  const _isValid = isRateSheetValid(rateSheet);
                   const effectiveDiscount = getEffectiveDiscount(rateSheet);
                   const isExpired =
                     rateSheet.validTo && new Date(rateSheet.validTo) < new Date();

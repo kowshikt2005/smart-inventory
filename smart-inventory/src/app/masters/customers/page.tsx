@@ -68,8 +68,9 @@ export default function CustomersPage() {
 
       const data = await response.json();
       setCustomers(data.customers || []);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
       console.error("Error fetching customers:", err);
     } finally {
       setIsLoading(false);

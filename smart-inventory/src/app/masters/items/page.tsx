@@ -67,8 +67,9 @@ export default function ItemsPage() {
 
       const data = await response.json();
       setItems(data.items || []);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
       console.error("Error fetching items:", err);
     } finally {
       setIsLoading(false);

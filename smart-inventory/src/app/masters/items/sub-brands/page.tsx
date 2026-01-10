@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Plus, MoreHorizontal, Edit, Loader2, X } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 
 interface Brand {
   id: string;
@@ -52,25 +52,7 @@ export default function SubBrandsPage() {
   const [newSubBrand, setNewSubBrand] = useState({ name: "", brandId: "" });
   const itemsPerPage = 10;
 
-  // Fetch data from API
-  useEffect(() => {
-    fetchAllData();
-  }, []);
-
-  const fetchAllData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      await Promise.all([fetchBrands(), fetchSubBrands()]);
-    } catch (err: any) {
-      setError(err.message);
-      console.error("Error fetching data:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchBrands = async () => {
+  const fetchBrands = useCallback(async () => {
     const response = await fetch("/api/brands");
     if (!response.ok) {
       throw new Error("Failed to fetch brands");
@@ -78,14 +60,14 @@ export default function SubBrandsPage() {
     const data = await response.json();
     setBrands(data.brands || []);
     return data.brands || [];
-  };
+  }, []);
 
-  const fetchSubBrands = async () => {
+  const fetchSubBrands = useCallback(async (brandsData?: Brand[]) => {
     // Get all brands first, then fetch sub-brands for each
-    const brandsData = brands.length > 0 ? brands : await fetchBrands();
+    const brandsToUse = brandsData || await fetchBrands();
     const allSubBrands: SubBrand[] = [];
 
-    for (const brand of brandsData) {
+    for (const brand of brandsToUse) {
       try {
         const response = await fetch(`/api/brands/${brand.id}/sub-brands`);
         if (response.ok) {
@@ -102,7 +84,27 @@ export default function SubBrandsPage() {
     }
 
     setSubBrands(allSubBrands);
-  };
+  }, [fetchBrands]);
+
+  const fetchAllData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const brandsData = await fetchBrands();
+      await fetchSubBrands(brandsData);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
+      console.error("Error fetching data:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchBrands, fetchSubBrands]);
+
+  // Fetch data from API
+  useEffect(() => {
+    fetchAllData();
+  }, [fetchAllData]);
 
   const handleAddSubBrand = async () => {
     try {

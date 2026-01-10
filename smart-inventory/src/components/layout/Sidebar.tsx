@@ -14,13 +14,22 @@ import {
   Package,
   Tag,
   Layers,
+  ShoppingCart,
+  FileText,
+  Receipt,
 } from "lucide-react";
 import { useState } from "react";
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [salesOpen, setSalesOpen] = useState(true);
   const [mastersOpen, setMastersOpen] = useState(true);
   const [itemsOpen, setItemsOpen] = useState(false);
+
+  const salesItems = [
+    { icon: FileText, label: "Orders", href: "/sales/orders" },
+    { icon: Receipt, label: "Invoices", href: "/sales/invoices" },
+  ];
 
   const masterItems = [
     { icon: Users, label: "Customers", href: "/masters/customers" },
@@ -62,6 +71,52 @@ export function Sidebar() {
           <LayoutDashboard className="h-5 w-5" strokeWidth={1.5} />
           <span>Dashboard</span>
         </Link>
+
+        {/* Sales Section */}
+        <div className="mb-2">
+          <button
+            onClick={() => setSalesOpen(!salesOpen)}
+            className={cn(
+              "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors",
+              pathname.startsWith("/sales") && "bg-gray-100"
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <ShoppingCart className="h-5 w-5" strokeWidth={1.5} />
+              <span>Sales</span>
+            </div>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 transition-transform",
+                salesOpen && "rotate-180"
+              )}
+            />
+          </button>
+
+          {/* Sales Dropdown */}
+          {salesOpen && (
+            <div className="ml-8 mt-1 space-y-1">
+              {salesItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors",
+                      isActive && "bg-gray-100 text-gray-900 font-medium"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" strokeWidth={1.5} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Masters Section */}
         <div className="mb-2">

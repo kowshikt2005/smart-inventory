@@ -65,8 +65,9 @@ export default function VendorsPage() {
 
       const data = await response.json();
       setVendors(data.vendors || []);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
       console.error("Error fetching vendors:", err);
     } finally {
       setIsLoading(false);

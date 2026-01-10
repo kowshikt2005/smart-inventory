@@ -68,14 +68,14 @@ export function AddItemModal({
       const filtered = subBrands.filter(sb => sb.brandId === formData.brandId);
       setFilteredSubBrands(filtered);
       // Reset sub-brand selection if current selection doesn't belong to selected brand
-      if (formData.subBrandId && !filtered.find(sb => sb.id === formData.subBrandId)) {
+      if (!filtered.find(sb => sb.id === formData.subBrandId)) {
         setFormData(prev => ({ ...prev, subBrandId: "" }));
       }
     } else {
       setFilteredSubBrands([]);
       setFormData(prev => ({ ...prev, subBrandId: "" }));
     }
-  }, [formData.brandId, subBrands]);
+  }, [formData.brandId, formData.subBrandId, subBrands]);
 
   const fetchBrands = async () => {
     try {
@@ -164,8 +164,9 @@ export function AddItemModal({
         minStock: "0",
         unit: "PCS",
       });
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
