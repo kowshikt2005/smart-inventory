@@ -11,7 +11,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Search, Download, Settings } from "lucide-react";
-import { Input } from "@/components/ui/input";
 
 export default function MastersPage() {
   const masterCategories = [

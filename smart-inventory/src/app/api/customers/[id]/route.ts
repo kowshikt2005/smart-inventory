@@ -4,20 +4,16 @@ import { db } from '@/lib/db';
 // GET /api/customers/[id] - Get a single customer by ID
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const customerId = parseInt(params.id);
-
-    if (isNaN(customerId)) {
-      return NextResponse.json(
-        { error: 'Invalid customer ID' },
-        { status: 400 }
-      );
-    }
+    const { id } = await params;
 
     const customer = await db.customer.findUnique({
-      where: { id: customerId },
+      where: { id },
+      include: {
+        rateSheet: true,
+      },
     });
 
     if (!customer) {
@@ -40,23 +36,15 @@ export async function GET(
 // PUT /api/customers/[id] - Update a customer
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const customerId = parseInt(params.id);
-
-    if (isNaN(customerId)) {
-      return NextResponse.json(
-        { error: 'Invalid customer ID' },
-        { status: 400 }
-      );
-    }
-
+    const { id } = await params;
     const body = await request.json();
 
     // Check if customer exists
     const existingCustomer = await db.customer.findUnique({
-      where: { id: customerId },
+      where: { id },
     });
 
     if (!existingCustomer) {
@@ -74,46 +62,26 @@ export async function PUT(
       );
     }
 
-    // Validate state code if provided
-    if (body.stateCode && body.stateCode.length !== 2) {
-      return NextResponse.json(
-        { error: 'State code must be exactly 2 characters' },
-        { status: 400 }
-      );
-    }
+    // Build update data
+    const updateData: any = {};
+
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.email !== undefined) updateData.email = body.email || null;
+    if (body.phone !== undefined) updateData.phone = body.phone || null;
+    if (body.gstin !== undefined) updateData.gstin = body.gstin || null;
+    if (body.address !== undefined) updateData.address = body.address || null;
+    if (body.city !== undefined) updateData.city = body.city || null;
+    if (body.state !== undefined) updateData.state = body.state || null;
+    if (body.pincode !== undefined) updateData.pincode = body.pincode || null;
+    if (body.creditLimit !== undefined) updateData.creditLimit = body.creditLimit;
+    if (body.creditDays !== undefined) updateData.creditDays = body.creditDays;
+    if (body.openingBalance !== undefined) updateData.openingBalance = body.openingBalance;
+    if (body.status !== undefined) updateData.status = body.status;
 
     // Update customer
     const customer = await db.customer.update({
-      where: { id: customerId },
-      data: {
-        ...(body.name && { name: body.name }),
-        ...(body.email !== undefined && { email: body.email || null }),
-        ...(body.phone !== undefined && { phone: body.phone || null }),
-        ...(body.gstin && { gstin: body.gstin }),
-        ...(body.state && { state: body.state }),
-        ...(body.stateCode && { stateCode: body.stateCode }),
-        ...(body.city && { city: body.city }),
-        ...(body.addressLine1 && { addressLine1: body.addressLine1 }),
-        ...(body.addressLine2 !== undefined && {
-          addressLine2: body.addressLine2 || null,
-        }),
-        ...(body.openingBalance !== undefined && {
-          openingBalance: body.openingBalance,
-        }),
-        ...(body.openingAsOfDate && {
-          openingAsOfDate: new Date(body.openingAsOfDate),
-        }),
-        ...(body.creditDays !== undefined && { creditDays: body.creditDays }),
-        ...(body.creditLimit !== undefined && {
-          creditLimit: body.creditLimit,
-        }),
-        ...(body.hasPriceList !== undefined && {
-          hasPriceList: body.hasPriceList,
-        }),
-        ...(body.rateSheet !== undefined && {
-          rateSheet: body.rateSheet || null,
-        }),
-      },
+      where: { id },
+      data: updateData,
     });
 
     return NextResponse.json(customer);
@@ -138,21 +106,14 @@ export async function PUT(
 // DELETE /api/customers/[id] - Delete a customer
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const customerId = parseInt(params.id);
-
-    if (isNaN(customerId)) {
-      return NextResponse.json(
-        { error: 'Invalid customer ID' },
-        { status: 400 }
-      );
-    }
+    const { id } = await params;
 
     // Check if customer exists
     const existingCustomer = await db.customer.findUnique({
-      where: { id: customerId },
+      where: { id },
     });
 
     if (!existingCustomer) {
@@ -164,7 +125,7 @@ export async function DELETE(
 
     // Delete customer
     await db.customer.delete({
-      where: { id: customerId },
+      where: { id },
     });
 
     return NextResponse.json({ message: 'Customer deleted successfully' });

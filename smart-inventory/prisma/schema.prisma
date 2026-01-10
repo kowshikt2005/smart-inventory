@@ -110,7 +110,7 @@ model Customer {
   salesOrders SalesOrder[]
   invoices    Invoice[]
   payments    Payment[]
-  rateSheets  RateSheet[]
+  rateSheet   RateSheet?   // One rate sheet per customer
 
   @@index([customerNumber])
   @@index([gstin])
@@ -201,7 +201,6 @@ model Item {
   subBrand         SubBrand?           @relation(fields: [subBrandId], references: [id], onDelete: SetNull)
   inventory        Inventory?
   salesOrderItems  SalesOrderItem[]
-  rateSheets       RateSheet[]
   stockMovements   StockMovement[]
   purchaseOrderItems PurchaseOrderItem[]
 
@@ -340,8 +339,8 @@ model OrderStatusHistory {
   changedBy    String
 
   // Relations
-  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
-  user       User       @relation(fields: [changedBy], references: [id])
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade, map: "osh_salesOrder_fkey")
+  user       User       @relation(fields: [changedBy], references: [id], map: "osh_user_fkey")
 
   @@index([salesOrderId])
   @@index([changedAt])
@@ -399,26 +398,41 @@ model PurchaseOrderItem {
 // RATE SHEET MANAGEMENT (Customer-specific Pricing)
 // ============================================
 
+enum RoundOffType {
+  NONE
+  UP
+  DOWN
+  NEAREST
+}
+
+enum CurrencyType {
+  INR
+  USD
+  EUR
+  GBP
+  AED
+}
+
 model RateSheet {
-  id         String    @id @default(uuid())
-  customerId String
-  itemId     String
-  rate       Decimal   @db.Decimal(15, 2)
-  discount   Decimal   @default(0) @db.Decimal(5, 2)
-  validFrom  DateTime
-  validTo    DateTime?
-  isActive   Boolean   @default(true)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id              String       @id @default(uuid())
+  name            String       // Rate sheet name for reference
+  customerId      String       @unique // One rate sheet per customer
+  validFrom       DateTime
+  validTo         DateTime?
+  itemRatePercent Decimal      @default(100) @db.Decimal(5, 2) // % of base sales rate (100 = full price)
+  discountPercent Decimal      @default(0) @db.Decimal(5, 2)   // Additional discount %
+  currency        CurrencyType @default(INR)
+  roundOff        RoundOffType @default(NONE)
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   // Relations
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  item     Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
-  @@unique([customerId, itemId, validFrom])
   @@index([customerId])
-  @@index([itemId])
   @@index([validFrom, validTo])
+  @@index([isActive])
   @@map("rate_sheets")
 }
 

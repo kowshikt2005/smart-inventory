@@ -138,7 +138,6 @@ export async function DELETE(
       include: {
         salesOrderItems: true,
         purchaseOrderItems: true,
-        rateSheets: true,
       },
     });
 
@@ -152,8 +151,7 @@ export async function DELETE(
     // Check if item is being used in any transactions
     if (
       existingItem.salesOrderItems.length > 0 ||
-      existingItem.purchaseOrderItems.length > 0 ||
-      existingItem.rateSheets.length > 0
+      existingItem.purchaseOrderItems.length > 0
     ) {
       return NextResponse.json(
         { error: 'Cannot delete item that is being used in transactions' },

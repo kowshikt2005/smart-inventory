@@ -22,7 +22,7 @@ import { Plus, MoreHorizontal, Eye, FileText, Loader2, X } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 
 interface Customer {
-  id: number;
+  id: string;
   name: string;
   gstin: string;
   city: string;
@@ -105,12 +105,12 @@ export default function CustomersPage() {
     setCurrentPage(1);
   };
 
-  const handleViewDetails = (customerId: number) => {
+  const handleViewDetails = (customerId: string) => {
     console.log("View details for customer:", customerId);
     // TODO: Navigate to customer details page or open modal
   };
 
-  const handleViewTransactions = (customerId: number) => {
+  const handleViewTransactions = (customerId: string) => {
     console.log("View transactions for customer:", customerId);
     // TODO: Navigate to transactions page or open modal
   };

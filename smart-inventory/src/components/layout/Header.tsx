@@ -1,8 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Menu, Search, Plus, Bell, User } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 
 export function Header() {
   return (
