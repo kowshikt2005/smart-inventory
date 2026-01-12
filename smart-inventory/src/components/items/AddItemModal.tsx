@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { X } from "lucide-react";
+import useSWR from "swr";
 
 interface Brand {
   id: string;
@@ -23,22 +24,39 @@ interface SubBrand {
   brandId: string;
 }
 
+interface EditItem {
+  id: string;
+  itemCode: string;
+  name: string;
+  description?: string;
+  standardPrice: string | number;
+  purchasePrice: string | number;
+  unit: string;
+  hsnCode?: string;
+  gstRate: string | number;
+  brand?: { id: string; name: string };
+  subBrand?: { id: string; name: string };
+  inventory?: {
+    minStockLevel: string | number;
+  };
+}
+
 interface AddItemModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  editItem?: EditItem | null;
 }
 
 export function AddItemModal({
   isOpen,
   onClose,
   onSuccess,
+  editItem,
 }: AddItemModalProps) {
+  const isEditing = !!editItem;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [brands, setBrands] = useState<Brand[]>([]);
-  const [subBrands, setSubBrands] = useState<SubBrand[]>([]);
-  const [filteredSubBrands, setFilteredSubBrands] = useState<SubBrand[]>([]);
   const firstInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
@@ -54,67 +72,60 @@ export function AddItemModal({
     unit: "PCS",
   });
 
-  // Fetch brands and sub-brands when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      fetchBrands();
-      fetchAllSubBrands();
-    }
-  }, [isOpen]);
+  // Use SWR to cache brands and sub-brands - NO N+1 queries!
+  const { data: brandsData } = useSWR(isOpen ? "/api/brands" : null);
+  const { data: subBrandsData } = useSWR(isOpen ? "/api/sub-brands" : null);
 
-  // Filter sub-brands when brand changes
+  const brands = brandsData?.brands || [];
+  const subBrands = subBrandsData?.subBrands || [];
+
+  // Populate form when editing
   useEffect(() => {
-    if (formData.brandId) {
-      const filtered = subBrands.filter(sb => sb.brandId === formData.brandId);
-      setFilteredSubBrands(filtered);
-      // Reset sub-brand selection if current selection doesn't belong to selected brand
-      if (!filtered.find(sb => sb.id === formData.subBrandId)) {
+    if (editItem && isOpen) {
+      setFormData({
+        name: editItem.name || "",
+        description: editItem.description || "",
+        brandId: editItem.brand?.id || "",
+        subBrandId: editItem.subBrand?.id || "",
+        hsnCode: editItem.hsnCode || "",
+        gstRate: String(editItem.gstRate) || "18",
+        standardPrice: String(editItem.standardPrice) || "0",
+        purchasePrice: String(editItem.purchasePrice) || "0",
+        minStock: String(editItem.inventory?.minStockLevel || 0),
+        unit: editItem.unit || "PCS",
+      });
+    } else if (!editItem && isOpen) {
+      // Reset form for new item
+      setFormData({
+        name: "",
+        description: "",
+        brandId: "",
+        subBrandId: "",
+        hsnCode: "",
+        gstRate: "18",
+        standardPrice: "0",
+        purchasePrice: "0",
+        minStock: "0",
+        unit: "PCS",
+      });
+    }
+  }, [editItem, isOpen]);
+
+  // Filter sub-brands based on selected brand
+  const filteredSubBrands = useMemo(() => {
+    if (!formData.brandId) return [];
+    return subBrands.filter((sb: SubBrand) => sb.brandId === formData.brandId);
+  }, [formData.brandId, subBrands]);
+
+  // Reset sub-brand when brand changes
+  useEffect(() => {
+    if (formData.brandId && formData.subBrandId) {
+      const isValid = filteredSubBrands.find((sb: SubBrand) => sb.id === formData.subBrandId);
+      if (!isValid) {
         setFormData(prev => ({ ...prev, subBrandId: "" }));
       }
-    } else {
-      setFilteredSubBrands([]);
-      setFormData(prev => ({ ...prev, subBrandId: "" }));
     }
-  }, [formData.brandId, formData.subBrandId, subBrands]);
-
-  const fetchBrands = async () => {
-    try {
-      const response = await fetch("/api/brands");
-      if (response.ok) {
-        const data = await response.json();
-        setBrands(data.brands || []);
-      }
-    } catch (error) {
-      console.error("Error fetching brands:", error);
-    }
-  };
-
-  const fetchAllSubBrands = async () => {
-    try {
-      // Fetch sub-brands for all brands
-      const response = await fetch("/api/brands");
-      if (response.ok) {
-        const brandsData = await response.json();
-        const allSubBrands: SubBrand[] = [];
-
-        for (const brand of brandsData.brands || []) {
-          try {
-            const subBrandResponse = await fetch(`/api/brands/${brand.id}/sub-brands`);
-            if (subBrandResponse.ok) {
-              const subBrandData = await subBrandResponse.json();
-              allSubBrands.push(...subBrandData.subBrands);
-            }
-          } catch (error) {
-            console.error(`Error fetching sub-brands for brand ${brand.id}:`, error);
-          }
-        }
-
-        setSubBrands(allSubBrands);
-      }
-    } catch (error) {
-      console.error("Error fetching sub-brands:", error);
-    }
-  };
+  }, [formData.brandId, formData.subBrandId, filteredSubBrands]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,8 +133,11 @@ export function AddItemModal({
     setError(null);
 
     try {
-      const response = await fetch("/api/items", {
-        method: "POST",
+      const url = isEditing ? `/api/items/${editItem.id}` : "/api/items";
+      const method = isEditing ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
         },
@@ -144,7 +158,7 @@ export function AddItemModal({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to create item");
+        throw new Error(data.error || `Failed to ${isEditing ? "update" : "create"} item`);
       }
 
       // Success
@@ -217,7 +231,7 @@ export function AddItemModal({
       <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900">Add New Item</h2>
+          <h2 className="text-xl font-bold text-gray-900">{isEditing ? "Edit Item" : "Add New Item"}</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600"
@@ -295,7 +309,7 @@ export function AddItemModal({
                     <SelectValue placeholder="Select a brand" />
                   </SelectTrigger>
                   <SelectContent>
-                    {brands.map((brand) => (
+                    {brands.map((brand: Brand) => (
                       <SelectItem key={brand.id} value={brand.id}>
                         {brand.name}
                       </SelectItem>
@@ -316,7 +330,7 @@ export function AddItemModal({
                     <SelectValue placeholder={formData.brandId ? "Select a sub-brand" : "Select brand first"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {filteredSubBrands.map((subBrand) => (
+                    {filteredSubBrands.map((subBrand: SubBrand) => (
                       <SelectItem key={subBrand.id} value={subBrand.id}>
                         {subBrand.name}
                       </SelectItem>

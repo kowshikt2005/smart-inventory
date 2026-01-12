@@ -332,34 +332,40 @@ export async function POST(request: Request) {
         },
       });
 
-      // Reserve inventory for each item (only if inventory record exists)
-      for (const orderItem of orderItems) {
-        const inventory = await tx.inventory.findUnique({
-          where: { itemId: orderItem.itemId },
-        });
+      // Reserve inventory for each item (only if inventory record exists) - OPTIMIZED
+      const itemIds = orderItems.map((item: any) => item.itemId);
+      const inventories = await tx.inventory.findMany({
+        where: { itemId: { in: itemIds } },
+      });
+      const inventoryMap = new Map(inventories.map(inv => [inv.itemId, inv]));
 
-        if (inventory) {
-          await tx.inventory.update({
+      // Prepare batch inventory updates
+      const inventoryUpdates = orderItems
+        .filter((orderItem: any) => inventoryMap.has(orderItem.itemId))
+        .map((orderItem: any) => 
+          tx.inventory.update({
             where: { itemId: orderItem.itemId },
             data: {
               reservedQuantity: {
                 increment: orderItem.quantity,
               },
             },
-          });
-        }
-      }
+          })
+        );
 
-      // Create initial status history
-      await tx.orderStatusHistory.create({
-        data: {
-          salesOrderId: order.id,
-          fromStatus: null,
-          toStatus: 'OPEN',
-          reason: 'Order created',
-          changedBy: SYSTEM_USER_ID,
-        },
-      });
+      // Execute inventory updates and status history in parallel
+      await Promise.all([
+        ...inventoryUpdates,
+        tx.orderStatusHistory.create({
+          data: {
+            salesOrderId: order.id,
+            fromStatus: null,
+            toStatus: 'OPEN',
+            reason: 'Order created',
+            changedBy: SYSTEM_USER_ID,
+          },
+        }),
+      ]);
 
       return order;
     }, {

@@ -16,7 +16,8 @@
       "mcp__context7__resolve-library-id",
       "Bash(npm run build:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "mcp__playwright__browser_press_key"
     ]
   },
   "enableAllProjectMcpServers": true,

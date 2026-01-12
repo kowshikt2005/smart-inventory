@@ -17,18 +17,25 @@ import {
   ShoppingCart,
   FileText,
   Receipt,
+  CreditCard,
+  RotateCcw,
+  BookOpen,
+  ClipboardList,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, memo } from "react";
 
-export function Sidebar() {
+export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname();
   const [salesOpen, setSalesOpen] = useState(true);
   const [mastersOpen, setMastersOpen] = useState(true);
   const [itemsOpen, setItemsOpen] = useState(false);
+  const [ledgerOpen, setLedgerOpen] = useState(true);
 
   const salesItems = [
     { icon: FileText, label: "Orders", href: "/sales/orders" },
     { icon: Receipt, label: "Invoices", href: "/sales/invoices" },
+    { icon: CreditCard, label: "Receipts", href: "/sales/receipts" },
+    { icon: RotateCcw, label: "Returns", href: "/sales/returns" },
   ];
 
   const masterItems = [
@@ -44,17 +51,20 @@ export function Sidebar() {
     { icon: Package, label: "Items", href: "/masters/items" },
   ];
 
+  const ledgerItems = [
+    { icon: Users, label: "Customer Ledger", href: "/ledger/customers" },
+    { icon: Package, label: "Stock Ledger", href: "/ledger/items" },
+    { icon: ClipboardList, label: "Stock Journal", href: "/ledger/stock-journal" },
+  ];
+
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-white border-r border-gray-200 flex flex-col">
+    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-primary border-r border-primary/20 flex flex-col shadow-lg">
       {/* Logo */}
-      <div className="flex items-center gap-3 p-6 border-b border-gray-200">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-600">
+      <div className="flex items-center gap-3 p-6 border-b border-white/10">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent shadow-md">
           <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
           </svg>
-        </div>
-        <div>
-          <h1 className="text-gray-900 font-bold text-lg"></h1>
         </div>
       </div>
 
@@ -64,8 +74,8 @@ export function Sidebar() {
         <Link
           href="/"
           className={cn(
-            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors mb-2",
-            pathname === "/" && "bg-gray-100 text-gray-900 font-medium"
+            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors mb-2",
+            pathname === "/" && "bg-white/15 text-white font-medium shadow-sm"
           )}
         >
           <LayoutDashboard className="h-5 w-5" strokeWidth={1.5} />
@@ -77,8 +87,8 @@ export function Sidebar() {
           <button
             onClick={() => setSalesOpen(!salesOpen)}
             className={cn(
-              "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors",
-              pathname.startsWith("/sales") && "bg-gray-100"
+              "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
+              pathname.startsWith("/sales") && "bg-white/15 text-white"
             )}
           >
             <div className="flex items-center gap-3">
@@ -105,8 +115,54 @@ export function Sidebar() {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors",
-                      isActive && "bg-gray-100 text-gray-900 font-medium"
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
+                      isActive && "bg-white/15 text-white font-medium shadow-sm"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" strokeWidth={1.5} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Ledger Section */}
+        <div className="mb-2">
+          <button
+            onClick={() => setLedgerOpen(!ledgerOpen)}
+            className={cn(
+              "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
+              pathname.startsWith("/ledger") && "bg-white/15 text-white"
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <BookOpen className="h-5 w-5" strokeWidth={1.5} />
+              <span>Ledger</span>
+            </div>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 transition-transform",
+                ledgerOpen && "rotate-180"
+              )}
+            />
+          </button>
+
+          {/* Ledger Dropdown */}
+          {ledgerOpen && (
+            <div className="ml-8 mt-1 space-y-1">
+              {ledgerItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
+                      isActive && "bg-white/15 text-white font-medium shadow-sm"
                     )}
                   >
                     <Icon className="h-4 w-4" strokeWidth={1.5} />
@@ -123,8 +179,8 @@ export function Sidebar() {
           <button
             onClick={() => setMastersOpen(!mastersOpen)}
             className={cn(
-              "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors",
-              pathname.startsWith("/masters") && "bg-gray-100"
+              "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
+              pathname.startsWith("/masters") && "bg-white/15 text-white"
             )}
           >
             <div className="flex items-center gap-3">
@@ -151,8 +207,8 @@ export function Sidebar() {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors",
-                      isActive && "bg-gray-100 text-gray-900 font-medium"
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
+                      isActive && "bg-white/15 text-white font-medium shadow-sm"
                     )}
                   >
                     <Icon className="h-4 w-4" strokeWidth={1.5} />
@@ -166,8 +222,8 @@ export function Sidebar() {
                 <button
                   onClick={() => setItemsOpen(!itemsOpen)}
                   className={cn(
-                    "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors",
-                    pathname.startsWith("/masters/items") && "bg-gray-100 text-gray-900"
+                    "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
+                    pathname.startsWith("/masters/items") && "bg-white/15 text-white"
                   )}
                 >
                   <div className="flex items-center gap-3">
@@ -194,8 +250,8 @@ export function Sidebar() {
                           key={item.href}
                           href={item.href}
                           className={cn(
-                            "flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors",
-                            isActive && "bg-gray-100 text-gray-900 font-medium"
+                            "flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors",
+                            isActive && "bg-white/15 text-white font-medium shadow-sm"
                           )}
                         >
                           <Icon className="h-3 w-3" strokeWidth={1.5} />
@@ -213,4 +269,4 @@ export function Sidebar() {
 
     </aside>
   );
-}
+});

@@ -51,6 +51,21 @@ enum PaymentStatus {
   PARTIAL
   PAID
   OVERDUE
+  CANCELLED
+}
+
+enum LedgerEntryType {
+  OPENING_BALANCE
+  SALES_INVOICE
+  SALES_RECEIPT
+  SALES_RETURN
+  ADJUSTMENT
+}
+
+enum SalesReturnStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
 }
 
 enum PaymentMode {
@@ -107,14 +122,43 @@ model Customer {
   updatedAt      DateTime       @updatedAt
 
   // Relations
-  salesOrders SalesOrder[]
-  invoices    Invoice[]
-  payments    Payment[]
-  rateSheet   RateSheet?   // One rate sheet per customer
+  salesOrders   SalesOrder[]
+  invoices      Invoice[]
+  payments      Payment[]
+  rateSheet     RateSheet?        // One rate sheet per customer
+  salesReturns  SalesReturn[]
+  ledgerEntries CustomerLedger[]
 
   @@index([customerNumber])
   @@index([gstin])
   @@map("customers")
+}
+
+// ============================================
+// CUSTOMER LEDGER (Financial Tracking)
+// ============================================
+
+model CustomerLedger {
+  id            String          @id @default(uuid())
+  customerId    String
+  date          DateTime
+  description   String
+  type          LedgerEntryType
+  debit         Decimal         @default(0) @db.Decimal(15, 2)
+  credit        Decimal         @default(0) @db.Decimal(15, 2)
+  balance       Decimal         @default(0) @db.Decimal(15, 2)
+  referenceType String          // 'sales_invoice', 'sales_receipt', 'sales_return'
+  referenceId   String
+  createdAt     DateTime        @default(now())
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([date])
+  @@index([type])
+  @@index([referenceType, referenceId])
+  @@map("customer_ledger")
 }
 
 // ============================================
@@ -197,12 +241,13 @@ model Item {
   updatedAt     DateTime @updatedAt
 
   // Relations
-  brand            Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  subBrand         SubBrand?           @relation(fields: [subBrandId], references: [id], onDelete: SetNull)
-  inventory        Inventory?
-  salesOrderItems  SalesOrderItem[]
-  stockMovements   StockMovement[]
+  brand              Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  subBrand           SubBrand?           @relation(fields: [subBrandId], references: [id], onDelete: SetNull)
+  inventory          Inventory?
+  salesOrderItems    SalesOrderItem[]
+  stockMovements     StockMovement[]
   purchaseOrderItems PurchaseOrderItem[]
+  salesReturnItems   SalesReturnItem[]
 
   @@index([itemCode])
   @@index([brandId])
@@ -447,7 +492,10 @@ model Invoice {
   salesOrderId  String        @unique
   customerId    String
   subtotal      Decimal       @default(0) @db.Decimal(15, 2)
+  cgst          Decimal       @default(0) @db.Decimal(15, 2)
+  sgst          Decimal       @default(0) @db.Decimal(15, 2)
   taxAmount     Decimal       @default(0) @db.Decimal(15, 2)
+  roundOff      Decimal       @default(0) @db.Decimal(15, 2)
   totalAmount   Decimal       @default(0) @db.Decimal(15, 2)
   paidAmount    Decimal       @default(0) @db.Decimal(15, 2)
   balanceAmount Decimal       @default(0) @db.Decimal(15, 2)
@@ -458,9 +506,11 @@ model Invoice {
   updatedAt     DateTime      @updatedAt
 
   // Relations
-  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id])
-  customer   Customer   @relation(fields: [customerId], references: [id])
-  payments   Payment[]
+  salesOrder   SalesOrder          @relation(fields: [salesOrderId], references: [id])
+  customer     Customer            @relation(fields: [customerId], references: [id])
+  payments     Payment[]
+  allocations  PaymentAllocation[]
+  salesReturns SalesReturn[]
 
   @@index([invoiceNumber])
   @@index([customerId])
@@ -474,23 +524,91 @@ model Payment {
   paymentNumber   String      @unique // PAY-xxxx
   paymentDate     DateTime
   customerId      String
-  invoiceId       String?
+  invoiceId       String?     // Legacy - use allocations for new payments
   amount          Decimal     @db.Decimal(15, 2)
   mode            PaymentMode
-  referenceNumber String? // Cheque number, transaction ID, etc.
+  referenceNumber String?     // Cheque number, transaction ID, etc.
   notes           String?     @db.Text
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
   // Relations
-  customer Customer @relation(fields: [customerId], references: [id])
-  invoice  Invoice? @relation(fields: [invoiceId], references: [id])
+  customer    Customer            @relation(fields: [customerId], references: [id])
+  invoice     Invoice?            @relation(fields: [invoiceId], references: [id])
+  allocations PaymentAllocation[]
 
   @@index([paymentNumber])
   @@index([customerId])
   @@index([invoiceId])
   @@index([paymentDate])
   @@map("payments")
+}
+
+model PaymentAllocation {
+  id        String  @id @default(uuid())
+  paymentId String
+  invoiceId String
+  amount    Decimal @db.Decimal(15, 2)
+
+  // Relations
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([paymentId])
+  @@index([invoiceId])
+  @@map("payment_allocations")
+}
+
+// ============================================
+// SALES RETURN (Credit Notes)
+// ============================================
+
+model SalesReturn {
+  id            String            @id @default(uuid())
+  returnNumber  String            @unique // SR-xxxx
+  returnDate    DateTime
+  customerId    String
+  invoiceId     String?           // Optional - can link to original invoice
+  subtotal      Decimal           @default(0) @db.Decimal(15, 2)
+  cgst          Decimal           @default(0) @db.Decimal(15, 2)
+  sgst          Decimal           @default(0) @db.Decimal(15, 2)
+  taxAmount     Decimal           @default(0) @db.Decimal(15, 2)
+  totalAmount   Decimal           @default(0) @db.Decimal(15, 2)
+  reason        String?           @db.Text
+  status        SalesReturnStatus @default(OPEN)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  // Relations
+  customer Customer          @relation(fields: [customerId], references: [id])
+  invoice  Invoice?          @relation(fields: [invoiceId], references: [id])
+  items    SalesReturnItem[]
+
+  @@index([returnNumber])
+  @@index([customerId])
+  @@index([invoiceId])
+  @@index([status])
+  @@index([returnDate])
+  @@map("sales_returns")
+}
+
+model SalesReturnItem {
+  id            String  @id @default(uuid())
+  salesReturnId String
+  itemId        String
+  quantity      Decimal @db.Decimal(15, 3)
+  rate          Decimal @db.Decimal(15, 2)
+  taxRate       Decimal @default(0) @db.Decimal(5, 2)
+  taxAmount     Decimal @default(0) @db.Decimal(15, 2)
+  amount        Decimal @default(0) @db.Decimal(15, 2)
+
+  // Relations
+  salesReturn SalesReturn @relation(fields: [salesReturnId], references: [id], onDelete: Cascade)
+  item        Item        @relation(fields: [itemId], references: [id])
+
+  @@index([salesReturnId])
+  @@index([itemId])
+  @@map("sales_return_items")
 }
 
 // ============================================

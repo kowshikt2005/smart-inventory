@@ -101,58 +101,82 @@ export async function PATCH(
 
       // Handle DELIVERED status - deduct from physical stock, release reservation
       if (newStatus === 'DELIVERED') {
+        // Prepare batch operations
+        const inventoryUpdates: Promise<any>[] = [];
+        const stockMovements: any[] = [];
+        
+        // Get all inventory records in one query
+        const itemIds = existingOrder.items.map(item => item.itemId);
+        const inventories = await tx.inventory.findMany({
+          where: { itemId: { in: itemIds } },
+        });
+        const inventoryMap = new Map(inventories.map(inv => [inv.itemId, inv]));
+
         for (const orderItem of existingOrder.items) {
-          const inventory = await tx.inventory.findUnique({
-            where: { itemId: orderItem.itemId },
-          });
+          const inventory = inventoryMap.get(orderItem.itemId);
 
           if (inventory) {
-            await tx.inventory.update({
-              where: { itemId: orderItem.itemId },
-              data: {
-                physicalStock: {
-                  decrement: Number(orderItem.quantity),
+            // Add inventory update to batch
+            inventoryUpdates.push(
+              tx.inventory.update({
+                where: { itemId: orderItem.itemId },
+                data: {
+                  physicalStock: {
+                    decrement: Number(orderItem.quantity),
+                  },
+                  reservedQuantity: {
+                    decrement: Number(orderItem.quantity),
+                  },
                 },
-                reservedQuantity: {
-                  decrement: Number(orderItem.quantity),
-                },
-              },
-            });
+              })
+            );
 
-            // Create stock movement record
-            await tx.stockMovement.create({
-              data: {
-                inventoryId: inventory.id,
-                itemId: orderItem.itemId,
-                quantity: -Number(orderItem.quantity),
-                type: 'SALE',
-                referenceType: 'SALES_ORDER',
-                referenceId: id,
-                notes: `Delivered via order ${existingOrder.orderNumber}`,
-                createdBy: SYSTEM_USER_ID,
-              },
+            // Prepare stock movement data
+            stockMovements.push({
+              inventoryId: inventory.id,
+              itemId: orderItem.itemId,
+              quantity: -Number(orderItem.quantity),
+              type: 'SALE',
+              referenceType: 'SALES_ORDER',
+              referenceId: id,
+              notes: `Delivered via order ${existingOrder.orderNumber}`,
+              createdBy: SYSTEM_USER_ID,
             });
           }
         }
+
+        // Execute all operations in parallel
+        await Promise.all([
+          ...inventoryUpdates,
+          stockMovements.length > 0 ? tx.stockMovement.createMany({ data: stockMovements }) : Promise.resolve(),
+        ]);
       }
 
       // Handle REJECT status - release reservations
       if (newStatus === 'REJECT') {
-        for (const orderItem of existingOrder.items) {
-          const inventory = await tx.inventory.findUnique({
-            where: { itemId: orderItem.itemId },
-          });
-          if (inventory) {
-            await tx.inventory.update({
+        // Get all inventory records in one query
+        const itemIds = existingOrder.items.map(item => item.itemId);
+        const inventories = await tx.inventory.findMany({
+          where: { itemId: { in: itemIds } },
+        });
+        const inventoryMap = new Map(inventories.map(inv => [inv.itemId, inv]));
+
+        // Prepare batch updates
+        const inventoryUpdates = existingOrder.items
+          .filter(orderItem => inventoryMap.has(orderItem.itemId))
+          .map(orderItem => 
+            tx.inventory.update({
               where: { itemId: orderItem.itemId },
               data: {
                 reservedQuantity: {
                   decrement: Number(orderItem.quantity),
                 },
               },
-            });
-          }
-        }
+            })
+          );
+
+        // Execute all updates in parallel
+        await Promise.all(inventoryUpdates);
       }
 
       // Update the order status

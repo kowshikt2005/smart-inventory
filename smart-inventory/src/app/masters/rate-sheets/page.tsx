@@ -33,7 +33,9 @@ import {
   CheckCircle,
   XCircle,
 } from "lucide-react";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
+import useSWR from "swr";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface Customer {
   id: string;
@@ -63,57 +65,38 @@ export default function RateSheetsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [rateSheets, setRateSheets] = useState<RateSheet[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [showActiveOnly, setShowActiveOnly] = useState(false);
   const [editingRateSheet, setEditingRateSheet] = useState<RateSheet | null>(null);
   const itemsPerPage = 15;
 
-  // Fetch rate sheets from API
-  const fetchRateSheets = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
+  // Debounce search
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
-      let url = "/api/rate-sheets?limit=500";
-      if (showActiveOnly) {
-        url += "&activeOnly=true";
-      }
-
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch rate sheets");
-      }
-
-      const data = await response.json();
-      setRateSheets(data.rateSheets || []);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      setError(errorMessage);
-      console.error("Error fetching rate sheets:", err);
-    } finally {
-      setIsLoading(false);
+  // Build API URL
+  const apiUrl = useMemo(() => {
+    let url = "/api/rate-sheets?limit=500";
+    if (showActiveOnly) {
+      url += "&activeOnly=true";
     }
+    return url;
   }, [showActiveOnly]);
 
-  useEffect(() => {
-    fetchRateSheets();
-  }, [fetchRateSheets]);
+  // Use SWR for caching
+  const { data, error, isLoading, mutate } = useSWR(apiUrl);
+  const rateSheets = data?.rateSheets || [];
 
   // Filter rate sheets based on search query
   const filteredRateSheets = useMemo(() => {
-    if (!searchQuery.trim()) return rateSheets;
+    if (!debouncedSearch.trim()) return rateSheets;
 
-    const query = searchQuery.toLowerCase();
+    const query = debouncedSearch.toLowerCase();
     return rateSheets.filter(
-      (rs) =>
+      (rs: RateSheet) =>
         rs.name.toLowerCase().includes(query) ||
         rs.customer.name.toLowerCase().includes(query) ||
         rs.customer.customerNumber.toLowerCase().includes(query)
     );
-  }, [searchQuery, rateSheets]);
+  }, [debouncedSearch, rateSheets]);
 
   // Paginate rate sheets
   const paginatedRateSheets = useMemo(() => {
@@ -150,7 +133,7 @@ export default function RateSheetsPage() {
       }
 
       // Refresh the list
-      fetchRateSheets();
+      mutate();
     } catch (err) {
       console.error("Error deleting rate sheet:", err);
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
@@ -187,8 +170,8 @@ export default function RateSheetsPage() {
     return Math.round((100 - effectiveRate) * 100) / 100;
   };
 
-  const _activeCount = rateSheets.filter((rs) => rs.isActive).length;
-  const validCount = rateSheets.filter((rs) => isRateSheetValid(rs)).length;
+  const _activeCount = rateSheets.filter((rs: RateSheet) => rs.isActive).length;
+  const validCount = rateSheets.filter((rs: RateSheet) => isRateSheetValid(rs)).length;
 
   return (
     <DashboardLayout>
@@ -235,7 +218,7 @@ export default function RateSheetsPage() {
               <div>
                 <p className="text-sm text-gray-600">Customers with Discounts</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {rateSheets.filter((rs) => getEffectiveDiscount(rs) > 0).length}
+                  {rateSheets.filter((rs: RateSheet) => getEffectiveDiscount(rs) > 0).length}
                 </p>
               </div>
             </div>
@@ -349,9 +332,9 @@ export default function RateSheetsPage() {
                     className="text-center text-red-600 py-8"
                   >
                     <div className="space-y-2">
-                      <p>Error: {error}</p>
+                      <p>Error: {error?.message || "Failed to load rate sheets"}</p>
                       <Button
-                        onClick={fetchRateSheets}
+                        onClick={() => mutate()}
                         variant="outline"
                         size="sm"
                       >
@@ -372,7 +355,7 @@ export default function RateSheetsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedRateSheets.map((rateSheet) => {
+                paginatedRateSheets.map((rateSheet: RateSheet) => {
                   const _isValid = isRateSheetValid(rateSheet);
                   const effectiveDiscount = getEffectiveDiscount(rateSheet);
                   const isExpired =
@@ -530,7 +513,7 @@ export default function RateSheetsPage() {
             setEditingRateSheet(null);
           }}
           onSuccess={() => {
-            fetchRateSheets();
+            mutate();
             setCurrentPage(1);
           }}
           editingRateSheet={editingRateSheet}

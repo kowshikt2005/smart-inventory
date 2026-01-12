@@ -18,7 +18,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Plus, MoreHorizontal, Eye, Edit, Loader2, X } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import useSWR from "swr";
+import { useDebounce } from "@/hooks/useDebounce";
 import { AddItemModal } from "@/components/items/AddItemModal";
 
 interface Item {
@@ -42,53 +45,33 @@ interface Item {
 }
 
 export default function ItemsPage() {
-  const [items, setItems] = useState<Item[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<Item | null>(null);
   const itemsPerPage = 10;
 
-  // Fetch items from API
-  useEffect(() => {
-    fetchItems();
-  }, []);
+  // Debounce search
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
-  const fetchItems = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await fetch("/api/items?limit=100");
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch items");
-      }
-
-      const data = await response.json();
-      setItems(data.items || []);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      setError(errorMessage);
-      console.error("Error fetching items:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Use SWR for caching
+  const { data, error, isLoading, mutate } = useSWR("/api/items?limit=100");
+  const items = data?.items || [];
 
   // Filter items based on search query
   const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return items;
+    if (!debouncedSearch.trim()) return items;
 
-    const query = searchQuery.toLowerCase();
+    const query = debouncedSearch.toLowerCase();
     return items.filter(
-      (item) =>
+      (item: Item) =>
         item.name.toLowerCase().includes(query) ||
         item.itemCode.toLowerCase().includes(query) ||
         (item.brand?.name.toLowerCase().includes(query)) ||
         (item.hsnCode?.toLowerCase().includes(query))
     );
-  }, [searchQuery, items]);
+  }, [debouncedSearch, items]);
 
   // Paginate items
   const paginatedItems = useMemo(() => {
@@ -106,13 +89,15 @@ export default function ItemsPage() {
   };
 
   const handleViewItem = (itemId: string) => {
-    console.log("View item:", itemId);
-    // TODO: Navigate to item details
+    router.push(`/masters/items/${itemId}`);
   };
 
   const handleEditItem = (itemId: string) => {
-    console.log("Edit item:", itemId);
-    // TODO: Open edit modal
+    const item = items.find((i: Item) => i.id === itemId);
+    if (item) {
+      setEditingItem(item);
+      setShowAddModal(true);
+    }
   };
 
   return (
@@ -189,8 +174,8 @@ export default function ItemsPage() {
                 <TableRow>
                   <TableCell colSpan={11} className="text-center text-red-600 py-8">
                     <div className="space-y-2">
-                      <p>Error: {error}</p>
-                      <Button onClick={fetchItems} variant="outline" size="sm">
+                      <p>Error: {error.message || "Failed to load items"}</p>
+                      <Button onClick={() => mutate()} variant="outline" size="sm">
                         Try Again
                       </Button>
                     </div>
@@ -205,7 +190,7 @@ export default function ItemsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedItems.map((item) => (
+                paginatedItems.map((item: Item) => (
                   <TableRow key={item.id}>
                     <TableCell className="font-mono">{item.itemCode}</TableCell>
                     <TableCell className="font-medium">{item.name}</TableCell>
@@ -280,14 +265,19 @@ export default function ItemsPage() {
           </div>
         )}
 
-        {/* Add Item Modal */}
+        {/* Add/Edit Item Modal */}
         <AddItemModal
           isOpen={showAddModal}
-          onClose={() => setShowAddModal(false)}
-          onSuccess={() => {
-            fetchItems();
-            setCurrentPage(1);
+          onClose={() => {
+            setShowAddModal(false);
+            setEditingItem(null);
           }}
+          onSuccess={() => {
+            mutate();
+            setCurrentPage(1);
+            setEditingItem(null);
+          }}
+          editItem={editingItem}
         />
       </div>
     </DashboardLayout>

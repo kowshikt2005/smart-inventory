@@ -19,7 +19,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { AddVendorModal } from "@/components/vendors/AddVendorModal";
 import { Plus, MoreHorizontal, Eye, FileText, Loader2, X } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import useSWR from "swr";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface Vendor {
   id: string;
@@ -40,53 +43,32 @@ interface Vendor {
 }
 
 export default function VendorsPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const itemsPerPage = 10;
 
-  // Fetch vendors from API
-  useEffect(() => {
-    fetchVendors();
-  }, []);
+  // Debounce search
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
-  const fetchVendors = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await fetch("/api/vendors");
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch vendors");
-      }
-
-      const data = await response.json();
-      setVendors(data.vendors || []);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      setError(errorMessage);
-      console.error("Error fetching vendors:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Use SWR for caching
+  const { data, error, isLoading, mutate } = useSWR("/api/vendors");
+  const vendors = data?.vendors || [];
 
   // Filter vendors based on search query
   const filteredVendors = useMemo(() => {
-    if (!searchQuery.trim()) return vendors;
+    if (!debouncedSearch.trim()) return vendors;
 
-    const query = searchQuery.toLowerCase();
+    const query = debouncedSearch.toLowerCase();
     return vendors.filter(
-      (vendor) =>
+      (vendor: Vendor) =>
         vendor.name.toLowerCase().includes(query) ||
         (vendor.gstin && vendor.gstin.toLowerCase().includes(query)) ||
         (vendor.city && vendor.city.toLowerCase().includes(query)) ||
         (vendor.state && vendor.state.toLowerCase().includes(query))
     );
-  }, [searchQuery, vendors]);
+  }, [debouncedSearch, vendors]);
 
   // Paginate vendors
   const paginatedVendors = useMemo(() => {
@@ -104,13 +86,11 @@ export default function VendorsPage() {
   };
 
   const handleViewDetails = (vendorId: string) => {
-    console.log("View details for vendor:", vendorId);
-    // TODO: Navigate to vendor details page or open modal
+    router.push(`/masters/vendors/${vendorId}`);
   };
 
   const handleViewTransactions = (vendorId: string) => {
-    console.log("View transactions for vendor:", vendorId);
-    // TODO: Navigate to transactions page or open modal
+    router.push(`/ledger/vendors?vendorId=${vendorId}`);
   };
 
   return (
@@ -206,9 +186,9 @@ export default function VendorsPage() {
                     className="text-center text-red-600 py-8"
                   >
                     <div className="space-y-2">
-                      <p>Error: {error}</p>
+                      <p>Error: {error.message || "Failed to load vendors"}</p>
                       <Button
-                        onClick={fetchVendors}
+                        onClick={() => mutate()}
                         variant="outline"
                         size="sm"
                       >
@@ -229,7 +209,7 @@ export default function VendorsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedVendors.map((vendor) => (
+                paginatedVendors.map((vendor: Vendor) => (
                   <TableRow key={vendor.id}>
                     <TableCell className="font-medium">{vendor.name}</TableCell>
                     <TableCell>{vendor.gstin || "N/A"}</TableCell>
@@ -313,7 +293,7 @@ export default function VendorsPage() {
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
           onSuccess={() => {
-            fetchVendors();
+            mutate();
             setCurrentPage(1);
           }}
         />

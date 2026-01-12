@@ -33,9 +33,12 @@ import {
   CheckCircle2,
   Eye,
   ArrowRight,
+  FileText,
 } from "lucide-react";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface Customer {
   id: string;
@@ -93,70 +96,37 @@ export default function SalesOrdersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
-  const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [totalCount, setTotalCount] = useState(0);
   const itemsPerPage = 15;
 
-  // Fetch sales orders
-  const fetchSalesOrders = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
+  // Debounce search query to avoid excessive API calls
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
-      let url = `/api/sales-orders?page=${currentPage}&limit=${itemsPerPage}`;
-      if (statusFilter !== "ALL") {
-        url += `&status=${statusFilter}`;
-      }
-      if (searchQuery) {
-        url += `&search=${encodeURIComponent(searchQuery)}`;
-      }
-
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch sales orders");
-      }
-
-      const data = await response.json();
-      setSalesOrders(data.salesOrders || []);
-      setTotalCount(data.pagination?.total || 0);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      setError(errorMessage);
-      console.error("Error fetching sales orders:", err);
-    } finally {
-      setIsLoading(false);
+  // Build API URL
+  const apiUrl = useMemo(() => {
+    let url = `/api/sales-orders?page=${currentPage}&limit=${itemsPerPage}`;
+    if (statusFilter !== "ALL") {
+      url += `&status=${statusFilter}`;
     }
-  }, [currentPage, statusFilter, searchQuery]);
-
-  useEffect(() => {
-    fetchSalesOrders();
-  }, [fetchSalesOrders]);
-
-  // Handle search
-  const handleSearch = () => {
-    setCurrentPage(1);
-    fetchSalesOrders();
-  };
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleSearch();
+    if (debouncedSearch) {
+      url += `&search=${encodeURIComponent(debouncedSearch)}`;
     }
-  };
+    return url;
+  }, [currentPage, statusFilter, debouncedSearch]);
 
-  const handleClearSearch = () => {
-    setSearchQuery("");
-    setCurrentPage(1);
-    fetchSalesOrders();
-  };
+  // Use SWR for data fetching with caching
+  const { data, error, isLoading, mutate } = useSWR(apiUrl);
+
+  const salesOrders = data?.salesOrders || [];
+  const totalCount = data?.pagination?.total || 0;
 
   // Handle status filter
   const handleStatusFilter = (status: string) => {
     setStatusFilter(status);
     setCurrentPage(1);
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery("");
   };
 
   // Handle delete
@@ -175,10 +145,40 @@ export default function SalesOrdersPage() {
         throw new Error(data.error || "Failed to delete order");
       }
 
-      fetchSalesOrders();
+      // Refresh data from cache after mutation
+      mutate();
     } catch (err) {
       console.error("Error deleting order:", err);
       alert(err instanceof Error ? err.message : "Failed to delete order");
+    }
+  };
+
+  // Handle create invoice from delivered order
+  const handleCreateInvoice = async (orderId: string) => {
+    try {
+      const response = await fetch("/api/sales-invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ salesOrderId: orderId }),
+      });
+
+      const data = await response.json();
+
+      if (response.status === 409 && data.invoiceId) {
+        // Invoice already exists
+        router.push(`/sales/invoices/${data.invoiceId}`);
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to create invoice");
+      }
+
+      // Redirect to the new invoice
+      router.push(`/sales/invoices/${data.id}`);
+    } catch (err) {
+      console.error("Error creating invoice:", err);
+      alert(err instanceof Error ? err.message : "Failed to create invoice");
     }
   };
 
@@ -227,7 +227,8 @@ export default function SalesOrdersPage() {
         throw new Error(data.error || "Failed to change status");
       }
 
-      fetchSalesOrders();
+      // Refresh data from cache after mutation
+      mutate();
     } catch (err) {
       console.error("Error changing status:", err);
       alert(err instanceof Error ? err.message : "Failed to change status");
@@ -258,9 +259,9 @@ export default function SalesOrdersPage() {
   const stats = useMemo(() => {
     return {
       total: totalCount,
-      open: salesOrders.filter((o) => o.status === "OPEN").length,
-      ready: salesOrders.filter((o) => o.status === "DELIVER").length,
-      delivered: salesOrders.filter((o) => o.status === "DELIVERED").length,
+      open: salesOrders.filter((o: SalesOrder) => o.status === "OPEN").length,
+      ready: salesOrders.filter((o: SalesOrder) => o.status === "DELIVER").length,
+      delivered: salesOrders.filter((o: SalesOrder) => o.status === "DELIVERED").length,
     };
   }, [salesOrders, totalCount]);
 
@@ -353,7 +354,6 @@ export default function SalesOrdersPage() {
                 placeholder="Search orders..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleSearchKeyDown}
                 className="pr-8"
               />
               {searchQuery && (
@@ -366,9 +366,6 @@ export default function SalesOrdersPage() {
                 </button>
               )}
             </div>
-            <Button onClick={handleSearch} variant="outline" size="sm">
-              Search
-            </Button>
             {/* New Order Button */}
             <Button
               onClick={() => router.push("/sales/orders/new")}
@@ -432,9 +429,9 @@ export default function SalesOrdersPage() {
                       className="text-center text-red-600 py-8"
                     >
                       <div className="space-y-2">
-                        <p>Error: {error}</p>
+                        <p>Error: {error.message || "Failed to load orders"}</p>
                         <Button
-                          onClick={fetchSalesOrders}
+                          onClick={() => mutate()}
                           variant="outline"
                           size="sm"
                         >
@@ -455,7 +452,7 @@ export default function SalesOrdersPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  salesOrders.map((order) => (
+                  salesOrders.map((order: SalesOrder) => (
                     <TableRow key={order.id} className="hover:bg-gray-50">
                       <TableCell className="text-sm">
                         {formatDate(order.orderDate)}
@@ -565,6 +562,17 @@ export default function SalesOrdersPage() {
                                 >
                                   <ArrowRight className="h-4 w-4 mr-2" />
                                   Release Hold
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {order.status === "DELIVERED" && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleCreateInvoice(order.id)}
+                                >
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  Create Invoice
                                 </DropdownMenuItem>
                               </>
                             )}

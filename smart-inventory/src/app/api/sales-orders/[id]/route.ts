@@ -190,27 +190,38 @@ export async function PUT(
 
       // Update in transaction with extended timeout
       const updatedOrder = await db.$transaction(async (tx) => {
-        // Release old inventory reservations (only if inventory exists)
-        for (const oldItem of existingOrder.items) {
-          const inventory = await tx.inventory.findUnique({
-            where: { itemId: oldItem.itemId },
-          });
-          if (inventory) {
-            await tx.inventory.update({
+        // Release old inventory reservations (only if inventory exists) - OPTIMIZED
+        const oldItemIds = existingOrder.items.map(item => item.itemId);
+        const newItemIds = body.items.map((item: any) => item.itemId);
+        const allItemIds = [...new Set([...oldItemIds, ...newItemIds])];
+
+        // Get all inventory records in one query
+        const inventories = await tx.inventory.findMany({
+          where: { itemId: { in: allItemIds } },
+        });
+        const inventoryMap = new Map(inventories.map(inv => [inv.itemId, inv]));
+
+        // Prepare batch operations for releasing old reservations
+        const releaseUpdates = existingOrder.items
+          .filter((oldItem: any) => inventoryMap.has(oldItem.itemId))
+          .map((oldItem: any) => 
+            tx.inventory.update({
               where: { itemId: oldItem.itemId },
               data: {
                 reservedQuantity: {
                   decrement: Number(oldItem.quantity),
                 },
               },
-            });
-          }
-        }
+            })
+          );
 
-        // Delete old items
-        await tx.salesOrderItem.deleteMany({
-          where: { salesOrderId: id },
-        });
+        // Execute release operations and delete old items in parallel
+        await Promise.all([
+          ...releaseUpdates,
+          tx.salesOrderItem.deleteMany({
+            where: { salesOrderId: id },
+          }),
+        ]);
 
         // Calculate new item totals
         const orderItems = body.items.map((orderItem: any) => {
@@ -284,22 +295,22 @@ export async function PUT(
           },
         });
 
-        // Reserve inventory for new items (only if inventory exists)
-        for (const orderItem of orderItems) {
-          const inventory = await tx.inventory.findUnique({
-            where: { itemId: orderItem.itemId },
-          });
-          if (inventory) {
-            await tx.inventory.update({
+        // Reserve inventory for new items (only if inventory exists) - OPTIMIZED
+        const reserveUpdates = orderItems
+          .filter((orderItem: any) => inventoryMap.has(orderItem.itemId))
+          .map((orderItem: any) => 
+            tx.inventory.update({
               where: { itemId: orderItem.itemId },
               data: {
                 reservedQuantity: {
                   increment: orderItem.quantity,
                 },
               },
-            });
-          }
-        }
+            })
+          );
+
+        // Execute inventory reservations in parallel
+        await Promise.all(reserveUpdates);
 
         return order;
       }, {
@@ -388,32 +399,39 @@ export async function DELETE(
       );
     }
 
-    // Delete in transaction with extended timeout
+    // Delete in transaction with extended timeout - OPTIMIZED
     await db.$transaction(async (tx) => {
-      // Release inventory reservations (only if inventory exists)
-      for (const orderItem of existingOrder.items) {
-        const inventory = await tx.inventory.findUnique({
-          where: { itemId: orderItem.itemId },
-        });
-        if (inventory) {
-          await tx.inventory.update({
+      // Get all inventory records in one query
+      const itemIds = existingOrder.items.map(item => item.itemId);
+      const inventories = await tx.inventory.findMany({
+        where: { itemId: { in: itemIds } },
+      });
+      const inventoryMap = new Map(inventories.map(inv => [inv.itemId, inv]));
+
+      // Prepare batch operations for releasing reservations
+      const releaseUpdates = existingOrder.items
+        .filter(orderItem => inventoryMap.has(orderItem.itemId))
+        .map(orderItem => 
+          tx.inventory.update({
             where: { itemId: orderItem.itemId },
             data: {
               reservedQuantity: {
                 decrement: Number(orderItem.quantity),
               },
             },
-          });
-        }
-      }
+          })
+        );
 
-      // Delete the order (items and status history will cascade)
-      await tx.salesOrder.delete({
-        where: { id },
-      });
+      // Execute release operations and delete order in parallel
+      await Promise.all([
+        ...releaseUpdates,
+        tx.salesOrder.delete({
+          where: { id },
+        }),
+      ]);
     }, {
-      maxWait: 10000,
-      timeout: 30000,
+      maxWait: 15000, // Increased timeout for batch operations
+      timeout: 45000,
     });
 
     return NextResponse.json({

@@ -1,0 +1,116 @@
+import { PrismaClient } from '@/generated/prisma';
+
+/**
+ * Generate the next invoice number in sequence (INV-0001, INV-0002, etc.)
+ */
+export async function generateInvoiceNumber(db: PrismaClient): Promise<string> {
+  const lastInvoice = await db.invoice.findFirst({
+    orderBy: { invoiceNumber: 'desc' },
+    select: { invoiceNumber: true },
+  });
+
+  let nextNum = 1;
+  if (lastInvoice) {
+    const match = lastInvoice.invoiceNumber.match(/INV-(\d+)/);
+    if (match) {
+      nextNum = parseInt(match[1], 10) + 1;
+    }
+  }
+
+  return `INV-${String(nextNum).padStart(4, '0')}`;
+}
+
+/**
+ * Generate the next payment number in sequence (PAY-0001, PAY-0002, etc.)
+ */
+export async function generatePaymentNumber(db: PrismaClient): Promise<string> {
+  const lastPayment = await db.payment.findFirst({
+    orderBy: { paymentNumber: 'desc' },
+    select: { paymentNumber: true },
+  });
+
+  let nextNum = 1;
+  if (lastPayment) {
+    const match = lastPayment.paymentNumber.match(/PAY-(\d+)/);
+    if (match) {
+      nextNum = parseInt(match[1], 10) + 1;
+    }
+  }
+
+  return `PAY-${String(nextNum).padStart(4, '0')}`;
+}
+
+/**
+ * Generate the next sales return number in sequence (SR-0001, SR-0002, etc.)
+ */
+export async function generateReturnNumber(db: PrismaClient): Promise<string> {
+  const lastReturn = await db.salesReturn.findFirst({
+    orderBy: { returnNumber: 'desc' },
+    select: { returnNumber: true },
+  });
+
+  let nextNum = 1;
+  if (lastReturn) {
+    const match = lastReturn.returnNumber.match(/SR-(\d+)/);
+    if (match) {
+      nextNum = parseInt(match[1], 10) + 1;
+    }
+  }
+
+  return `SR-${String(nextNum).padStart(4, '0')}`;
+}
+
+/**
+ * Generate the next stock journal number in sequence (SJ-0001, SJ-0002, etc.)
+ */
+export async function generateJournalNumber(db: PrismaClient): Promise<string> {
+  const lastJournal = await db.stockJournal.findFirst({
+    orderBy: { journalNumber: 'desc' },
+    select: { journalNumber: true },
+  });
+
+  let nextNum = 1;
+  if (lastJournal) {
+    const match = lastJournal.journalNumber.match(/SJ-(\d+)/);
+    if (match) {
+      nextNum = parseInt(match[1], 10) + 1;
+    }
+  }
+
+  return `SJ-${String(nextNum).padStart(4, '0')}`;
+}
+
+/**
+ * Calculate due date based on customer credit days
+ */
+export function calculateDueDate(invoiceDate: Date, creditDays: number): Date {
+  const dueDate = new Date(invoiceDate);
+  dueDate.setDate(dueDate.getDate() + creditDays);
+  return dueDate;
+}
+
+/**
+ * Check if invoice is overdue
+ */
+export function isInvoiceOverdue(dueDate: Date | null, balanceAmount: number): boolean {
+  if (!dueDate || balanceAmount <= 0) return false;
+  return new Date() > new Date(dueDate);
+}
+
+/**
+ * Calculate customer running balance from ledger entries
+ */
+export async function getCustomerBalance(db: PrismaClient, customerId: string): Promise<number> {
+  const result = await db.customerLedger.aggregate({
+    where: { customerId },
+    _sum: {
+      debit: true,
+      credit: true,
+    },
+  });
+
+  const totalDebit = Number(result._sum.debit || 0);
+  const totalCredit = Number(result._sum.credit || 0);
+
+  return totalDebit - totalCredit;
+}

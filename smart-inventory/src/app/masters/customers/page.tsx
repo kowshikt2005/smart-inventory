@@ -19,7 +19,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { AddCustomerModal } from "@/components/customers/AddCustomerModal";
 import { Plus, MoreHorizontal, Eye, FileText, Loader2, X } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import useSWR from "swr";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface Customer {
   id: string;
@@ -43,53 +46,32 @@ interface Customer {
 }
 
 export default function CustomersPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const itemsPerPage = 10;
 
-  // Fetch customers from API
-  useEffect(() => {
-    fetchCustomers();
-  }, []);
+  // Debounce search to avoid excessive filtering
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
-  const fetchCustomers = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await fetch("/api/customers");
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch customers");
-      }
-
-      const data = await response.json();
-      setCustomers(data.customers || []);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      setError(errorMessage);
-      console.error("Error fetching customers:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Use SWR for caching
+  const { data, error, isLoading, mutate } = useSWR("/api/customers");
+  const customers = data?.customers || [];
 
   // Filter customers based on search query
   const filteredCustomers = useMemo(() => {
-    if (!searchQuery.trim()) return customers;
+    if (!debouncedSearch.trim()) return customers;
 
-    const query = searchQuery.toLowerCase();
+    const query = debouncedSearch.toLowerCase();
     return customers.filter(
-      (customer) =>
+      (customer: Customer) =>
         customer.name.toLowerCase().includes(query) ||
         customer.gstin.toLowerCase().includes(query) ||
         customer.city.toLowerCase().includes(query) ||
         customer.state.toLowerCase().includes(query)
     );
-  }, [searchQuery, customers]);
+  }, [debouncedSearch, customers]);
 
   // Paginate customers
   const paginatedCustomers = useMemo(() => {
@@ -107,13 +89,11 @@ export default function CustomersPage() {
   };
 
   const handleViewDetails = (customerId: string) => {
-    console.log("View details for customer:", customerId);
-    // TODO: Navigate to customer details page or open modal
+    router.push(`/masters/customers/${customerId}`);
   };
 
   const handleViewTransactions = (customerId: string) => {
-    console.log("View transactions for customer:", customerId);
-    // TODO: Navigate to transactions page or open modal
+    router.push(`/ledger/customers?customerId=${customerId}`);
   };
 
   return (
@@ -214,9 +194,9 @@ export default function CustomersPage() {
                     className="text-center text-red-600 py-8"
                   >
                     <div className="space-y-2">
-                      <p>Error: {error}</p>
+                      <p>Error: {error.message || "Failed to load customers"}</p>
                       <Button
-                        onClick={fetchCustomers}
+                        onClick={() => mutate()}
                         variant="outline"
                         size="sm"
                       >
@@ -237,7 +217,7 @@ export default function CustomersPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedCustomers.map((customer) => (
+                paginatedCustomers.map((customer: Customer) => (
                   <TableRow key={customer.id}>
                     <TableCell className="font-medium">
                       {customer.name}
@@ -334,8 +314,8 @@ export default function CustomersPage() {
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
           onSuccess={() => {
-            // Refresh customer list after adding new customer
-            fetchCustomers();
+            // Refresh customer list from cache after adding new customer
+            mutate();
             setCurrentPage(1); // Reset to first page
           }}
         />
