@@ -86,6 +86,7 @@ model User {
   email     String   @unique
   name      String
   password  String
+  googleId  String?  @unique // For Google OAuth linking
   role      UserRole @default(SALESMAN)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())

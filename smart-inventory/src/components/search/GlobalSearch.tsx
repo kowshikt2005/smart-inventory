@@ -47,8 +47,8 @@ interface SearchResult {
   type: string;
   category: string;
   url: string;
-  icon: React.ComponentType<any>;
-  metadata?: Record<string, any>;
+  icon: React.ComponentType<{ className?: string }>;
+  metadata?: Record<string, string | number | boolean>;
 }
 
 interface GlobalSearchProps {
@@ -232,7 +232,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
     if (debouncedQuery.length >= 2) {
       // Customers
       if (customersData?.customers) {
-        const customerResults: SearchResult[] = customersData.customers.map((customer: any) => ({
+        const customerResults: SearchResult[] = customersData.customers.map((customer: { id: string; name: string; customerNumber: string; email?: string; phone?: string; city?: string; state?: string; gstin?: string }) => ({
           id: `customer-${customer.id}`,
           title: customer.name,
           subtitle: customer.customerNumber,
@@ -248,7 +248,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
 
       // Vendors
       if (vendorsData?.vendors) {
-        const vendorResults: SearchResult[] = vendorsData.vendors.map((vendor: any) => ({
+        const vendorResults: SearchResult[] = vendorsData.vendors.map((vendor: { id: string; name: string; vendorNumber: string; email?: string; phone?: string; city?: string; state?: string; gstin?: string }) => ({
           id: `vendor-${vendor.id}`,
           title: vendor.name,
           subtitle: vendor.vendorNumber,
@@ -264,7 +264,17 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
 
       // Items
       if (itemsData?.items) {
-        const itemResults: SearchResult[] = itemsData.items.map((item: any) => ({
+        const itemResults: SearchResult[] = itemsData.items.map((item: { 
+          id: string; 
+          name: string; 
+          itemCode: string; 
+          description?: string; 
+          brand?: { name: string }; 
+          subBrand?: { name: string };
+          unit?: string;
+          standardPrice?: number;
+          inventory?: { physicalStock?: number };
+        }) => ({
           id: `item-${item.id}`,
           title: item.name,
           subtitle: item.itemCode,
@@ -284,7 +294,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
 
       // Sales Orders
       if (ordersData?.salesOrders) {
-        const orderResults: SearchResult[] = ordersData.salesOrders.map((order: any) => ({
+        const orderResults: SearchResult[] = ordersData.salesOrders.map((order: { id: string; orderNumber: string; orderDate: string; customer: { name: string }; totalAmount: number; status: string }) => ({
           id: `order-${order.id}`,
           title: order.orderNumber,
           subtitle: order.customer.name,
@@ -304,7 +314,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
 
       // Stock Journals
       if (journalsData?.journals) {
-        const journalResults: SearchResult[] = journalsData.journals.map((journal: any) => ({
+        const journalResults: SearchResult[] = journalsData.journals.map((journal: { id: string; journalNumber: string; date: string; type: string; quantity: number; reason?: string }) => ({
           id: `journal-${journal.id}`,
           title: journal.journalNumber,
           subtitle: journal.item?.name || "Unknown Item",
@@ -416,7 +426,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
             )}
             
             {!isLoading && Object.keys(groupedResults).length === 0 && query.length > 0 && (
-              <CommandEmpty>No results found for "{query}"</CommandEmpty>
+              <CommandEmpty>No results found for &quot;{query}&quot;</CommandEmpty>
             )}
 
             {!isLoading && query.length === 0 && (
@@ -514,7 +524,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
                   className="flex items-center gap-3 px-4 py-3 text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 border-t-2 border-teal-200"
                 >
                   <Search className="h-4 w-4" />
-                  <span className="font-medium">View all search results for "{query}"</span>
+                  <span className="font-medium">View all search results for &quot;{query}&quot;</span>
                   <ArrowRight className="h-3 w-3 ml-auto" />
                 </CommandItem>
               </CommandGroup>

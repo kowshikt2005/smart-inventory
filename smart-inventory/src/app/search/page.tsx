@@ -42,7 +42,7 @@ interface SearchResultItem {
   description?: string;
   type: string;
   url: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, string | number | boolean>;
 }
 
 const SEARCH_TABS = [
@@ -102,7 +102,7 @@ export default function SearchPage() {
     };
 
     if (customersData?.customers) {
-      results.customers = customersData.customers.map((customer: any) => ({
+      results.customers = customersData.customers.map((customer: { id: string; name: string; customerNumber: string; email?: string; phone?: string; city?: string; state?: string; gstin?: string }) => ({
         id: customer.id,
         title: customer.name,
         subtitle: customer.customerNumber,
@@ -114,7 +114,7 @@ export default function SearchPage() {
     }
 
     if (vendorsData?.vendors) {
-      results.vendors = vendorsData.vendors.map((vendor: any) => ({
+      results.vendors = vendorsData.vendors.map((vendor: { id: string; name: string; vendorNumber: string; email?: string; phone?: string; city?: string; state?: string; gstin?: string }) => ({
         id: vendor.id,
         title: vendor.name,
         subtitle: vendor.vendorNumber,
@@ -126,7 +126,17 @@ export default function SearchPage() {
     }
 
     if (itemsData?.items) {
-      results.items = itemsData.items.map((item: any) => ({
+      results.items = itemsData.items.map((item: { 
+        id: string; 
+        name: string; 
+        itemCode: string; 
+        description?: string; 
+        brand?: { name: string }; 
+        subBrand?: { name: string };
+        unit?: string;
+        standardPrice?: number;
+        inventory?: { physicalStock?: number };
+      }) => ({
         id: item.id,
         title: item.name,
         subtitle: item.itemCode,
@@ -142,7 +152,7 @@ export default function SearchPage() {
     }
 
     if (ordersData?.salesOrders) {
-      results.orders = ordersData.salesOrders.map((order: any) => ({
+      results.orders = ordersData.salesOrders.map((order: { id: string; orderNumber: string; orderDate: string; customer: { name: string }; totalAmount: number; status: string }) => ({
         id: order.id,
         title: order.orderNumber,
         subtitle: order.customer.name,
@@ -158,7 +168,7 @@ export default function SearchPage() {
     }
 
     if (journalsData?.journals) {
-      results.journals = journalsData.journals.map((journal: any) => ({
+      results.journals = journalsData.journals.map((journal: { id: string; journalNumber: string; date: string; type: string; quantity: number; reason?: string }) => ({
         id: journal.id,
         title: journal.journalNumber,
         subtitle: journal.item?.name || "Unknown Item",
@@ -303,7 +313,7 @@ function SearchResultsTable({ results, query, onNavigate }: SearchResultsTablePr
       <div className="text-center py-16 text-gray-500">
         <Search className="h-12 w-12 mx-auto mb-4 text-gray-300" />
         <h3 className="text-lg font-medium mb-2">No results found</h3>
-        <p>No items match your search for "{query}"</p>
+        <p>No items match your search for &quot;{query}&quot;</p>
       </div>
     );
   }

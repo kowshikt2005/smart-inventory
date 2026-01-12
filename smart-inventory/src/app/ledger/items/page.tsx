@@ -255,7 +255,7 @@ export default function StockLedgerPage() {
           ) : movements.length === 0 && !summary ? (
             <div className="text-center py-16 text-gray-500">
               <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-              <p>Click "View Ledger" to load stock movements</p>
+              <p>Click &quot;View Ledger&quot; to load stock movements</p>
             </div>
           ) : movements.length === 0 ? (
             <div className="text-center py-16 text-gray-500">
