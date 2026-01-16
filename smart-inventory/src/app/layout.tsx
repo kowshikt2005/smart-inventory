@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Smart Inventory",
-  description: "Inventory management system",
+  title: "Sri Balaji Enterprises ERP",
+  description: "Enterprise Resource Planning system for Sri Balaji Enterprises",
 };
 
 export default function RootLayout({

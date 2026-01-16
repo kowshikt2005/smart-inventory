@@ -112,6 +112,10 @@ export async function PUT(
       updateData.isActive = body.isActive;
     }
 
+    if (body.excludedItemIds !== undefined) {
+      updateData.excludedItemIds = body.excludedItemIds || [];
+    }
+
     const rateSheet = await db.rateSheet.update({
       where: { id },
       data: updateData,

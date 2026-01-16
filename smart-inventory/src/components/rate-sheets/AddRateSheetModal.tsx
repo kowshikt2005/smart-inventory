@@ -29,6 +29,13 @@ interface Customer {
   state?: string;
 }
 
+interface Item {
+  id: string;
+  itemCode: string;
+  name: string;
+  unit: string;
+}
+
 interface RateSheet {
   id: string;
   name: string;
@@ -80,6 +87,12 @@ export function AddRateSheetModal({
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
+  // Items data for exclusions
+  const [items, setItems] = useState<Item[]>([]);
+  const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const [excludedItemIds, setExcludedItemIds] = useState<string[]>([]);
+  const [itemSearch, setItemSearch] = useState("");
+
   // Form fields
   const [name, setName] = useState("");
   const [validFrom, setValidFrom] = useState(
@@ -94,10 +107,13 @@ export function AddRateSheetModal({
 
   const isEditing = !!editingRateSheet;
 
-  // Fetch customers
+  // Fetch customers and items
   useEffect(() => {
-    if (isOpen && !isEditing) {
-      fetchCustomers();
+    if (isOpen) {
+      if (!isEditing) {
+        fetchCustomers();
+      }
+      fetchItems();
     }
   }, [isOpen, isEditing]);
 
@@ -117,6 +133,8 @@ export function AddRateSheetModal({
       setCurrency(editingRateSheet.currency);
       setRoundOff(editingRateSheet.roundOff);
       setIsActive(editingRateSheet.isActive);
+      const excluded = (editingRateSheet as RateSheet & { excludedItemIds?: string[] }).excludedItemIds || [];
+      setExcludedItemIds(Array.isArray(excluded) ? excluded : []);
     } else {
       resetForm();
     }
@@ -137,6 +155,21 @@ export function AddRateSheetModal({
     }
   };
 
+  const fetchItems = async () => {
+    try {
+      setIsLoadingItems(true);
+      const response = await fetch("/api/items?limit=1000&activeOnly=true");
+      if (response.ok) {
+        const data = await response.json();
+        setItems(data.items || []);
+      }
+    } catch (err) {
+      console.error("Error fetching items:", err);
+    } finally {
+      setIsLoadingItems(false);
+    }
+  };
+
   const resetForm = () => {
     setName("");
     setSelectedCustomer(null);
@@ -148,6 +181,8 @@ export function AddRateSheetModal({
     setCurrency("INR");
     setRoundOff("NONE");
     setIsActive(true);
+    setExcludedItemIds([]);
+    setItemSearch("");
     setError(null);
   };
 
@@ -223,6 +258,7 @@ export function AddRateSheetModal({
         currency,
         roundOff,
         isActive,
+        excludedItemIds,
       };
 
       const url = isEditing
@@ -381,6 +417,104 @@ export function AddRateSheetModal({
               )}
             </div>
 
+            {/* Excluded Items */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Exclude Specific Items <span className="text-gray-400">(Optional)</span>
+              </label>
+              {isLoadingItems ? (
+                <div className="flex items-center gap-2 text-gray-500 p-3 border rounded-lg">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading items...
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      type="text"
+                      placeholder="Search items to exclude..."
+                      value={itemSearch}
+                      onChange={(e) => setItemSearch(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+
+                  {excludedItemIds.length > 0 && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-sm font-medium text-amber-900 mb-2">
+                        Excluded Items ({excludedItemIds.length})
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {excludedItemIds.map((id) => {
+                          const item = items.find((i) => i.id === id);
+                          if (!item) return null;
+                          return (
+                            <div
+                              key={id}
+                              className="flex items-center gap-1 px-2 py-1 bg-white border border-amber-300 rounded text-xs"
+                            >
+                              <span>{item.name}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExcludedItemIds((prev) =>
+                                    prev.filter((i) => i !== id)
+                                  )
+                                }
+                                className="text-amber-600 hover:text-amber-800"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {itemSearch && (
+                    <div className="border rounded-lg max-h-48 overflow-y-auto">
+                      {items
+                        .filter(
+                          (item) =>
+                            (item.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
+                             item.itemCode.toLowerCase().includes(itemSearch.toLowerCase())) &&
+                            !excludedItemIds.includes(item.id)
+                        )
+                        .slice(0, 20)
+                        .map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setExcludedItemIds((prev) => [...prev, item.id]);
+                              setItemSearch("");
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b last:border-b-0"
+                          >
+                            <p className="font-medium text-sm">{item.name}</p>
+                            <p className="text-xs text-gray-500">{item.itemCode}</p>
+                          </button>
+                        ))}
+                      {items.filter(
+                        (item) =>
+                          (item.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
+                           item.itemCode.toLowerCase().includes(itemSearch.toLowerCase())) &&
+                          !excludedItemIds.includes(item.id)
+                      ).length === 0 && (
+                        <p className="p-3 text-gray-500 text-sm">No items found</p>
+                      )}
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-500">
+                    Rate sheet will apply to all items except those listed above
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Validity Dates */}
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -414,15 +548,6 @@ export function AddRateSheetModal({
               </div>
             </div>
 
-            {/* Apply For - All Items Info */}
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800 font-medium">
-                Apply for: All Items
-              </p>
-              <p className="text-xs text-blue-600 mt-1">
-                This rate sheet will apply to all items for this customer
-              </p>
-            </div>
 
             {/* Item Rate Percent */}
             <div>

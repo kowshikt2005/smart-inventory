@@ -240,6 +240,12 @@ function NewSalesOrderPageContent() {
         return Number(item.standardPrice);
       }
 
+      // Check if item is excluded from this rate sheet
+      const excludedItemIds = (rateSheet as { excludedItemIds?: string[] }).excludedItemIds || [];
+      if (Array.isArray(excludedItemIds) && excludedItemIds.includes(item.id)) {
+        return Number(item.standardPrice);
+      }
+
       const itemRatePercent = Number(rateSheet.itemRatePercent);
       const discountPercent = Number(rateSheet.discountPercent);
 

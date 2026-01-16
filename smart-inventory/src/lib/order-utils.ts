@@ -102,10 +102,22 @@ export function getEffectiveRate(
     isActive: boolean;
     itemRatePercent: number | Decimal;
     discountPercent: number | Decimal;
-  } | null
+    excludedItemIds?: string[];
+  } | null,
+  itemId?: string
 ): number {
   if (!rateSheet || !rateSheet.isActive) {
     return standardPrice;
+  }
+
+  // Check if item is excluded from this rate sheet
+  if (itemId && rateSheet.excludedItemIds) {
+    const excludedIds = Array.isArray(rateSheet.excludedItemIds)
+      ? rateSheet.excludedItemIds
+      : [];
+    if (excludedIds.includes(itemId)) {
+      return standardPrice;
+    }
   }
 
   const itemRatePercent = Number(rateSheet.itemRatePercent);

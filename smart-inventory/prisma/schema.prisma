@@ -466,6 +466,7 @@ model RateSheet {
   validTo         DateTime?
   itemRatePercent Decimal      @default(100) @db.Decimal(5, 2) // % of base sales rate (100 = full price)
   discountPercent Decimal      @default(0) @db.Decimal(5, 2)   // Additional discount %
+  excludedItemIds Json?        // Array of item IDs to exclude from this rate sheet
   currency        CurrencyType @default(INR)
   roundOff        RoundOffType @default(NONE)
   isActive        Boolean      @default(true)
