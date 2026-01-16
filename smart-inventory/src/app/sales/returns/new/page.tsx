@@ -478,8 +478,8 @@ export default function NewSalesReturnPage() {
                           <TableCell>
                             <Input
                               type="number"
-                              min="0.001"
-                              step="0.001"
+                              min="1"
+                              step="1"
                               value={item.quantity}
                               onChange={(e) =>
                                 handleItemChange(

@@ -89,7 +89,6 @@ export default function SalesReturnsPage() {
 
   // Use SWR for caching
   const { data, error, isLoading, mutate } = useSWR(apiUrl);
-  const salesReturns = data?.salesReturns || [];
   const totalCount = data?.pagination?.total || 0;
 
   const handleClearSearch = () => {
@@ -175,6 +174,7 @@ export default function SalesReturnsPage() {
 
   // Calculate stats
   const stats = useMemo(() => {
+    const salesReturns = data?.salesReturns || [];
     const open = salesReturns.filter((r: SalesReturn) => r.status === "OPEN").length;
     const completed = salesReturns.filter((r: SalesReturn) => r.status === "COMPLETED").length;
     const totalValue = salesReturns
@@ -187,7 +187,7 @@ export default function SalesReturnsPage() {
       completed,
       totalValue,
     };
-  }, [salesReturns, totalCount]);
+  }, [data, totalCount]);
 
   return (
     <DashboardLayout>
@@ -367,7 +367,7 @@ export default function SalesReturnsPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : salesReturns.length === 0 ? (
+                ) : (data?.salesReturns || []).length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={8}
@@ -379,7 +379,7 @@ export default function SalesReturnsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  salesReturns.map((ret: SalesReturn) => (
+                  (data?.salesReturns || []).map((ret: SalesReturn) => (
                     <TableRow key={ret.id} className="hover:bg-gray-50">
                       <TableCell className="text-sm">
                         {formatDate(ret.returnDate)}

@@ -71,10 +71,10 @@ export default function StockJournalPage() {
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   const { data, error, isLoading, mutate } = useSWR("/api/stock-journals?limit=500");
-  const journals: StockJournal[] = data?.journals || [];
 
   // Filter journals based on search
   const filteredJournals = useMemo(() => {
+    const journals: StockJournal[] = data?.journals || [];
     if (!debouncedSearch.trim()) return journals;
     const query = debouncedSearch.toLowerCase();
     return journals.filter(
@@ -84,7 +84,7 @@ export default function StockJournalPage() {
         j.item?.itemCode.toLowerCase().includes(query) ||
         j.reason?.toLowerCase().includes(query)
     );
-  }, [debouncedSearch, journals]);
+  }, [debouncedSearch, data]);
 
   // Paginate
   const paginatedJournals = useMemo(() => {
@@ -123,19 +123,6 @@ export default function StockJournalPage() {
       month: "short",
       year: "numeric",
     });
-  };
-
-  const getAdjustmentTypeFromNotes = (journal: StockJournal) => {
-    // Extract adjustment type from the stock movement notes pattern
-    // Notes format: "Stock Journal SJ-XXXX - TYPE: reason"
-    if (journal.reason) {
-      if (journal.reason.includes("INCREASE")) return "INCREASE";
-      if (journal.reason.includes("DECREASE")) return "DECREASE";
-      if (journal.reason.includes("RESERVED")) return "RESERVED";
-      if (journal.reason.includes("UNRESERVED")) return "UNRESERVED";
-    }
-    // Fallback to type
-    return journal.type === "ADJUSTMENT_IN" ? "INCREASE" : "DECREASE";
   };
 
   return (

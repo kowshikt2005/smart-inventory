@@ -44,16 +44,11 @@ interface Customer {
   creditDays: number;
 }
 
-interface SalesOrder {
-  id: string;
-  orderNumber: string;
-  orderDate: string;
-}
-
 interface Invoice {
   id: string;
   invoiceNumber: string;
   invoiceDate: string;
+  orderNumber: string | null;
   dueDate: string | null;
   subtotal: number;
   cgst: number;
@@ -65,7 +60,6 @@ interface Invoice {
   paymentStatus: string;
   effectiveStatus: string;
   customer: Customer;
-  salesOrder: SalesOrder;
 }
 
 const STATUS_FILTERS = [
@@ -432,15 +426,8 @@ export default function SalesInvoicesPage() {
                           {invoice.invoiceNumber}
                         </button>
                       </TableCell>
-                      <TableCell>
-                        <button
-                          onClick={() =>
-                            router.push(`/sales/orders/${invoice.salesOrder.id}`)
-                          }
-                          className="text-sm text-gray-600 hover:text-teal-600 hover:underline"
-                        >
-                          {invoice.salesOrder.orderNumber}
-                        </button>
+                      <TableCell className="text-sm text-gray-600">
+                        {invoice.orderNumber || "-"}
                       </TableCell>
                       <TableCell>
                         <div>

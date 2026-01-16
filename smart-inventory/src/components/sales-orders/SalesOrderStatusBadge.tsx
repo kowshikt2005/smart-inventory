@@ -3,10 +3,8 @@
 import { Badge } from "@/components/ui/badge";
 import {
   Clock,
-  Truck,
   Pause,
   XCircle,
-  CheckCircle2,
 } from "lucide-react";
 
 interface SalesOrderStatusBadgeProps {
@@ -28,25 +26,15 @@ const STATUS_CONFIG: Record<
     className: "bg-blue-100 text-blue-700 hover:bg-blue-100",
     icon: Clock,
   },
-  DELIVER: {
-    label: "Ready",
-    className: "bg-green-100 text-green-700 hover:bg-green-100",
-    icon: Truck,
-  },
   HOLD: {
-    label: "On Hold",
-    className: "bg-yellow-100 text-yellow-700 hover:bg-yellow-100",
+    label: "Hold",
+    className: "bg-orange-100 text-orange-700 hover:bg-orange-100",
     icon: Pause,
   },
-  REJECT: {
+  REJECTED: {
     label: "Rejected",
     className: "bg-red-100 text-red-700 hover:bg-red-100",
     icon: XCircle,
-  },
-  DELIVERED: {
-    label: "Delivered",
-    className: "bg-purple-100 text-purple-700 hover:bg-purple-100",
-    icon: CheckCircle2,
   },
 };
 

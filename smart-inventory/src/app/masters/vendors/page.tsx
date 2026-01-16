@@ -54,10 +54,10 @@ export default function VendorsPage() {
 
   // Use SWR for caching
   const { data, error, isLoading, mutate } = useSWR("/api/vendors");
-  const vendors = data?.vendors || [];
 
   // Filter vendors based on search query
   const filteredVendors = useMemo(() => {
+    const vendors = data?.vendors || [];
     if (!debouncedSearch.trim()) return vendors;
 
     const query = debouncedSearch.toLowerCase();
@@ -68,7 +68,7 @@ export default function VendorsPage() {
         (vendor.city && vendor.city.toLowerCase().includes(query)) ||
         (vendor.state && vendor.state.toLowerCase().includes(query))
     );
-  }, [debouncedSearch, vendors]);
+  }, [debouncedSearch, data]);
 
   // Paginate vendors
   const paginatedVendors = useMemo(() => {

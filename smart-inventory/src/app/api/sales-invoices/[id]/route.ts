@@ -27,21 +27,17 @@ export async function GET(
             creditDays: true,
           },
         },
-        salesOrder: {
+        items: {
           include: {
-            items: {
-              include: {
-                item: {
-                  select: {
-                    id: true,
-                    itemCode: true,
-                    name: true,
-                    unit: true,
-                    hsnCode: true,
-                    gstRate: true,
-                    standardPrice: true,
-                  },
-                },
+            item: {
+              select: {
+                id: true,
+                itemCode: true,
+                name: true,
+                unit: true,
+                hsnCode: true,
+                gstRate: true,
+                standardPrice: true,
               },
             },
           },

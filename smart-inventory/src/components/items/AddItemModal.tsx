@@ -77,7 +77,6 @@ export function AddItemModal({
   const { data: subBrandsData } = useSWR(isOpen ? "/api/sub-brands" : null);
 
   const brands = brandsData?.brands || [];
-  const subBrands = subBrandsData?.subBrands || [];
 
   // Populate form when editing
   useEffect(() => {
@@ -113,9 +112,10 @@ export function AddItemModal({
 
   // Filter sub-brands based on selected brand
   const filteredSubBrands = useMemo(() => {
+    const subBrands = subBrandsData?.subBrands || [];
     if (!formData.brandId) return [];
     return subBrands.filter((sb: SubBrand) => sb.brandId === formData.brandId);
-  }, [formData.brandId, subBrands]);
+  }, [formData.brandId, subBrandsData]);
 
   // Reset sub-brand when brand changes
   useEffect(() => {

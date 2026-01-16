@@ -82,23 +82,12 @@ export function OrderItemRow({
 
   // Handle item selection
   const handleItemSelect = (itemId: string) => {
-    const newItem = items.find((i) => i.id === itemId);
-    if (newItem) {
-      const taxRate = Number(newItem.gstRate);
-      const rate = Number(newItem.standardPrice);
-      const quantity = item.quantity || 1;
-      const amount = quantity * rate;
-      const taxAmount = amount * (taxRate / 100);
-
-      onUpdate({
-        ...item,
-        itemId,
-        rate,
-        taxRate,
-        taxAmount: Math.round(taxAmount * 100) / 100,
-        amount: Math.round(amount * 100) / 100,
-      });
-    }
+    // Just notify parent - let parent calculate the rate with rate sheet
+    onUpdate({
+      ...item,
+      itemId,
+      // Parent will recalculate rate, taxRate, amount, and taxAmount
+    });
   };
 
   // Handle quantity change
@@ -181,8 +170,8 @@ export function OrderItemRow({
       <td className="px-3 py-2">
         <Input
           type="number"
-          min="0.001"
-          step="0.001"
+          min="1"
+          step="1"
           value={item.quantity || ""}
           onChange={(e) => handleQuantityChange(e.target.value)}
           className="w-24 text-right"

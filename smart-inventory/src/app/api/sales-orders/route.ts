@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { generateOrderNumber, calculateLineItem, calculateOrderTotals, SYSTEM_USER_ID } from '@/lib/order-utils';
+import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
 
 // GET /api/sales-orders - Get all sales orders with filtering
 export async function GET(request: Request) {
@@ -83,34 +84,68 @@ export async function GET(request: Request) {
       db.salesOrder.count({ where }),
     ]);
 
-    // Add stock status to each order
+    // Calculate priority-based stock allocation
+    const allocationResult = await calculateStockAllocation(db);
+
+    // Add stock status to each order based on priority allocation
     const ordersWithStockStatus = salesOrders.map((order) => {
-      let stockStatus: 'Available' | 'Partial' | 'Unavailable' = 'Available';
+      // Get allocation for this order
+      const allocations = getOrderAllocation(order.id, allocationResult);
+      const allocationMap = new Map(
+        allocations.map((a) => [a.itemId, a])
+      );
+
+      // Calculate stock status based on allocation
+      const stockStatus = calculateOrderStockStatus(allocations);
 
       const itemsWithStock = order.items.map((orderItem) => {
-        const physicalStock = Number(orderItem.item.inventory?.physicalStock || 0);
-        const reservedQuantity = Number(orderItem.item.inventory?.reservedQuantity || 0);
-        const availableStock = physicalStock - reservedQuantity;
-        const quantity = Number(orderItem.quantity);
-        const hasStock = availableStock >= quantity;
+        const allocation = allocationMap.get(orderItem.itemId);
+        const allocatedQty = allocation?.allocatedQty || 0;
+        const shortfallQty = allocation?.shortfallQty || 0;
+        const hasStock = shortfallQty === 0;
 
-        return { ...orderItem, hasStock, availableStock };
+        return {
+          ...orderItem,
+          hasStock,
+          availableStock: allocatedQty,
+          allocatedQty,
+          shortfallQty,
+        };
       });
 
-      const allHaveStock = itemsWithStock.every((item) => item.hasStock);
-      const someHaveStock = itemsWithStock.some((item) => item.hasStock);
+      // Create summary for stock
+      const stockSummary = {
+        totalItems: itemsWithStock.length,
+        availableItems: itemsWithStock.filter((item) => item.hasStock).length,
+        partialItems: itemsWithStock.filter(
+          (item) => !item.hasStock && item.allocatedQty > 0
+        ).length,
+        unavailableItems: itemsWithStock.filter(
+          (item) => item.allocatedQty === 0
+        ).length,
+      };
 
-      if (allHaveStock) {
-        stockStatus = 'Available';
-      } else if (someHaveStock) {
-        stockStatus = 'Partial';
-      } else {
-        stockStatus = 'Unavailable';
+      // For Partial/Unavailable orders, include detailed item stock info
+      let itemStockDetails = undefined;
+      if (stockStatus === 'Partial' || stockStatus === 'Unavailable') {
+        itemStockDetails = itemsWithStock
+          .filter((item) => !item.hasStock)
+          .map((item) => ({
+            itemId: item.itemId,
+            itemCode: item.item.itemCode,
+            itemName: item.item.name,
+            orderedQty: Number(item.quantity),
+            availableQty: item.allocatedQty,
+            missingQty: item.shortfallQty,
+            unit: item.item.unit,
+          }));
       }
 
       return {
         ...order,
         stockStatus,
+        stockSummary,
+        itemStockDetails,
         items: itemsWithStock,
       };
     });
@@ -223,6 +258,41 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+    }
+
+    // Check stock availability and warn if insufficient (non-blocking)
+    const insufficientStockItems = [];
+    for (const orderItem of body.items) {
+      const item = items.find((i) => i.id === orderItem.itemId);
+      if (!item) continue;
+
+      const physicalStock = Number(item.inventory?.physicalStock || 0);
+      const reservedQuantity = Number(item.inventory?.reservedQuantity || 0);
+      const availableStock = physicalStock - reservedQuantity;
+      const requiredQty = Number(orderItem.quantity);
+
+      if (availableStock < requiredQty) {
+        insufficientStockItems.push({
+          itemId: item.id,
+          itemCode: item.itemCode,
+          itemName: item.name,
+          required: requiredQty,
+          available: availableStock,
+          shortfall: requiredQty - availableStock,
+        });
+      }
+    }
+
+    // If stock is insufficient and user hasn't confirmed, return warning
+    if (insufficientStockItems.length > 0 && !body.forceCreate) {
+      return NextResponse.json(
+        {
+          warning: true,
+          message: 'Some items have insufficient stock',
+          insufficientStock: insufficientStockItems,
+        },
+        { status: 409 }
+      );
     }
 
     // Validate round off is within range

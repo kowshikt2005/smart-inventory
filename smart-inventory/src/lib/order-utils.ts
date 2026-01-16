@@ -120,13 +120,12 @@ export function getEffectiveRate(
 
 /**
  * Status transition validation
+ * New simplified workflow: OPEN <-> HOLD -> REJECTED
  */
 export const STATUS_TRANSITIONS: Record<string, string[]> = {
-  OPEN: ['DELIVER', 'HOLD', 'REJECT'],
-  DELIVER: ['DELIVERED', 'REJECT'],
-  HOLD: ['DELIVER', 'REJECT'],
-  REJECT: [], // Terminal state
-  DELIVERED: [], // Terminal state
+  OPEN: ['HOLD', 'REJECTED'],
+  HOLD: ['OPEN', 'REJECTED'],
+  REJECTED: [], // Terminal state
 };
 
 export function isValidStatusTransition(fromStatus: string, toStatus: string): boolean {

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { mutate } from "swr";
 
 interface Customer {
   id: string;
@@ -44,6 +45,14 @@ interface Item {
     physicalStock: number;
     reservedQuantity: number;
   } | null;
+}
+
+interface InsufficientStockItem {
+  itemName: string;
+  itemCode: string;
+  required: number;
+  available: number;
+  shortfall: number;
 }
 
 interface OrderItemData {
@@ -225,8 +234,8 @@ function NewSalesOrderPageContent() {
 
   // Get effective rate for an item considering customer rate sheet
   const getEffectiveRate = useCallback(
-    (item: Item) => {
-      const rateSheet = selectedCustomer?.rateSheet;
+    (item: Item, customer?: Customer | null) => {
+      const rateSheet = (customer || selectedCustomer)?.rateSheet;
       if (!rateSheet || !rateSheet.isActive) {
         return Number(item.standardPrice);
       }
@@ -246,17 +255,17 @@ function NewSalesOrderPageContent() {
   // Handle customer selection
   const handleCustomerSelect = async (customer: Customer) => {
     // Fetch customer with rate sheet
+    let fullCustomer = customer;
     try {
       const response = await fetch(`/api/customers/${customer.id}`);
       if (response.ok) {
-        const fullCustomer = await response.json();
-        setSelectedCustomer(fullCustomer);
-      } else {
-        setSelectedCustomer(customer);
+        fullCustomer = await response.json();
       }
     } catch {
-      setSelectedCustomer(customer);
+      // Use the customer as-is if fetch fails
     }
+    
+    setSelectedCustomer(fullCustomer);
     setCustomerSearch("");
 
     // Recalculate item rates if rate sheet changes
@@ -267,7 +276,7 @@ function NewSalesOrderPageContent() {
           const item = items.find((i) => i.id === orderItem.itemId);
           if (!item) return orderItem;
 
-          const rate = getEffectiveRate(item);
+          const rate = getEffectiveRate(item, fullCustomer);
           const amount = orderItem.quantity * rate;
           const taxAmount = amount * (orderItem.taxRate / 100);
 
@@ -301,16 +310,20 @@ function NewSalesOrderPageContent() {
 
   // Handle updating item row
   const handleUpdateItem = (index: number, updatedItem: OrderItemData) => {
-    // Apply customer rate sheet if selecting new item
-    if (updatedItem.itemId && orderItems[index].itemId !== updatedItem.itemId) {
+    // Apply customer rate sheet if selecting new item or item changed
+    const itemChanged = updatedItem.itemId && orderItems[index].itemId !== updatedItem.itemId;
+    
+    if (itemChanged) {
       const item = items.find((i) => i.id === updatedItem.itemId);
       if (item) {
         const rate = getEffectiveRate(item);
-        const amount = updatedItem.quantity * rate;
+        const quantity = updatedItem.quantity || 1;
+        const amount = quantity * rate;
         const taxAmount = amount * (Number(item.gstRate) / 100);
 
         updatedItem = {
           ...updatedItem,
+          quantity,
           rate,
           taxRate: Number(item.gstRate),
           amount: Math.round(amount * 100) / 100,
@@ -427,10 +440,50 @@ function NewSalesOrderPageContent() {
         body: JSON.stringify(payload),
       });
 
+      const data = await response.json();
+
+      // Handle stock warning (409 status)
+      if (response.status === 409 && data.warning) {
+        const proceed = confirm(
+          `Warning: Some items have insufficient stock:\n\n${data.insufficientStock
+            .map(
+              (item: InsufficientStockItem) =>
+                `${item.itemName} (${item.itemCode}):\n  Required: ${item.required}\n  Available: ${item.available}\n  Missing: ${item.shortfall}`
+            )
+            .join("\n\n")}\n\nDo you want to create the order anyway?`
+        );
+
+        if (proceed) {
+          // Retry with forceCreate flag
+          const forceResponse = await fetch(url, {
+            method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...payload, forceCreate: true }),
+          });
+
+          if (!forceResponse.ok) {
+            const errorData = await forceResponse.json();
+            throw new Error(errorData.error || "Failed to save order");
+          }
+
+          // Invalidate sales orders cache to show the new order
+          mutate(key => typeof key === 'string' && key.includes('/api/sales-orders'), undefined, { revalidate: true });
+          
+          router.push("/sales/orders");
+          return;
+        } else {
+          // User cancelled
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.error || "Failed to save order");
       }
+
+      // Invalidate sales orders cache to show the new order
+      mutate(key => typeof key === 'string' && key.includes('/api/sales-orders'), undefined, { revalidate: true });
 
       router.push("/sales/orders");
     } catch (err) {

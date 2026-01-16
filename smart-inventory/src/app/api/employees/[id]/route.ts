@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { hashPassword, hasRole } from '@/lib/auth-utils';
+import { UserRole } from '@/generated/prisma';
 
 // GET /api/employees/[id] - Get single employee (Admin only)
 export async function GET(
@@ -144,7 +145,7 @@ export async function PUT(
         name: string;
         email: string;
         isActive: boolean;
-        role?: string;
+        role?: UserRole;
         password?: string;
       } = {
         name: body.name || existingEmployee.name,
@@ -153,7 +154,7 @@ export async function PUT(
       };
 
       if (body.role) {
-        userUpdateData.role = body.role;
+        userUpdateData.role = body.role as UserRole;
       }
 
       if (body.password) {

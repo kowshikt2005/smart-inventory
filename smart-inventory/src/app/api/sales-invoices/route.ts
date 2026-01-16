@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { generateInvoiceNumber, calculateDueDate } from '@/lib/invoice-utils';
 import { calculateOrderTotals } from '@/lib/order-utils';
+import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
 
 // GET /api/sales-invoices - Get all invoices with filtering
 export async function GET(request: Request) {
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
     if (search) {
       where.OR = [
         { invoiceNumber: { contains: search } },
-        { salesOrder: { orderNumber: { contains: search } } },
+        { orderNumber: { contains: search } },
         { customer: { name: { contains: search } } },
         { customer: { customerNumber: { contains: search } } },
       ];
@@ -48,26 +49,6 @@ export async function GET(request: Request) {
               city: true,
               state: true,
               creditDays: true,
-            },
-          },
-          salesOrder: {
-            select: {
-              id: true,
-              orderNumber: true,
-              orderDate: true,
-              items: {
-                include: {
-                  item: {
-                    select: {
-                      id: true,
-                      itemCode: true,
-                      name: true,
-                      unit: true,
-                      hsnCode: true,
-                    },
-                  },
-                },
-              },
             },
           },
         },
@@ -190,10 +171,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if order is delivered
-    if (salesOrder.status !== 'DELIVERED') {
+    // Check if order is not rejected
+    if (salesOrder.status === 'REJECTED') {
       return NextResponse.json(
-        { error: 'Only delivered orders can be invoiced' },
+        { error: 'Cannot create invoice for rejected orders' },
         { status: 400 }
       );
     }
@@ -203,6 +184,47 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Invoice already exists for this order', invoiceId: salesOrder.invoice.id },
         { status: 409 }
+      );
+    }
+
+    // Validate stock availability using priority-based allocation
+    const allocationResult = await calculateStockAllocation(db);
+    const allocations = getOrderAllocation(salesOrder.id, allocationResult);
+    const stockStatus = calculateOrderStockStatus(allocations);
+
+    // Only allow invoice creation for fully allocated orders (In Stock)
+    if (stockStatus !== 'Available') {
+      const allocationMap = new Map(allocations.map((a) => [a.itemId, a]));
+
+      const insufficientStockItems = salesOrder.items
+        .map((orderItem) => {
+          const allocation = allocationMap.get(orderItem.itemId);
+          const allocatedQty = allocation?.allocatedQty || 0;
+          const orderedQty = Number(orderItem.quantity);
+          const shortfall = allocation?.shortfallQty || orderedQty;
+
+          if (shortfall > 0) {
+            return {
+              itemCode: orderItem.item.itemCode,
+              itemName: orderItem.item.name,
+              required: orderedQty,
+              available: allocatedQty,
+              shortfall,
+            };
+          }
+          return null;
+        })
+        .filter((item) => item !== null);
+
+      return NextResponse.json(
+        {
+          error: stockStatus === 'Partial'
+            ? 'Cannot create invoice: Order is partially allocated. Some items have insufficient stock based on priority allocation.'
+            : 'Cannot create invoice: No stock allocated for this order. All items are out of stock or allocated to higher priority orders.',
+          stockStatus,
+          insufficientStock: insufficientStockItems,
+        },
+        { status: 400 }
       );
     }
 
@@ -225,12 +247,23 @@ export async function POST(request: Request) {
       const invoiceDate = body.invoiceDate ? new Date(body.invoiceDate) : new Date();
       const dueDate = calculateDueDate(invoiceDate, salesOrder.customer.creditDays);
 
-      // Create the invoice
+      // Prepare invoice items from sales order items
+      const invoiceItems = salesOrder.items.map((item) => ({
+        itemId: item.itemId,
+        quantity: item.quantity,
+        rate: item.rate,
+        discountPercent: item.discountPercent,
+        taxRate: item.taxRate,
+        taxAmount: item.taxAmount,
+        amount: item.amount,
+      }));
+
+      // Create the invoice with items
       const newInvoice = await tx.invoice.create({
         data: {
           invoiceNumber,
           invoiceDate,
-          salesOrderId: salesOrder.id,
+          orderNumber: salesOrder.orderNumber, // Store for reference
           customerId: salesOrder.customerId,
           subtotal,
           cgst,
@@ -243,6 +276,9 @@ export async function POST(request: Request) {
           paymentStatus: 'PENDING',
           dueDate,
           notes: body.notes || salesOrder.notes,
+          items: {
+            create: invoiceItems,
+          },
         },
         include: {
           customer: {
@@ -252,14 +288,71 @@ export async function POST(request: Request) {
               name: true,
             },
           },
-          salesOrder: {
-            select: {
-              id: true,
-              orderNumber: true,
+          items: {
+            include: {
+              item: {
+                select: {
+                  id: true,
+                  itemCode: true,
+                  name: true,
+                  unit: true,
+                },
+              },
             },
           },
         },
       });
+
+      // Deduct stock and release reservations
+      const itemIds = salesOrder.items.map((item) => item.itemId);
+      const inventories = await tx.inventory.findMany({
+        where: { itemId: { in: itemIds } },
+      });
+      const inventoryMap = new Map(inventories.map((inv) => [inv.itemId, inv]));
+
+      const inventoryUpdates: Promise<any>[] = [];
+      const stockMovements: any[] = [];
+
+      for (const orderItem of salesOrder.items) {
+        const inventory = inventoryMap.get(orderItem.itemId);
+
+        if (inventory) {
+          // Deduct physical stock and release reservation
+          inventoryUpdates.push(
+            tx.inventory.update({
+              where: { itemId: orderItem.itemId },
+              data: {
+                physicalStock: {
+                  decrement: Number(orderItem.quantity),
+                },
+                reservedQuantity: {
+                  decrement: Number(orderItem.quantity),
+                },
+              },
+            })
+          );
+
+          // Record stock movement
+          stockMovements.push({
+            inventoryId: inventory.id,
+            itemId: orderItem.itemId,
+            quantity: -Number(orderItem.quantity),
+            type: 'SALE',
+            referenceType: 'INVOICE',
+            referenceId: newInvoice.id,
+            notes: `Invoiced - ${invoiceNumber} (Order: ${salesOrder.orderNumber})`,
+            createdBy: salesOrder.createdBy,
+          });
+        }
+      }
+
+      // Execute all inventory operations in parallel
+      await Promise.all([
+        ...inventoryUpdates,
+        stockMovements.length > 0
+          ? tx.stockMovement.createMany({ data: stockMovements })
+          : Promise.resolve(),
+      ]);
 
       // Create customer ledger entry (DEBIT - customer owes us)
       const lastLedgerEntry = await tx.customerLedger.findFirst({
@@ -284,10 +377,15 @@ export async function POST(request: Request) {
         },
       });
 
+      // Delete the sales order (cascade will delete items and status history)
+      await tx.salesOrder.delete({
+        where: { id: salesOrder.id },
+      });
+
       return newInvoice;
     }, {
-      maxWait: 10000,
-      timeout: 30000,
+      maxWait: 15000,
+      timeout: 45000,
     });
 
     return NextResponse.json(invoice, { status: 201 });

@@ -83,10 +83,10 @@ export default function RateSheetsPage() {
 
   // Use SWR for caching
   const { data, error, isLoading, mutate } = useSWR(apiUrl);
-  const rateSheets = data?.rateSheets || [];
 
   // Filter rate sheets based on search query
   const filteredRateSheets = useMemo(() => {
+    const rateSheets = data?.rateSheets || [];
     if (!debouncedSearch.trim()) return rateSheets;
 
     const query = debouncedSearch.toLowerCase();
@@ -96,7 +96,7 @@ export default function RateSheetsPage() {
         rs.customer.name.toLowerCase().includes(query) ||
         rs.customer.customerNumber.toLowerCase().includes(query)
     );
-  }, [debouncedSearch, rateSheets]);
+  }, [debouncedSearch, data]);
 
   // Paginate rate sheets
   const paginatedRateSheets = useMemo(() => {
@@ -170,7 +170,7 @@ export default function RateSheetsPage() {
     return Math.round((100 - effectiveRate) * 100) / 100;
   };
 
-  const _activeCount = rateSheets.filter((rs: RateSheet) => rs.isActive).length;
+  const rateSheets = data?.rateSheets || [];
   const validCount = rateSheets.filter((rs: RateSheet) => isRateSheetValid(rs)).length;
 
   return (

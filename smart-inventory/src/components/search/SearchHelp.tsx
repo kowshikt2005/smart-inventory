@@ -4,7 +4,6 @@ import {
   Users, 
   Package, 
   ShoppingCart, 
-  FileText, 
   Building2, 
   ClipboardList,
   Search,

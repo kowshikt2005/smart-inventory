@@ -57,10 +57,10 @@ export default function CustomersPage() {
 
   // Use SWR for caching
   const { data, error, isLoading, mutate } = useSWR("/api/customers");
-  const customers = data?.customers || [];
 
   // Filter customers based on search query
   const filteredCustomers = useMemo(() => {
+    const customers = data?.customers || [];
     if (!debouncedSearch.trim()) return customers;
 
     const query = debouncedSearch.toLowerCase();
@@ -71,7 +71,7 @@ export default function CustomersPage() {
         customer.city.toLowerCase().includes(query) ||
         customer.state.toLowerCase().includes(query)
     );
-  }, [debouncedSearch, customers]);
+  }, [debouncedSearch, data]);
 
   // Paginate customers
   const paginatedCustomers = useMemo(() => {

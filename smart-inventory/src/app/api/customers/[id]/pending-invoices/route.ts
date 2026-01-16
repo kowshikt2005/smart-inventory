@@ -37,16 +37,12 @@ export async function GET(
         id: true,
         invoiceNumber: true,
         invoiceDate: true,
+        orderNumber: true,
         dueDate: true,
         totalAmount: true,
         paidAmount: true,
         balanceAmount: true,
         paymentStatus: true,
-        salesOrder: {
-          select: {
-            orderNumber: true,
-          },
-        },
       },
       orderBy: { invoiceDate: 'asc' },
     });

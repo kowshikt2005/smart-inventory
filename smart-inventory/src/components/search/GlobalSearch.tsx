@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -24,16 +23,12 @@ import {
   ShoppingCart,
   FileText,
   Receipt,
-  CreditCard,
   RotateCcw,
   Building2,
-  UserCircle,
-  DollarSign,
   Tag,
   Layers,
   BookOpen,
   ClipboardList,
-  Loader2,
   ArrowRight,
 } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -193,7 +188,6 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   
   const debouncedQuery = useDebounce(query, 300);
@@ -314,7 +308,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
 
       // Stock Journals
       if (journalsData?.journals) {
-        const journalResults: SearchResult[] = journalsData.journals.map((journal: { id: string; journalNumber: string; date: string; type: string; quantity: number; reason?: string }) => ({
+        const journalResults: SearchResult[] = journalsData.journals.map((journal: { id: string; journalNumber: string; date: string; type: string; quantity: number; reason?: string; item?: { name: string; unit: string } }) => ({
           id: `journal-${journal.id}`,
           title: journal.journalNumber,
           subtitle: journal.item?.name || "Unknown Item",
@@ -323,7 +317,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
           category: "journals",
           url: `/ledger/stock-journal`,
           icon: ClipboardList,
-          metadata: { 
+          metadata: {
             type: journal.type,
             quantity: journal.quantity,
             date: journal.date 
@@ -418,18 +412,11 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
             onValueChange={setQuery}
           />
           <CommandList className="max-h-[400px]">
-            {isLoading && (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="ml-2 text-sm text-muted-foreground">Searching...</span>
-              </div>
-            )}
-            
-            {!isLoading && Object.keys(groupedResults).length === 0 && query.length > 0 && (
+            {Object.keys(groupedResults).length === 0 && query.length > 0 && (
               <CommandEmpty>No results found for &quot;{query}&quot;</CommandEmpty>
             )}
 
-            {!isLoading && query.length === 0 && (
+            {query.length === 0 && (
               <div className="px-4 py-6 text-center text-sm text-muted-foreground">
                 <Search className="mx-auto h-8 w-8 mb-2 opacity-50" />
                 <p>Start typing to search across your inventory system</p>
@@ -456,7 +443,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
               </div>
             )}
 
-            {!isLoading && Object.entries(groupedResults).map(([category, results]) => (
+            {Object.entries(groupedResults).map(([category, results]) => (
               <CommandGroup key={category} heading={SEARCH_CATEGORIES[category as keyof typeof SEARCH_CATEGORIES] || category}>
                 {results.map((result) => {
                   const Icon = result.icon;
@@ -512,7 +499,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
             ))}
 
             {/* Global "View All Results" if there are any results */}
-            {!isLoading && Object.keys(groupedResults).length > 0 && (
+            {Object.keys(groupedResults).length > 0 && (
               <CommandGroup>
                 <CommandItem
                   value="view all search results"

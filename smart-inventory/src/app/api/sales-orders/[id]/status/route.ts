@@ -22,7 +22,7 @@ export async function PATCH(
     const reason = body.reason || null;
 
     // Validate status value
-    const validStatuses = ['OPEN', 'DELIVER', 'HOLD', 'REJECT', 'DELIVERED'];
+    const validStatuses = ['OPEN', 'HOLD', 'REJECTED'];
     if (!validStatuses.includes(newStatus)) {
       return NextResponse.json(
         { error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` },
@@ -68,92 +68,8 @@ export async function PATCH(
 
     // Perform status-specific validations and side effects
     const updatedOrder = await db.$transaction(async (tx) => {
-      // Handle DELIVER status - validate stock availability
-      if (newStatus === 'DELIVER') {
-        const insufficientStock = [];
-        for (const orderItem of existingOrder.items) {
-          const physicalStock = Number(orderItem.item.inventory?.physicalStock || 0);
-          const reservedQuantity = Number(orderItem.item.inventory?.reservedQuantity || 0);
-          const availableStock = physicalStock - reservedQuantity + Number(orderItem.quantity); // Add back this order's reservation
-          const requiredQty = Number(orderItem.quantity);
-
-          if (availableStock < requiredQty) {
-            insufficientStock.push({
-              itemCode: orderItem.item.itemCode,
-              itemName: orderItem.item.name,
-              required: requiredQty,
-              available: physicalStock,
-            });
-          }
-        }
-
-        if (insufficientStock.length > 0) {
-          // Return a warning but allow transition (with body.force = true)
-          if (!body.force) {
-            return {
-              warning: true,
-              message: 'Some items have insufficient stock',
-              insufficientStock,
-            };
-          }
-        }
-      }
-
-      // Handle DELIVERED status - deduct from physical stock, release reservation
-      if (newStatus === 'DELIVERED') {
-        // Prepare batch operations
-        const inventoryUpdates: Promise<any>[] = [];
-        const stockMovements: any[] = [];
-        
-        // Get all inventory records in one query
-        const itemIds = existingOrder.items.map(item => item.itemId);
-        const inventories = await tx.inventory.findMany({
-          where: { itemId: { in: itemIds } },
-        });
-        const inventoryMap = new Map(inventories.map(inv => [inv.itemId, inv]));
-
-        for (const orderItem of existingOrder.items) {
-          const inventory = inventoryMap.get(orderItem.itemId);
-
-          if (inventory) {
-            // Add inventory update to batch
-            inventoryUpdates.push(
-              tx.inventory.update({
-                where: { itemId: orderItem.itemId },
-                data: {
-                  physicalStock: {
-                    decrement: Number(orderItem.quantity),
-                  },
-                  reservedQuantity: {
-                    decrement: Number(orderItem.quantity),
-                  },
-                },
-              })
-            );
-
-            // Prepare stock movement data
-            stockMovements.push({
-              inventoryId: inventory.id,
-              itemId: orderItem.itemId,
-              quantity: -Number(orderItem.quantity),
-              type: 'SALE',
-              referenceType: 'SALES_ORDER',
-              referenceId: id,
-              notes: `Delivered via order ${existingOrder.orderNumber}`,
-              createdBy: SYSTEM_USER_ID,
-            });
-          }
-        }
-
-        // Execute all operations in parallel
-        await Promise.all([
-          ...inventoryUpdates,
-          stockMovements.length > 0 ? tx.stockMovement.createMany({ data: stockMovements }) : Promise.resolve(),
-        ]);
-      }
-
-      // Handle REJECT status - release reservations
-      if (newStatus === 'REJECT') {
+      // Handle REJECTED status - release reservations
+      if (newStatus === 'REJECTED') {
         // Get all inventory records in one query
         const itemIds = existingOrder.items.map(item => item.itemId);
         const inventories = await tx.inventory.findMany({
@@ -245,11 +161,9 @@ export async function PATCH(
 
 function getTransitionDescription(currentStatus: string): string {
   const transitions: Record<string, string> = {
-    OPEN: 'DELIVER, HOLD, or REJECT',
-    DELIVER: 'DELIVERED or REJECT',
-    HOLD: 'DELIVER or REJECT',
-    REJECT: 'None (terminal state)',
-    DELIVERED: 'None (terminal state)',
+    OPEN: 'HOLD or REJECTED',
+    HOLD: 'OPEN or REJECTED',
+    REJECTED: 'None (terminal state)',
   };
   return transitions[currentStatus] || 'None';
 }

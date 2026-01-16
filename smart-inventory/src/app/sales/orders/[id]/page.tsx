@@ -29,6 +29,7 @@ import {
   CheckCircle2,
   X,
   Clock,
+  AlertTriangle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
@@ -42,6 +43,17 @@ interface Customer {
   state: string | null;
 }
 
+interface StockInfo {
+  physicalStock: number;
+  reservedQuantity: number;
+  availableStock: number;
+  requiredQuantity: number;
+  allocatedQty: number;
+  canFulfill: number;
+  shortfall: number;
+  stockStatus: 'Available' | 'Partial' | 'Unavailable';
+}
+
 interface OrderItem {
   id: string;
   itemId: string;
@@ -53,6 +65,7 @@ interface OrderItem {
   amount: number;
   hasStock: boolean;
   availableStock: number;
+  stockInfo?: StockInfo;
   item: {
     id: string;
     itemCode: string;
@@ -61,6 +74,14 @@ interface OrderItem {
     hsnCode: string | null;
     gstRate: number;
   };
+}
+
+interface InsufficientStockItem {
+  itemName: string;
+  itemCode: string;
+  required: number;
+  available: number;
+  shortfall: number;
 }
 
 interface SalesOrder {
@@ -178,6 +199,18 @@ export default function SalesOrderDetailPage() {
         return;
       }
 
+      // Handle insufficient stock error
+      if (!response.ok && data.insufficientStock) {
+        const stockDetails = data.insufficientStock
+          .map(
+            (item: InsufficientStockItem) =>
+              `${item.itemName} (${item.itemCode}):\n  Required: ${item.required}\n  Available: ${item.available}\n  Missing: ${item.shortfall}`
+          )
+          .join("\n\n");
+        alert(`${data.error}\n\n${stockDetails}`);
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(data.error || "Failed to create invoice");
       }
@@ -268,57 +301,63 @@ export default function SalesOrderDetailPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  {/* Edit - only for OPEN orders */}
                   {order.status === "OPEN" && (
-                    <>
-                      <DropdownMenuItem
-                        onClick={() => router.push(`/sales/orders/new?edit=${id}`)}
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit Order
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => handleStatusChange("DELIVER")}
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
-                        Mark as Ready
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleStatusChange("HOLD")}>
-                        <Clock className="h-4 w-4 mr-2" />
-                        Put on Hold
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  {order.status === "DELIVER" && (
                     <DropdownMenuItem
-                      onClick={() => handleStatusChange("DELIVERED")}
+                      onClick={() => router.push(`/sales/orders/new?edit=${id}`)}
                     >
-                      <CheckCircle2 className="h-4 w-4 mr-2" />
-                      Mark as Delivered
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Order
                     </DropdownMenuItem>
                   )}
-                  {order.status === "DELIVERED" && (
+
+                  {/* Create Invoice - for all non-rejected orders */}
+                  {order.status !== "REJECTED" && (
                     <>
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={handleCreateInvoice}>
                         <FileText className="h-4 w-4 mr-2" />
                         Create Invoice
                       </DropdownMenuItem>
                     </>
                   )}
-                  {(order.status === "OPEN" ||
-                    order.status === "HOLD" ||
-                    order.status === "DELIVER") && (
+
+                  {/* Status transitions */}
+                  {order.status === "OPEN" && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => handleStatusChange("REJECT")}
-                        className="text-red-600"
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        Cancel Order
+                      <DropdownMenuItem onClick={() => handleStatusChange("HOLD")}>
+                        <Clock className="h-4 w-4 mr-2" />
+                        Put on Hold
                       </DropdownMenuItem>
                     </>
                   )}
+
+                  {order.status === "HOLD" && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => handleStatusChange("OPEN")}>
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        Release Hold
+                      </DropdownMenuItem>
+                    </>
+                  )}
+
+                  {/* Cancel/Reject - for OPEN and HOLD orders */}
+                  {(order.status === "OPEN" || order.status === "HOLD") && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => handleStatusChange("REJECTED")}
+                        className="text-red-600"
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Reject Order
+                      </DropdownMenuItem>
+                    </>
+                  )}
+
+                  {/* Delete - only for OPEN orders */}
                   {order.status === "OPEN" && (
                     <DropdownMenuItem
                       onClick={handleDelete}
@@ -389,6 +428,72 @@ export default function SalesOrderDetailPage() {
           </div>
         </div>
 
+        {/* Stock Shortage Alert - Only for Partial Stock */}
+        {order.stockStatus === "Partial" && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-yellow-900 mb-2">
+                  Stock Shortage Alert
+                </h3>
+                <p className="text-sm text-yellow-800 mb-3">
+                  Some items in this order have insufficient stock. Please review the details below.
+                </p>
+                <div className="space-y-2">
+                  {order.items
+                    .filter((item) => {
+                      return item.stockInfo && item.stockInfo.stockStatus !== 'Available';
+                    })
+                    .map((item) => {
+                      const stockInfo = item.stockInfo!;
+                      return (
+                        <div
+                          key={item.id}
+                          className="bg-white rounded border border-yellow-300 p-3"
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <p className="font-medium text-gray-900">{item.item.name}</p>
+                              <p className="text-xs text-gray-500">{item.item.itemCode}</p>
+                            </div>
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              stockInfo.stockStatus === 'Partial'
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-red-100 text-red-700'
+                            }`}>
+                              {stockInfo.stockStatus}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-3 text-sm">
+                            <div>
+                              <span className="text-gray-600">Ordered:</span>
+                              <span className="ml-2 font-medium text-gray-900">
+                                {stockInfo.requiredQuantity} {item.item.unit}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Available:</span>
+                              <span className="ml-2 font-medium text-green-600">
+                                {stockInfo.canFulfill} {item.item.unit}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Missing:</span>
+                              <span className="ml-2 font-medium text-red-600">
+                                {stockInfo.shortfall} {item.item.unit}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Items Table */}
         <div className="bg-white rounded-lg border border-gray-200 mb-6">
           <div className="p-6 border-b border-gray-200">
@@ -401,6 +506,7 @@ export default function SalesOrderDetailPage() {
                   <TableHead className="font-semibold">Item</TableHead>
                   <TableHead className="font-semibold">HSN</TableHead>
                   <TableHead className="font-semibold text-right">Qty</TableHead>
+                  <TableHead className="font-semibold text-center">Stock Status</TableHead>
                   <TableHead className="font-semibold text-right">Rate</TableHead>
                   <TableHead className="font-semibold text-right">
                     Discount %
@@ -412,44 +518,83 @@ export default function SalesOrderDetailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {order.items.map((item) => (
-                  <TableRow
-                    key={item.id}
-                    className={!item.hasStock ? "bg-yellow-50" : ""}
-                  >
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{item.item.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {item.item.itemCode}
-                        </p>
-                        {!item.hasStock && (
-                          <p className="text-xs text-yellow-600">
-                            Stock: {item.availableStock}
+                {order.items.map((item) => {
+                  const stockInfo = item.stockInfo;
+                  const hasStockInfo = stockInfo !== undefined;
+                  const itemHasStock = hasStockInfo ? stockInfo.stockStatus === 'Available' : item.hasStock;
+
+                  return (
+                    <TableRow
+                      key={item.id}
+                      className={!itemHasStock ? "bg-yellow-50" : ""}
+                    >
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{item.item.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {item.item.itemCode}
                           </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {item.item.hsnCode || "-"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {Number(item.quantity)} {item.item.unit}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {hasStockInfo ? (
+                          <div className="flex flex-col items-center gap-1">
+                            {stockInfo.stockStatus === 'Available' && (
+                              <span className="text-xs text-green-600 font-medium">
+                                ✓ Available
+                              </span>
+                            )}
+                            {stockInfo.stockStatus === 'Partial' && (
+                              <div className="text-xs">
+                                <span className="text-yellow-600 font-medium">
+                                  ⚠ Partial
+                                </span>
+                                <div className="text-gray-600 mt-1">
+                                  Available: {stockInfo.canFulfill} / {stockInfo.requiredQuantity}
+                                </div>
+                                <div className="text-red-600">
+                                  Missing: {stockInfo.shortfall}
+                                </div>
+                              </div>
+                            )}
+                            {stockInfo.stockStatus === 'Unavailable' && (
+                              <div className="text-xs">
+                                <span className="text-red-600 font-medium">
+                                  ✗ Out of Stock
+                                </span>
+                                <div className="text-gray-600 mt-1">
+                                  Required: {stockInfo.requiredQuantity}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-500">
+                            {item.hasStock ? "Available" : `Stock: ${item.availableStock}`}
+                          </span>
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {item.item.hsnCode || "-"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {Number(item.quantity)} {item.item.unit}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(Number(item.rate))}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {Number(item.discountPercent)}%
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {Number(item.taxRate)}%
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCurrency(Number(item.amount) + Number(item.taxAmount))}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(Number(item.rate))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {Number(item.discountPercent)}%
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {Number(item.taxRate)}%
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatCurrency(Number(item.amount) + Number(item.taxAmount))}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

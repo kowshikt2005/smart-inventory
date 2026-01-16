@@ -29,8 +29,6 @@ import {
   X,
   ShoppingCart,
   Clock,
-  Truck,
-  CheckCircle2,
   Eye,
   ArrowRight,
   FileText,
@@ -67,6 +65,24 @@ interface OrderItem {
   };
 }
 
+interface ItemStockDetail {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  orderedQty: number;
+  availableQty: number;
+  missingQty: number;
+  unit: string;
+}
+
+interface InsufficientStockItem {
+  itemName: string;
+  itemCode: string;
+  required: number;
+  available: number;
+  shortfall: number;
+}
+
 interface SalesOrder {
   id: string;
   orderNumber: string;
@@ -78,6 +94,13 @@ interface SalesOrder {
   taxAmount: number;
   totalAmount: number;
   stockStatus: "Available" | "Partial" | "Unavailable";
+  stockSummary?: {
+    totalItems: number;
+    availableItems: number;
+    partialItems: number;
+    unavailableItems: number;
+  };
+  itemStockDetails?: ItemStockDetail[];
   customer: Customer;
   items: OrderItem[];
 }
@@ -85,10 +108,8 @@ interface SalesOrder {
 const STATUS_FILTERS = [
   { value: "ALL", label: "All Orders" },
   { value: "OPEN", label: "Open" },
-  { value: "DELIVER", label: "Ready" },
-  { value: "HOLD", label: "On Hold" },
-  { value: "DELIVERED", label: "Delivered" },
-  { value: "REJECT", label: "Rejected" },
+  { value: "HOLD", label: "Hold" },
+  { value: "REJECTED", label: "Rejected" },
 ];
 
 export default function SalesOrdersPage() {
@@ -116,7 +137,6 @@ export default function SalesOrdersPage() {
   // Use SWR for data fetching with caching
   const { data, error, isLoading, mutate } = useSWR(apiUrl);
 
-  const salesOrders = data?.salesOrders || [];
   const totalCount = data?.pagination?.total || 0;
 
   // Handle status filter
@@ -167,6 +187,18 @@ export default function SalesOrdersPage() {
       if (response.status === 409 && data.invoiceId) {
         // Invoice already exists
         router.push(`/sales/invoices/${data.invoiceId}`);
+        return;
+      }
+
+      // Handle insufficient stock error
+      if (!response.ok && data.insufficientStock) {
+        const stockDetails = data.insufficientStock
+          .map(
+            (item: InsufficientStockItem) =>
+              `${item.itemName} (${item.itemCode}):\n  Required: ${item.required}\n  Available: ${item.available}\n  Missing: ${item.shortfall}`
+          )
+          .join("\n\n");
+        alert(`${data.error}\n\n${stockDetails}`);
         return;
       }
 
@@ -257,13 +289,13 @@ export default function SalesOrdersPage() {
 
   // Calculate stats
   const stats = useMemo(() => {
+    const salesOrders = data?.salesOrders || [];
     return {
       total: totalCount,
       open: salesOrders.filter((o: SalesOrder) => o.status === "OPEN").length,
-      ready: salesOrders.filter((o: SalesOrder) => o.status === "DELIVER").length,
-      delivered: salesOrders.filter((o: SalesOrder) => o.status === "DELIVERED").length,
+      hold: salesOrders.filter((o: SalesOrder) => o.status === "HOLD").length,
     };
-  }, [salesOrders, totalCount]);
+  }, [data, totalCount]);
 
   return (
     <DashboardLayout>
@@ -277,7 +309,7 @@ export default function SalesOrdersPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-100 rounded-lg">
@@ -302,25 +334,12 @@ export default function SalesOrdersPage() {
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Truck className="h-5 w-5 text-green-600" />
+              <div className="p-2 bg-orange-100 rounded-lg">
+                <Clock className="h-5 w-5 text-orange-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Ready for Delivery</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.ready}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <CheckCircle2 className="h-5 w-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Delivered</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.delivered}
-                </p>
+                <p className="text-sm text-gray-600">On Hold</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.hold}</p>
               </div>
             </div>
           </div>
@@ -440,7 +459,7 @@ export default function SalesOrdersPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : salesOrders.length === 0 ? (
+                ) : (data?.salesOrders || []).length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={8}
@@ -452,7 +471,7 @@ export default function SalesOrdersPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  salesOrders.map((order: SalesOrder) => (
+                  (data?.salesOrders || []).map((order: SalesOrder) => (
                     <TableRow key={order.id} className="hover:bg-gray-50">
                       <TableCell className="text-sm">
                         {formatDate(order.orderDate)}
@@ -479,7 +498,11 @@ export default function SalesOrdersPage() {
                         {order.referenceNumber || "-"}
                       </TableCell>
                       <TableCell className="text-center">
-                        <StockStatusBadge status={order.stockStatus} />
+                        <StockStatusBadge
+                          status={order.stockStatus}
+                          stockSummary={order.stockSummary}
+                          itemStockDetails={order.itemStockDetails}
+                        />
                       </TableCell>
                       <TableCell className="text-center">
                         <SalesOrderStatusBadge status={order.status} />
@@ -508,64 +531,23 @@ export default function SalesOrdersPage() {
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
+
+                            {/* Edit - only for OPEN orders */}
                             {order.status === "OPEN" && (
-                              <>
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    router.push(
-                                      `/sales/orders/new?edit=${order.id}`
-                                    )
-                                  }
-                                >
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Edit Order
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    handleStatusChange(order.id, "DELIVER")
-                                  }
-                                >
-                                  <ArrowRight className="h-4 w-4 mr-2" />
-                                  Mark as Ready
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    handleStatusChange(order.id, "HOLD")
-                                  }
-                                >
-                                  <Clock className="h-4 w-4 mr-2" />
-                                  Put on Hold
-                                </DropdownMenuItem>
-                              </>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(
+                                    `/sales/orders/new?edit=${order.id}`
+                                  )
+                                }
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit Order
+                              </DropdownMenuItem>
                             )}
-                            {order.status === "DELIVER" && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    handleStatusChange(order.id, "DELIVERED")
-                                  }
-                                >
-                                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                                  Mark as Delivered
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                            {order.status === "HOLD" && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    handleStatusChange(order.id, "DELIVER")
-                                  }
-                                >
-                                  <ArrowRight className="h-4 w-4 mr-2" />
-                                  Release Hold
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                            {order.status === "DELIVERED" && (
+
+                            {/* Create Invoice - for all non-rejected orders */}
+                            {order.status !== "REJECTED" && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
@@ -576,26 +558,57 @@ export default function SalesOrdersPage() {
                                 </DropdownMenuItem>
                               </>
                             )}
-                            {(order.status === "OPEN" ||
-                              order.status === "HOLD" ||
-                              order.status === "DELIVER") && (
+
+                            {/* Status transitions */}
+                            {order.status === "OPEN" && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    handleStatusChange(order.id, "HOLD")
+                                  }
+                                >
+                                  <Clock className="h-4 w-4 mr-2" />
+                                  Put on Hold
+                                </DropdownMenuItem>
+                              </>
+                            )}
+
+                            {order.status === "HOLD" && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    handleStatusChange(order.id, "OPEN")
+                                  }
+                                >
+                                  <ArrowRight className="h-4 w-4 mr-2" />
+                                  Release Hold
+                                </DropdownMenuItem>
+                              </>
+                            )}
+
+                            {/* Cancel/Reject - for OPEN and HOLD orders */}
+                            {(order.status === "OPEN" || order.status === "HOLD") && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   onClick={() =>
                                     handleStatusChange(
                                       order.id,
-                                      "REJECT",
+                                      "REJECTED",
                                       "Order cancelled"
                                     )
                                   }
                                   className="text-red-600"
                                 >
                                   <X className="h-4 w-4 mr-2" />
-                                  Cancel Order
+                                  Reject Order
                                 </DropdownMenuItem>
                               </>
                             )}
+
+                            {/* Delete - only for OPEN orders */}
                             {order.status === "OPEN" && (
                               <DropdownMenuItem
                                 onClick={() => handleDelete(order.id)}

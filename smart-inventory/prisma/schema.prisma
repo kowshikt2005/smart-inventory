@@ -30,10 +30,8 @@ enum CustomerStatus {
 
 enum SalesOrderStatus {
   OPEN
-  DELIVER
   HOLD
-  REJECT
-  DELIVERED
+  REJECTED
 }
 
 enum StockMovementType {
@@ -246,6 +244,7 @@ model Item {
   subBrand           SubBrand?           @relation(fields: [subBrandId], references: [id], onDelete: SetNull)
   inventory          Inventory?
   salesOrderItems    SalesOrderItem[]
+  invoiceItems       InvoiceItem[]
   stockMovements     StockMovement[]
   purchaseOrderItems PurchaseOrderItem[]
   salesReturnItems   SalesReturnItem[]
@@ -490,7 +489,8 @@ model Invoice {
   id            String        @id @default(uuid())
   invoiceNumber String        @unique // INV-xxxx
   invoiceDate   DateTime
-  salesOrderId  String        @unique
+  salesOrderId  String?       @unique // Optional - order deleted after invoice creation
+  orderNumber   String?       // Stored for reference after order deletion
   customerId    String
   subtotal      Decimal       @default(0) @db.Decimal(15, 2)
   cgst          Decimal       @default(0) @db.Decimal(15, 2)
@@ -507,8 +507,9 @@ model Invoice {
   updatedAt     DateTime      @updatedAt
 
   // Relations
-  salesOrder   SalesOrder          @relation(fields: [salesOrderId], references: [id])
+  salesOrder   SalesOrder?         @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
   customer     Customer            @relation(fields: [customerId], references: [id])
+  items        InvoiceItem[]
   payments     Payment[]
   allocations  PaymentAllocation[]
   salesReturns SalesReturn[]
@@ -518,6 +519,26 @@ model Invoice {
   @@index([invoiceDate])
   @@index([paymentStatus])
   @@map("invoices")
+}
+
+model InvoiceItem {
+  id            String  @id @default(uuid())
+  invoiceId     String
+  itemId        String
+  quantity      Decimal @db.Decimal(15, 3)
+  rate          Decimal @db.Decimal(15, 2)
+  discountPercent Decimal @default(0) @db.Decimal(5, 2)
+  taxRate       Decimal @default(0) @db.Decimal(5, 2)
+  taxAmount     Decimal @default(0) @db.Decimal(15, 2)
+  amount        Decimal @default(0) @db.Decimal(15, 2)
+
+  // Relations
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  item    Item    @relation(fields: [itemId], references: [id])
+
+  @@index([invoiceId])
+  @@index([itemId])
+  @@map("invoice_items")
 }
 
 model Payment {

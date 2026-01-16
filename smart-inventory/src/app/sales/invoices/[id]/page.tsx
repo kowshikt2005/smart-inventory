@@ -29,11 +29,12 @@ interface Customer {
   creditDays: number;
 }
 
-interface OrderItem {
+interface InvoiceItem {
   id: string;
   itemId: string;
   quantity: number;
   rate: number;
+  discountPercent: number;
   taxRate: number;
   taxAmount: number;
   amount: number;
@@ -46,13 +47,6 @@ interface OrderItem {
     gstRate: number;
     standardPrice: number;
   };
-}
-
-interface SalesOrder {
-  id: string;
-  orderNumber: string;
-  orderDate: string;
-  items: OrderItem[];
 }
 
 interface Payment {
@@ -73,6 +67,7 @@ interface Invoice {
   id: string;
   invoiceNumber: string;
   invoiceDate: string;
+  orderNumber: string | null;
   dueDate: string | null;
   subtotal: number;
   cgst: number;
@@ -86,7 +81,7 @@ interface Invoice {
   effectiveStatus: string;
   notes: string | null;
   customer: Customer;
-  salesOrder: SalesOrder;
+  items: InvoiceItem[];
   allocations: PaymentAllocation[];
 }
 
@@ -202,9 +197,11 @@ export default function InvoiceDetailPage() {
               <h1 className="text-2xl font-bold text-gray-900">
                 {invoice.invoiceNumber}
               </h1>
-              <p className="text-gray-600">
-                Order: {invoice.salesOrder.orderNumber}
-              </p>
+              {invoice.orderNumber && (
+                <p className="text-gray-600">
+                  Order: {invoice.orderNumber}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <InvoiceStatusBadge status={invoice.effectiveStatus} />
@@ -311,7 +308,7 @@ export default function InvoiceDetailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoice.salesOrder.items.map((item) => (
+                {invoice.items.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>
                       <div>

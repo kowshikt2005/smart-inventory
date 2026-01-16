@@ -39,7 +39,7 @@ import {
   Users,
   Search,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useSession } from "next-auth/react";
 import useSWR from "swr";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -131,14 +131,6 @@ export default function EmployeesPage() {
       currency: "INR",
       minimumFractionDigits: 0,
     }).format(amount);
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
   };
 
   if (!isAdmin) {

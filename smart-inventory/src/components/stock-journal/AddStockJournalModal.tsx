@@ -58,12 +58,12 @@ export function AddStockJournalModal({
 
   // Fetch items
   const { data: itemsData } = useSWR(isOpen ? "/api/items?limit=1000" : null);
-  const items: Item[] = itemsData?.items || [];
 
   // Get selected item details
   const selectedItem = useMemo(() => {
+    const items: Item[] = itemsData?.items || [];
     return items.find((item) => item.id === formData.itemId);
-  }, [items, formData.itemId]);
+  }, [itemsData, formData.itemId]);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -182,7 +182,7 @@ export function AddStockJournalModal({
                 <SelectValue placeholder="Select an item..." />
               </SelectTrigger>
               <SelectContent>
-                {items.map((item) => (
+                {(itemsData?.items || []).map((item: Item) => (
                   <SelectItem key={item.id} value={item.id}>
                     {item.itemCode} - {item.name}
                   </SelectItem>

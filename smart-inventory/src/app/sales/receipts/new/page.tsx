@@ -35,14 +35,12 @@ interface PendingInvoice {
   id: string;
   invoiceNumber: string;
   invoiceDate: string;
+  orderNumber: string | null;
   dueDate: string | null;
   totalAmount: number;
   paidAmount: number;
   balanceAmount: number;
   effectiveStatus: string;
-  salesOrder: {
-    orderNumber: string;
-  };
 }
 
 interface Allocation {
@@ -457,9 +455,11 @@ function NewPaymentContent() {
                               <p className="font-medium">
                                 {invoice.invoiceNumber}
                               </p>
-                              <p className="text-xs text-gray-500">
-                                {invoice.salesOrder.orderNumber}
-                              </p>
+                              {invoice.orderNumber && (
+                                <p className="text-xs text-gray-500">
+                                  Order: {invoice.orderNumber}
+                                </p>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell className="text-sm">

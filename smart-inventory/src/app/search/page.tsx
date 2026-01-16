@@ -23,14 +23,13 @@ import {
   Users,
   Package,
   ShoppingCart,
-  FileText,
   Building2,
   ClipboardList,
   Loader2,
   ExternalLink,
   X,
 } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDebounce } from "@/hooks/useDebounce";
 import useSWR from "swr";
@@ -54,7 +53,7 @@ const SEARCH_TABS = [
   { id: "journals", label: "Journals", icon: ClipboardList },
 ];
 
-export default function SearchPage() {
+function SearchPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
@@ -168,17 +167,17 @@ export default function SearchPage() {
     }
 
     if (journalsData?.journals) {
-      results.journals = journalsData.journals.map((journal: { id: string; journalNumber: string; date: string; type: string; quantity: number; reason?: string }) => ({
+      results.journals = journalsData.journals.map((journal: { id: string; journalNumber: string; date: string; type: string; quantity: number; reason?: string; item?: { name: string; unit: string } }) => ({
         id: journal.id,
         title: journal.journalNumber,
         subtitle: journal.item?.name || "Unknown Item",
         description: `${journal.type} • ${Number(journal.quantity).toFixed(3)} ${journal.item?.unit || ""}`,
         type: "journal",
         url: `/ledger/stock-journal`,
-        metadata: { 
+        metadata: {
           type: journal.type,
           quantity: journal.quantity,
-          date: journal.date 
+          date: journal.date
         },
       }));
     }
@@ -193,27 +192,6 @@ export default function SearchPage() {
   const getResultsForTab = (tabId: string) => {
     if (tabId === "all") return allResults;
     return searchResults[tabId] || [];
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      minimumFractionDigits: 2,
-    }).format(amount);
-  };
-
-  const getTabIcon = (tabId: string) => {
-    const tab = SEARCH_TABS.find(t => t.id === tabId);
-    return tab?.icon || Search;
   };
 
   const getResultCount = (tabId: string) => {
@@ -326,14 +304,6 @@ function SearchResultsTable({ results, query, onNavigate }: SearchResultsTablePr
     }).format(amount);
   };
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
       <Table>
@@ -398,5 +368,19 @@ function SearchResultsTable({ results, query, onNavigate }: SearchResultsTablePr
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-screen">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        </div>
+      </DashboardLayout>
+    }>
+      <SearchPageContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { calculateLineItem, calculateOrderTotals } from '@/lib/order-utils';
+import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
 
 // GET /api/sales-orders/[id] - Get a single sales order
 export async function GET(
@@ -88,32 +89,59 @@ export async function GET(
       );
     }
 
-    // Calculate stock status for each item
+    // Calculate priority-based stock allocation
+    const allocationResult = await calculateStockAllocation(db);
+    const allocations = getOrderAllocation(salesOrder.id, allocationResult);
+    const allocationMap = new Map(
+      allocations.map((a) => [a.itemId, a])
+    );
+
+    // Calculate stock status based on allocation
+    const stockStatus = calculateOrderStockStatus(allocations);
+
+    // Calculate detailed stock status for each item
     const itemsWithStock = salesOrder.items.map((orderItem) => {
       const physicalStock = Number(orderItem.item.inventory?.physicalStock || 0);
       const reservedQuantity = Number(orderItem.item.inventory?.reservedQuantity || 0);
-      const availableStock = physicalStock - reservedQuantity;
       const quantity = Number(orderItem.quantity);
-      const hasStock = availableStock >= quantity;
 
-      return { ...orderItem, hasStock, availableStock };
+      const allocation = allocationMap.get(orderItem.itemId);
+      const allocatedQty = allocation?.allocatedQty || 0;
+      const shortfall = allocation?.shortfallQty || 0;
+      const hasStock = shortfall === 0;
+
+      return {
+        ...orderItem,
+        hasStock,
+        stockInfo: {
+          physicalStock,
+          reservedQuantity,
+          availableStock: physicalStock - reservedQuantity,
+          requiredQuantity: quantity,
+          allocatedQty,
+          canFulfill: allocatedQty,
+          shortfall,
+          stockStatus: hasStock ? 'Available' : allocatedQty > 0 ? 'Partial' : 'Unavailable',
+        },
+      };
     });
 
-    const allHaveStock = itemsWithStock.every((item) => item.hasStock);
-    const someHaveStock = itemsWithStock.some((item) => item.hasStock);
-
-    let stockStatus: 'Available' | 'Partial' | 'Unavailable' = 'Available';
-    if (allHaveStock) {
-      stockStatus = 'Available';
-    } else if (someHaveStock) {
-      stockStatus = 'Partial';
-    } else {
-      stockStatus = 'Unavailable';
-    }
+    // Create summary for stock
+    const stockSummary = {
+      totalItems: itemsWithStock.length,
+      availableItems: itemsWithStock.filter((item) => item.hasStock).length,
+      partialItems: itemsWithStock.filter(
+        (item) => !item.hasStock && item.stockInfo.allocatedQty > 0
+      ).length,
+      unavailableItems: itemsWithStock.filter(
+        (item) => item.stockInfo.allocatedQty === 0
+      ).length,
+    };
 
     return NextResponse.json({
       ...salesOrder,
       stockStatus,
+      stockSummary,
       items: itemsWithStock,
     });
   } catch (error) {

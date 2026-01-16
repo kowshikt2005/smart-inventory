@@ -237,9 +237,6 @@ export default function CustomerLedgerPage() {
               <p className="text-sm text-gray-600">Opening Balance</p>
               <p className="text-xl font-bold text-gray-900">
                 {formatCurrency(summary.openingBalance)}
-                <span className="text-sm font-normal ml-1">
-                  {summary.openingBalance >= 0 ? "Dr" : "Cr"}
-                </span>
               </p>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -258,9 +255,6 @@ export default function CustomerLedgerPage() {
               <p className="text-sm text-gray-600">Closing Balance</p>
               <p className="text-xl font-bold text-gray-900">
                 {formatCurrency(summary.closingBalance)}
-                <span className="text-sm font-normal ml-1">
-                  {summary.balanceType}
-                </span>
               </p>
             </div>
           </div>
@@ -317,9 +311,6 @@ export default function CustomerLedgerPage() {
                       <TableCell className="text-right">-</TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(summary.openingBalance)}
-                        <span className="text-xs ml-1">
-                          {summary.openingBalance >= 0 ? "Dr" : "Cr"}
-                        </span>
                       </TableCell>
                     </TableRow>
                   )}
@@ -348,9 +339,6 @@ export default function CustomerLedgerPage() {
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(entry.runningBalance)}
-                        <span className="text-xs ml-1">
-                          {entry.runningBalance >= 0 ? "Dr" : "Cr"}
-                        </span>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -371,9 +359,6 @@ export default function CustomerLedgerPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(summary.closingBalance)}
-                        <span className="text-xs ml-1">
-                          {summary.balanceType}
-                        </span>
                       </TableCell>
                     </TableRow>
                   )}

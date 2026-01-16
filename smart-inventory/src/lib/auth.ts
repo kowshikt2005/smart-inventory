@@ -19,14 +19,14 @@ export const authConfig: NextAuthConfig = {
 
         try {
           const user = await db.user.findUnique({
-            where: { email: credentials.email },
+            where: { email: credentials.email as string },
           });
 
           if (!user || !user.isActive) {
             return null;
           }
 
-          const isValidPassword = await verifyPassword(credentials.password, user.password);
+          const isValidPassword = await verifyPassword(credentials.password as string, user.password);
           if (!isValidPassword) {
             return null;
           }
@@ -49,7 +49,7 @@ export const authConfig: NextAuthConfig = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account }) {
       if (account?.provider === "google") {
         try {
           // Check if user exists with this Google ID
@@ -96,7 +96,7 @@ export const authConfig: NextAuthConfig = {
     async jwt({ token, user }) {
       if (user) {
         token.role = user.role;
-        token.id = user.id;
+        token.id = user.id as string;
       }
       return token;
     },
