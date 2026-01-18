@@ -250,6 +250,11 @@ function NewPurchaseOrderPageContent() {
       return;
     }
 
+    if (expectedDelivery && new Date(expectedDelivery) < new Date(orderDate)) {
+      setError("Expected delivery date cannot be before order date");
+      return;
+    }
+
     const validItems = orderItems.filter((item) => item.itemId && item.quantity > 0);
     if (validItems.length === 0) {
       setError("Please add at least one item with quantity");
@@ -345,6 +350,7 @@ function NewPurchaseOrderPageContent() {
                   type="date"
                   value={expectedDelivery}
                   onChange={(e) => setExpectedDelivery(e.target.value)}
+                  min={orderDate}
                 />
               </div>
             </div>
@@ -468,7 +474,7 @@ function NewPurchaseOrderPageContent() {
                           <Input
                             type="number"
                             min="0"
-                            step="0.001"
+                            step="1"
                             value={orderItem.quantity || ""}
                             onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
                             className="w-full text-right"

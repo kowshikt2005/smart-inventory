@@ -323,7 +323,7 @@ function NewPurchaseInvoicePageContent() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Due Date *</label>
-                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} min={invoiceDate} />
               </div>
             </div>
           </div>
@@ -433,7 +433,7 @@ function NewPurchaseInvoicePageContent() {
                           <Input
                             type="number"
                             min="0"
-                            step="0.001"
+                            step="1"
                             value={invoiceItem.quantity || ""}
                             onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
                             className="w-full text-right"

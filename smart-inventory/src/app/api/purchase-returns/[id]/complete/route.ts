@@ -116,6 +116,26 @@ export async function POST(
         },
       });
 
+      // If linked to invoice, reduce the invoice's balance
+      if (existingReturn.purchaseInvoiceId) {
+        const invoice = await tx.purchaseInvoice.findUnique({
+          where: { id: existingReturn.purchaseInvoiceId },
+        });
+
+        if (invoice) {
+          const invoiceNewBalance = Math.max(0, Number(invoice.balanceAmount) - Number(existingReturn.totalAmount));
+          const invoiceNewStatus = invoiceNewBalance <= 0.01 ? 'PAID' : invoice.status;
+
+          await tx.purchaseInvoice.update({
+            where: { id: existingReturn.purchaseInvoiceId },
+            data: {
+              balanceAmount: invoiceNewBalance,
+              status: invoiceNewStatus,
+            },
+          });
+        }
+      }
+
       // Update the return status
       const updated = await tx.purchaseReturn.update({
         where: { id },
