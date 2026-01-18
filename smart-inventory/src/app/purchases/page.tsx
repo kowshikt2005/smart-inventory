@@ -15,8 +15,6 @@ import {
   CreditCard,
   RotateCcw,
   TrendingUp,
-  Calendar,
-  DollarSign,
   Package,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -50,7 +48,7 @@ export default function PurchasesDashboardPage() {
   const router = useRouter();
   
   // Fetch stats from all purchase modules
-  const { data: stats, error, isLoading } = useSWR<StatsData>("/api/purchases/stats");
+  const { data: stats, error: _error, isLoading } = useSWR<StatsData>("/api/purchases/stats");
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {

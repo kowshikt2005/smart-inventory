@@ -9,6 +9,7 @@ export async function GET(request: Request) {
     const search = searchParams.get('search') || '';
     const vendorId = searchParams.get('vendorId') || '';
     const purchaseInvoiceId = searchParams.get('purchaseInvoiceId') || '';
+    const type = searchParams.get('type') || ''; // 'advance' or 'invoice'
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
@@ -22,6 +23,13 @@ export async function GET(request: Request) {
 
     if (purchaseInvoiceId) {
       where.purchaseInvoiceId = purchaseInvoiceId;
+    }
+
+    // Filter by payment type
+    if (type === 'advance') {
+      where.purchaseInvoiceId = null;
+    } else if (type === 'invoice') {
+      where.purchaseInvoiceId = { not: null };
     }
 
     if (search) {
@@ -95,13 +103,6 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!body.purchaseInvoiceId) {
-      return NextResponse.json(
-        { error: 'Purchase invoice is required' },
-        { status: 400 }
-      );
-    }
-
     if (!body.date) {
       return NextResponse.json(
         { error: 'Payment date is required' },
@@ -153,46 +154,52 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate purchase invoice exists and belongs to vendor
-    const purchaseInvoice = await db.purchaseInvoice.findUnique({
-      where: { id: body.purchaseInvoiceId },
-    });
+    // Check if this is an advance payment or invoice payment
+    const isAdvancePayment = !body.purchaseInvoiceId;
+    let purchaseInvoice = null;
 
-    if (!purchaseInvoice) {
-      return NextResponse.json(
-        { error: 'Purchase invoice not found' },
-        { status: 404 }
-      );
-    }
+    // If invoice payment, validate the invoice
+    if (!isAdvancePayment) {
+      purchaseInvoice = await db.purchaseInvoice.findUnique({
+        where: { id: body.purchaseInvoiceId },
+      });
 
-    if (purchaseInvoice.vendorId !== body.vendorId) {
-      return NextResponse.json(
-        { error: 'Purchase invoice belongs to a different vendor' },
-        { status: 400 }
-      );
-    }
+      if (!purchaseInvoice) {
+        return NextResponse.json(
+          { error: 'Purchase invoice not found' },
+          { status: 404 }
+        );
+      }
 
-    if (purchaseInvoice.status === 'PAID') {
-      return NextResponse.json(
-        { error: 'Invoice is already fully paid' },
-        { status: 400 }
-      );
-    }
+      if (purchaseInvoice.vendorId !== body.vendorId) {
+        return NextResponse.json(
+          { error: 'Purchase invoice belongs to a different vendor' },
+          { status: 400 }
+        );
+      }
 
-    if (purchaseInvoice.status === 'CANCELLED') {
-      return NextResponse.json(
-        { error: 'Cannot make payment for cancelled invoice' },
-        { status: 400 }
-      );
-    }
+      if (purchaseInvoice.status === 'PAID') {
+        return NextResponse.json(
+          { error: 'Invoice is already fully paid' },
+          { status: 400 }
+        );
+      }
 
-    // Validate payment amount doesn't exceed balance
-    const balanceAmount = Number(purchaseInvoice.balanceAmount);
-    if (body.amount > balanceAmount) {
-      return NextResponse.json(
-        { error: `Payment amount cannot exceed balance of ${balanceAmount.toFixed(2)}` },
-        { status: 400 }
-      );
+      if (purchaseInvoice.status === 'CANCELLED') {
+        return NextResponse.json(
+          { error: 'Cannot make payment for cancelled invoice' },
+          { status: 400 }
+        );
+      }
+
+      // Validate payment amount doesn't exceed balance
+      const balanceAmount = Number(purchaseInvoice.balanceAmount);
+      if (body.amount > balanceAmount) {
+        return NextResponse.json(
+          { error: `Payment amount cannot exceed balance of ${balanceAmount.toFixed(2)}` },
+          { status: 400 }
+        );
+      }
     }
 
     // Validate bank account if not cash
@@ -234,7 +241,7 @@ export async function POST(request: Request) {
         data: {
           paymentNumber,
           vendorId: body.vendorId,
-          purchaseInvoiceId: body.purchaseInvoiceId,
+          purchaseInvoiceId: body.purchaseInvoiceId || null,
           date: new Date(body.date),
           amount: body.amount,
           mode: body.mode,
@@ -259,19 +266,21 @@ export async function POST(request: Request) {
         },
       });
 
-      // Update invoice paid amount and status
-      const newPaidAmount = Number(purchaseInvoice.paidAmount) + body.amount;
-      const newBalanceAmount = Number(purchaseInvoice.totalAmount) - newPaidAmount;
-      const newStatus = newBalanceAmount <= 0 ? 'PAID' : purchaseInvoice.status;
+      // If invoice payment, update invoice paid amount and status
+      if (purchaseInvoice) {
+        const newPaidAmount = Number(purchaseInvoice.paidAmount) + body.amount;
+        const newBalanceAmount = Number(purchaseInvoice.totalAmount) - newPaidAmount;
+        const newStatus = newBalanceAmount <= 0 ? 'PAID' : purchaseInvoice.status;
 
-      await tx.purchaseInvoice.update({
-        where: { id: body.purchaseInvoiceId },
-        data: {
-          paidAmount: newPaidAmount,
-          balanceAmount: newBalanceAmount,
-          status: newStatus,
-        },
-      });
+        await tx.purchaseInvoice.update({
+          where: { id: body.purchaseInvoiceId },
+          data: {
+            paidAmount: newPaidAmount,
+            balanceAmount: newBalanceAmount,
+            status: newStatus,
+          },
+        });
+      }
 
       // Update bank account balance if not cash
       if (body.paidFrom !== 'Cash') {
@@ -296,11 +305,15 @@ export async function POST(request: Request) {
       const newBalance = previousBalance - body.amount;
 
       // Create vendor ledger entry
+      const description = isAdvancePayment
+        ? `Advance Payment ${paymentNumber}`
+        : `Payment ${paymentNumber} for Invoice ${purchaseInvoice!.invoiceNumber}`;
+
       await tx.vendorLedger.create({
         data: {
           vendorId: body.vendorId,
           date: new Date(body.date),
-          description: `Payment ${paymentNumber} for Invoice ${purchaseInvoice.invoiceNumber}`,
+          description,
           type: 'PURCHASE_PAYMENT',
           debit: body.amount, // Debit means we paid the vendor
           credit: 0,

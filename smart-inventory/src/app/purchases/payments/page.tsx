@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Plus, MoreHorizontal, Trash2, Loader2, X, Eye, CreditCard } from "lucide-react";
+import { Plus, MoreHorizontal, Trash2, Loader2, X, Eye, CreditCard, Wallet } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -28,7 +28,7 @@ interface VendorPayment {
   paymentNumber: string;
   date: string;
   vendorId: string;
-  purchaseInvoiceId: string;
+  purchaseInvoiceId: string | null;
   amount: number;
   mode: string;
   paidFrom: string;
@@ -43,13 +43,16 @@ interface VendorPayment {
     invoiceNumber: string;
     totalAmount: number;
     balanceAmount: number;
-  };
+  } | null;
 }
+
+type PaymentFilter = "all" | "invoice" | "advance";
 
 export default function VendorPaymentsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
   const itemsPerPage = 15;
 
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -59,8 +62,11 @@ export default function VendorPaymentsPage() {
     if (debouncedSearch) {
       url += `&search=${encodeURIComponent(debouncedSearch)}`;
     }
+    if (paymentFilter !== "all") {
+      url += `&type=${paymentFilter}`;
+    }
     return url;
-  }, [currentPage, debouncedSearch]);
+  }, [currentPage, debouncedSearch, paymentFilter]);
 
   const { data, error, isLoading, mutate } = useSWR(apiUrl);
 
@@ -133,6 +139,41 @@ export default function VendorPaymentsPage() {
           </div>
         </div>
 
+        {/* Filter Tabs */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => { setPaymentFilter("all"); setCurrentPage(1); }}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              paymentFilter === "all"
+                ? "bg-teal-500 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            All Payments
+          </button>
+          <button
+            onClick={() => { setPaymentFilter("invoice"); setCurrentPage(1); }}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              paymentFilter === "invoice"
+                ? "bg-teal-500 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            Invoice Payments
+          </button>
+          <button
+            onClick={() => { setPaymentFilter("advance"); setCurrentPage(1); }}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              paymentFilter === "advance"
+                ? "bg-teal-500 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            <Wallet className="h-4 w-4 inline mr-1" />
+            Advance Payments
+          </button>
+        </div>
+
         {/* Search and Actions */}
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div className="relative w-64">
@@ -169,6 +210,7 @@ export default function VendorPaymentsPage() {
                 <TableRow className="bg-gray-50">
                   <TableHead className="font-semibold">Date</TableHead>
                   <TableHead className="font-semibold">Payment #</TableHead>
+                  <TableHead className="font-semibold">Type</TableHead>
                   <TableHead className="font-semibold">Vendor</TableHead>
                   <TableHead className="font-semibold">Invoice #</TableHead>
                   <TableHead className="font-semibold">Mode</TableHead>
@@ -179,7 +221,7 @@ export default function VendorPaymentsPage() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-gray-500 py-12">
+                    <TableCell colSpan={8} className="text-center text-gray-500 py-12">
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="h-5 w-5 animate-spin" />
                         <span>Loading payments...</span>
@@ -188,7 +230,7 @@ export default function VendorPaymentsPage() {
                   </TableRow>
                 ) : error ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-red-600 py-8">
+                    <TableCell colSpan={8} className="text-center text-red-600 py-8">
                       <p>Error: {error.message || "Failed to load payments"}</p>
                       <Button onClick={() => mutate()} variant="outline" size="sm" className="mt-2">
                         Try Again
@@ -197,7 +239,7 @@ export default function VendorPaymentsPage() {
                   </TableRow>
                 ) : (data?.vendorPayments || []).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                    <TableCell colSpan={8} className="text-center text-gray-500 py-8">
                       {searchQuery ? "No payments found" : "No vendor payments yet."}
                     </TableCell>
                   </TableRow>
@@ -214,18 +256,34 @@ export default function VendorPaymentsPage() {
                         </button>
                       </TableCell>
                       <TableCell>
+                        {payment.purchaseInvoice ? (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                            Invoice
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                            <Wallet className="h-3 w-3 mr-1" />
+                            Advance
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <div>
                           <p className="font-medium">{payment.vendor.name}</p>
                           <p className="text-xs text-gray-500">{payment.vendor.vendorNumber}</p>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <button
-                          onClick={() => router.push(`/purchases/invoices/${payment.purchaseInvoice.id}`)}
-                          className="text-teal-600 hover:underline"
-                        >
-                          {payment.purchaseInvoice.invoiceNumber}
-                        </button>
+                        {payment.purchaseInvoice ? (
+                          <button
+                            onClick={() => router.push(`/purchases/invoices/${payment.purchaseInvoice!.id}`)}
+                            className="text-teal-600 hover:underline"
+                          >
+                            {payment.purchaseInvoice.invoiceNumber}
+                          </button>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm">{payment.mode}</TableCell>
                       <TableCell className="text-right font-medium">

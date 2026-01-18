@@ -82,31 +82,33 @@ export async function DELETE(
     await db.$transaction(async (tx) => {
       const paymentAmount = Number(existingPayment.amount);
 
-      // Update invoice paid amount and status
+      // If this payment was linked to an invoice, update the invoice
       const invoice = existingPayment.purchaseInvoice;
-      const newPaidAmount = Number(invoice.paidAmount) - paymentAmount;
-      const newBalanceAmount = Number(invoice.totalAmount) - newPaidAmount;
+      if (invoice) {
+        const newPaidAmount = Number(invoice.paidAmount) - paymentAmount;
+        const newBalanceAmount = Number(invoice.totalAmount) - newPaidAmount;
 
-      // Determine new status
-      let newStatus = invoice.status;
-      if (invoice.status === 'PAID') {
-        // Check if invoice is overdue
-        const now = new Date();
-        if (invoice.dueDate && new Date(invoice.dueDate) < now) {
-          newStatus = 'OVERDUE';
-        } else {
-          newStatus = 'PENDING';
+        // Determine new status
+        let newStatus = invoice.status;
+        if (invoice.status === 'PAID') {
+          // Check if invoice is overdue
+          const now = new Date();
+          if (invoice.dueDate && new Date(invoice.dueDate) < now) {
+            newStatus = 'OVERDUE';
+          } else {
+            newStatus = 'PENDING';
+          }
         }
-      }
 
-      await tx.purchaseInvoice.update({
-        where: { id: invoice.id },
-        data: {
-          paidAmount: newPaidAmount,
-          balanceAmount: newBalanceAmount,
-          status: newStatus,
-        },
-      });
+        await tx.purchaseInvoice.update({
+          where: { id: invoice.id },
+          data: {
+            paidAmount: newPaidAmount,
+            balanceAmount: newBalanceAmount,
+            status: newStatus,
+          },
+        });
+      }
 
       // Restore bank account balance if not cash
       if (existingPayment.paidFrom !== 'Cash') {

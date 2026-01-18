@@ -74,7 +74,7 @@ export default function PurchaseInvoiceDetailPage() {
   const params = useParams();
   const invoiceId = params.id as string;
 
-  const { data: invoice, error, isLoading, mutate } = useSWR<PurchaseInvoice>(
+  const { data: invoice, error, isLoading, mutate: _mutate } = useSWR<PurchaseInvoice>(
     `/api/purchase-invoices/${invoiceId}`
   );
 

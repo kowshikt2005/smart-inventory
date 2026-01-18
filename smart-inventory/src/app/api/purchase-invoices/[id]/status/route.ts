@@ -47,7 +47,7 @@ export async function PATCH(
     }
 
     // Additional validation for specific transitions
-    if ((newStatus === 'PAID' || newStatus === 'CANCELLED') && existingInvoice.balanceAmount > 0) {
+    if ((newStatus === 'PAID' || newStatus === 'CANCELLED') && Number(existingInvoice.balanceAmount) > 0) {
       return NextResponse.json(
         { 
           error: 'Cannot mark as paid/cancelled while there is outstanding balance' 

@@ -56,7 +56,7 @@ function NewPurchaseReturnPageContent() {
   const [returnItems, setReturnItems] = useState<ReturnItemData[]>([
     { id: generateId(), itemId: "", quantity: 1, rate: 0, taxRate: 0, taxAmount: 0, amount: 0 },
   ]);
-  const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const [_isLoadingItems, setIsLoadingItems] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

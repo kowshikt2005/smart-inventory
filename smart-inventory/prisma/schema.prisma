@@ -772,7 +772,7 @@ model VendorPayment {
   id                String      @id @default(uuid())
   paymentNumber     String      @unique // VP-xxxx
   vendorId          String
-  purchaseInvoiceId String      // Required - linked to invoice
+  purchaseInvoiceId String?     // Optional - can be advance payment
   date              DateTime
   amount            Decimal     @db.Decimal(15, 2)
   mode              PaymentMode
@@ -783,8 +783,8 @@ model VendorPayment {
   updatedAt         DateTime    @updatedAt
 
   // Relations
-  vendor          Vendor          @relation(fields: [vendorId], references: [id])
-  purchaseInvoice PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id])
+  vendor          Vendor           @relation(fields: [vendorId], references: [id])
+  purchaseInvoice PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id])
 
   @@index([paymentNumber])
   @@index([vendorId])

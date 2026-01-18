@@ -1,0 +1,8 @@
+# Ignore Windows device-name artifacts that were created accidentally
+nul
+smart-inventory/nul
+
+# Common ignores
+node_modules/
+package-lock.json
+package.json
