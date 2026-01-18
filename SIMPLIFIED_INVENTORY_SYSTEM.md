@@ -1,3 +1,4 @@
+
 # Simplified Inventory System
 
 ## What Changed
