@@ -22,6 +22,7 @@ import {
   RotateCcw,
   BookOpen,
   ClipboardList,
+  Truck,
 } from "lucide-react";
 import { useState, memo } from "react";
 
@@ -63,6 +64,7 @@ export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [salesOpen, setSalesOpen] = useState(true);
+  const [purchasesOpen, setPurchasesOpen] = useState(true);
   const [mastersOpen, setMastersOpen] = useState(true);
   const [itemsOpen, setItemsOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(true);
@@ -76,6 +78,13 @@ export const Sidebar = memo(function Sidebar() {
     { icon: Receipt, label: "Invoices", href: "/sales/invoices" },
     { icon: CreditCard, label: "Receipts", href: "/sales/receipts" },
     { icon: RotateCcw, label: "Returns", href: "/sales/returns" },
+  ];
+
+  const purchaseItems = [
+    { icon: FileText, label: "Orders", href: "/purchases/orders" },
+    { icon: Receipt, label: "Invoices", href: "/purchases/invoices" },
+    { icon: CreditCard, label: "Payments", href: "/purchases/payments" },
+    { icon: RotateCcw, label: "Returns", href: "/purchases/returns" },
   ];
 
   const masterItems = [
@@ -169,6 +178,52 @@ export const Sidebar = memo(function Sidebar() {
             )}
           </div>
         )}
+
+        {/* Purchase Section */}
+        <div className="mb-2">
+          <button
+            onClick={() => setPurchasesOpen(!purchasesOpen)}
+            className={cn(
+              "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
+              pathname.startsWith("/purchases") && "bg-white/15 text-white"
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <Truck className="h-5 w-5" strokeWidth={1.5} />
+              <span>Purchases</span>
+            </div>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 transition-transform",
+                purchasesOpen && "rotate-180"
+              )}
+            />
+          </button>
+
+          {/* Purchase Dropdown */}
+          {purchasesOpen && (
+            <div className="ml-8 mt-1 space-y-1">
+              {purchaseItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
+                      isActive && "bg-white/15 text-white font-medium shadow-sm"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" strokeWidth={1.5} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Ledger Section */}
         {permissions.ledger && (

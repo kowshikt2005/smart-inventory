@@ -58,9 +58,32 @@ enum LedgerEntryType {
   SALES_RECEIPT
   SALES_RETURN
   ADJUSTMENT
+  PURCHASE_INVOICE
+  PURCHASE_PAYMENT
+  PURCHASE_RETURN
 }
 
 enum SalesReturnStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+enum PurchaseOrderStatus {
+  OPEN
+  PARTIAL
+  RECEIVED
+  CANCELLED
+}
+
+enum PurchaseInvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PurchaseReturnStatus {
   OPEN
   COMPLETED
   CANCELLED
@@ -182,7 +205,11 @@ model Vendor {
   updatedAt      DateTime @updatedAt
 
   // Relations
-  purchaseOrders PurchaseOrder[]
+  purchaseOrders   PurchaseOrder[]
+  purchaseInvoices PurchaseInvoice[]
+  vendorPayments   VendorPayment[]
+  purchaseReturns  PurchaseReturn[]
+  ledgerEntries    VendorLedger[]
 
   @@index([vendorNumber])
   @@index([gstin])
@@ -240,14 +267,16 @@ model Item {
   updatedAt     DateTime @updatedAt
 
   // Relations
-  brand              Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  subBrand           SubBrand?           @relation(fields: [subBrandId], references: [id], onDelete: SetNull)
-  inventory          Inventory?
-  salesOrderItems    SalesOrderItem[]
-  invoiceItems       InvoiceItem[]
-  stockMovements     StockMovement[]
-  purchaseOrderItems PurchaseOrderItem[]
-  salesReturnItems   SalesReturnItem[]
+  brand                Brand?                 @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  subBrand             SubBrand?              @relation(fields: [subBrandId], references: [id], onDelete: SetNull)
+  inventory            Inventory?
+  salesOrderItems      SalesOrderItem[]
+  invoiceItems         InvoiceItem[]
+  stockMovements       StockMovement[]
+  purchaseOrderItems   PurchaseOrderItem[]
+  salesReturnItems     SalesReturnItem[]
+  purchaseInvoiceItems PurchaseInvoiceItem[]
+  purchaseReturnItems  PurchaseReturnItem[]
 
   @@index([itemCode])
   @@index([brandId])
@@ -397,26 +426,29 @@ model OrderStatusHistory {
 // ============================================
 
 model PurchaseOrder {
-  id              String   @id @default(uuid())
-  orderNumber     String   @unique // PO-xxxx
-  orderDate       DateTime
-  vendorId        String
+  id               String              @id @default(uuid())
+  orderNumber      String              @unique // PO-xxxx
+  vendorId         String
+  vendorName       String              // Denormalized for performance
+  date             DateTime
   expectedDelivery DateTime?
-  status          String   @default("PENDING") // PENDING, RECEIVED, PARTIAL, CANCELLED
-  subtotal        Decimal  @default(0) @db.Decimal(15, 2)
-  taxAmount       Decimal  @default(0) @db.Decimal(15, 2)
-  totalAmount     Decimal  @default(0) @db.Decimal(15, 2)
-  notes           String?  @db.Text
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  amount           Decimal             @default(0) @db.Decimal(15, 2) // Subtotal before tax
+  taxAmount        Decimal             @default(0) @db.Decimal(15, 2)
+  totalAmount      Decimal             @default(0) @db.Decimal(15, 2) // amount + taxAmount
+  status           PurchaseOrderStatus @default(OPEN)
+  notes            String?             @db.Text
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   // Relations
-  vendor Vendor              @relation(fields: [vendorId], references: [id])
-  items  PurchaseOrderItem[]
+  vendor           Vendor               @relation(fields: [vendorId], references: [id])
+  items            PurchaseOrderItem[]
+  purchaseInvoices PurchaseInvoice[]
 
   @@index([orderNumber])
   @@index([vendorId])
-  @@index([orderDate])
+  @@index([date])
+  @@index([status])
   @@map("purchase_orders")
 }
 
@@ -674,4 +706,168 @@ model BankAccount {
 
   @@index([accountNumber])
   @@map("bank_accounts")
+}
+
+// ============================================
+// PURCHASE INVOICE MANAGEMENT
+// ============================================
+
+model PurchaseInvoice {
+  id               String                @id @default(uuid())
+  invoiceNumber    String                @unique // PI-xxxx
+  vendorId         String
+  vendorName       String                // Denormalized for performance
+  purchaseOrderId  String?               // Optional - can create without PO
+  date             DateTime
+  dueDate          DateTime              // For payment tracking
+  amount           Decimal               @default(0) @db.Decimal(15, 2) // Subtotal
+  taxAmount        Decimal               @default(0) @db.Decimal(15, 2)
+  totalAmount      Decimal               @default(0) @db.Decimal(15, 2) // Total invoice value
+  paidAmount       Decimal               @default(0) @db.Decimal(15, 2)
+  balanceAmount    Decimal               @default(0) @db.Decimal(15, 2)
+  status           PurchaseInvoiceStatus @default(PENDING)
+  notes            String?               @db.Text
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  // Relations
+  vendor         Vendor                @relation(fields: [vendorId], references: [id])
+  purchaseOrder  PurchaseOrder?        @relation(fields: [purchaseOrderId], references: [id])
+  items          PurchaseInvoiceItem[]
+  vendorPayments VendorPayment[]
+  purchaseReturns PurchaseReturn[]
+
+  @@index([invoiceNumber])
+  @@index([vendorId])
+  @@index([purchaseOrderId])
+  @@index([date])
+  @@index([status])
+  @@map("purchase_invoices")
+}
+
+model PurchaseInvoiceItem {
+  id                String  @id @default(uuid())
+  purchaseInvoiceId String
+  itemId            String
+  quantity          Decimal @db.Decimal(15, 3)
+  rate              Decimal @db.Decimal(15, 2)
+  taxRate           Decimal @default(0) @db.Decimal(5, 2)
+  taxAmount         Decimal @default(0) @db.Decimal(15, 2)
+  amount            Decimal @default(0) @db.Decimal(15, 2)
+
+  // Relations
+  purchaseInvoice PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
+  item            Item            @relation(fields: [itemId], references: [id])
+
+  @@index([purchaseInvoiceId])
+  @@index([itemId])
+  @@map("purchase_invoice_items")
+}
+
+// ============================================
+// VENDOR PAYMENT MANAGEMENT
+// ============================================
+
+model VendorPayment {
+  id                String      @id @default(uuid())
+  paymentNumber     String      @unique // VP-xxxx
+  vendorId          String
+  purchaseInvoiceId String      // Required - linked to invoice
+  date              DateTime
+  amount            Decimal     @db.Decimal(15, 2)
+  mode              PaymentMode
+  paidFrom          String      // 'Cash' or BankAccount ID
+  reference         String?     // Check number, transaction ID, etc.
+  notes             String?     @db.Text
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  // Relations
+  vendor          Vendor          @relation(fields: [vendorId], references: [id])
+  purchaseInvoice PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id])
+
+  @@index([paymentNumber])
+  @@index([vendorId])
+  @@index([purchaseInvoiceId])
+  @@index([date])
+  @@map("vendor_payments")
+}
+
+// ============================================
+// PURCHASE RETURN MANAGEMENT
+// ============================================
+
+model PurchaseReturn {
+  id                String               @id @default(uuid())
+  returnNumber      String               @unique // PR-xxxx
+  vendorId          String
+  vendorName        String               // Denormalized for performance
+  purchaseInvoiceId String?              // Optional - can return without invoice
+  date              DateTime
+  amount            Decimal              @default(0) @db.Decimal(15, 2) // Subtotal
+  taxAmount         Decimal              @default(0) @db.Decimal(15, 2)
+  totalAmount       Decimal              @default(0) @db.Decimal(15, 2) // Total return value
+  status            PurchaseReturnStatus @default(OPEN)
+  reason            String?              @db.Text
+  notes             String?              @db.Text
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  // Relations
+  vendor          Vendor               @relation(fields: [vendorId], references: [id])
+  purchaseInvoice PurchaseInvoice?     @relation(fields: [purchaseInvoiceId], references: [id])
+  items           PurchaseReturnItem[]
+
+  @@index([returnNumber])
+  @@index([vendorId])
+  @@index([purchaseInvoiceId])
+  @@index([status])
+  @@index([date])
+  @@map("purchase_returns")
+}
+
+model PurchaseReturnItem {
+  id               String  @id @default(uuid())
+  purchaseReturnId String
+  itemId           String
+  quantity         Decimal @db.Decimal(15, 3)
+  rate             Decimal @db.Decimal(15, 2)
+  taxRate          Decimal @default(0) @db.Decimal(5, 2)
+  taxAmount        Decimal @default(0) @db.Decimal(15, 2)
+  amount           Decimal @default(0) @db.Decimal(15, 2)
+
+  // Relations
+  purchaseReturn PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+  item           Item           @relation(fields: [itemId], references: [id])
+
+  @@index([purchaseReturnId])
+  @@index([itemId])
+  @@map("purchase_return_items")
+}
+
+// ============================================
+// VENDOR LEDGER (Financial Tracking)
+// ============================================
+
+model VendorLedger {
+  id            String          @id @default(uuid())
+  vendorId      String
+  date          DateTime
+  description   String
+  type          LedgerEntryType
+  debit         Decimal         @default(0) @db.Decimal(15, 2)
+  credit        Decimal         @default(0) @db.Decimal(15, 2)
+  balance       Decimal         @default(0) @db.Decimal(15, 2)
+  referenceType String          // 'purchase_invoice', 'vendor_payment', 'purchase_return'
+  referenceId   String
+  createdAt     DateTime        @default(now())
+
+  // Relations
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@index([date])
+  @@index([type])
+  @@index([referenceType, referenceId])
+  @@map("vendor_ledger")
 }
