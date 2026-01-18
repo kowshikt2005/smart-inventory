@@ -80,37 +80,47 @@ export async function GET(request: Request) {
       };
     });
 
-    // Calculate overall stats (not just current page)
-    const allInvoices = await db.invoice.findMany({
-      select: {
-        paymentStatus: true,
-        balanceAmount: true,
-        dueDate: true,
-      },
-    });
+    // Calculate overall stats using database aggregation (much faster than fetching all)
+    const [paidCount, overdueStats, pendingStats, totalCount] = await Promise.all([
+      // Count paid invoices
+      db.invoice.count({ where: { paymentStatus: 'PAID' } }),
+      // Count and sum overdue (pending, past due date, has balance)
+      db.invoice.aggregate({
+        where: {
+          paymentStatus: 'PENDING',
+          dueDate: { lt: now },
+          balanceAmount: { gt: 0 },
+        },
+        _count: true,
+        _sum: { balanceAmount: true },
+      }),
+      // Count and sum pending/partial (not overdue)
+      db.invoice.aggregate({
+        where: {
+          OR: [
+            { paymentStatus: 'PARTIAL' },
+            {
+              paymentStatus: 'PENDING',
+              OR: [
+                { dueDate: { gte: now } },
+                { dueDate: null },
+                { balanceAmount: 0 },
+              ],
+            },
+          ],
+        },
+        _count: true,
+        _sum: { balanceAmount: true },
+      }),
+      // Total count
+      db.invoice.count(),
+    ]);
 
-    let pendingCount = 0;
-    let overdueCount = 0;
-    let paidCount = 0;
-    let totalReceivable = 0;
-
-    allInvoices.forEach((inv) => {
-      const isOverdue =
-        inv.paymentStatus === 'PENDING' &&
-        inv.dueDate &&
-        new Date(inv.dueDate) < now &&
-        Number(inv.balanceAmount) > 0;
-
-      if (inv.paymentStatus === 'PAID') {
-        paidCount++;
-      } else if (isOverdue) {
-        overdueCount++;
-        totalReceivable += Number(inv.balanceAmount);
-      } else if (inv.paymentStatus === 'PENDING' || inv.paymentStatus === 'PARTIAL') {
-        pendingCount++;
-        totalReceivable += Number(inv.balanceAmount);
-      }
-    });
+    const overdueCount = overdueStats._count;
+    const pendingCount = pendingStats._count;
+    const totalReceivable =
+      Number(overdueStats._sum.balanceAmount || 0) +
+      Number(pendingStats._sum.balanceAmount || 0);
 
     return NextResponse.json({
       invoices: invoicesWithStatus,
@@ -121,7 +131,7 @@ export async function GET(request: Request) {
         totalPages: Math.ceil(total / limit),
       },
       stats: {
-        total: allInvoices.length,
+        total: totalCount,
         pending: pendingCount,
         overdue: overdueCount,
         paid: paidCount,
@@ -336,7 +346,7 @@ export async function POST(request: Request) {
           stockMovements.push({
             inventoryId: inventory.id,
             itemId: orderItem.itemId,
-            quantity: -Number(orderItem.quantity),
+            quantity: Number(orderItem.quantity),
             type: 'SALE',
             referenceType: 'INVOICE',
             referenceId: newInvoice.id,

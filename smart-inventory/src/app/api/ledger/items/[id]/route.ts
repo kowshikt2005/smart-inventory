@@ -64,10 +64,18 @@ export async function GET(
 
       for (const movement of priorMovements) {
         const qty = Number(movement.quantity);
-        if (['PURCHASE', 'ADJUSTMENT_IN', 'RETURN'].includes(movement.type)) {
-          openingBalance += qty;
-        } else if (['SALE', 'ADJUSTMENT_OUT', 'DAMAGE', 'TRANSFER'].includes(movement.type)) {
-          openingBalance -= qty;
+        
+        // Handle both positive and negative quantities
+        if (qty < 0) {
+          // Negative quantity = OUT
+          openingBalance += qty; // qty is already negative
+        } else if (qty > 0) {
+          // Positive quantity - check type
+          if (['PURCHASE', 'ADJUSTMENT_IN', 'RETURN'].includes(movement.type)) {
+            openingBalance += qty;
+          } else if (['SALE', 'ADJUSTMENT_OUT', 'DAMAGE', 'TRANSFER'].includes(movement.type)) {
+            openingBalance -= qty;
+          }
         }
       }
     }
@@ -89,15 +97,25 @@ export async function GET(
       let outQty = 0;
       let particulars = '';
 
-      // Determine in/out based on movement type
-      if (['PURCHASE', 'ADJUSTMENT_IN', 'RETURN'].includes(movement.type)) {
-        inQty = qty;
-        totalIn += qty;
-        runningBalance += qty;
-      } else if (['SALE', 'ADJUSTMENT_OUT', 'DAMAGE', 'TRANSFER'].includes(movement.type)) {
-        outQty = qty;
-        totalOut += qty;
-        runningBalance -= qty;
+      // Handle both positive and negative quantities
+      // If quantity is negative, it's always an OUT movement
+      // If quantity is positive, check the type
+      if (qty < 0) {
+        // Negative quantity = OUT
+        outQty = Math.abs(qty);
+        totalOut += Math.abs(qty);
+        runningBalance += qty; // qty is already negative
+      } else if (qty > 0) {
+        // Positive quantity - check type
+        if (['PURCHASE', 'ADJUSTMENT_IN', 'RETURN'].includes(movement.type)) {
+          inQty = qty;
+          totalIn += qty;
+          runningBalance += qty;
+        } else if (['SALE', 'ADJUSTMENT_OUT', 'DAMAGE', 'TRANSFER'].includes(movement.type)) {
+          outQty = qty;
+          totalOut += qty;
+          runningBalance -= qty;
+        }
       }
 
       // Generate particulars based on reference type
@@ -113,6 +131,9 @@ export async function GET(
           break;
         case 'STOCK_JOURNAL':
           particulars = movement.notes || 'Stock Journal';
+          break;
+        case 'INVOICE':
+          particulars = movement.notes || 'Invoice';
           break;
         default:
           particulars = movement.notes || movement.type.replace(/_/g, ' ');

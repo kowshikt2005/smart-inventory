@@ -55,20 +55,18 @@ export async function GET(request: Request) {
       db.employee.count({ where }),
     ]);
 
-    // Fetch user roles for each employee
-    const employeesWithRoles = await Promise.all(
-      employees.map(async (employee) => {
-        const user = employee.email ? await db.user.findUnique({
-          where: { email: employee.email },
-          select: { role: true },
-        }) : null;
+    // Fetch all user roles in a single query (fixes N+1 problem)
+    const emails = employees.map(e => e.email).filter((email): email is string => !!email);
+    const users = emails.length > 0 ? await db.user.findMany({
+      where: { email: { in: emails } },
+      select: { email: true, role: true },
+    }) : [];
 
-        return {
-          ...employee,
-          role: user?.role || 'SALESMAN',
-        };
-      })
-    );
+    const roleMap = new Map(users.map(u => [u.email, u.role]));
+    const employeesWithRoles = employees.map(employee => ({
+      ...employee,
+      role: employee.email ? (roleMap.get(employee.email) || 'SALESMAN') : 'SALESMAN',
+    }));
 
     return NextResponse.json({
       employees: employeesWithRoles,

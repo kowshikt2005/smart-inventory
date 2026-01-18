@@ -1,23 +1,44 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // Fetch all sub-brands in a single query
-    const subBrands = await db.subBrand.findMany({
-      orderBy: {
-        name: "asc",
-      },
-      select: {
-        id: true,
-        name: true,
-        brandId: true,
-      },
-    });
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get('search') || '';
+    const brandId = searchParams.get('brandId');
+    // Optional pagination - if not provided, returns all (backward compatible)
+    const page = searchParams.get('page') ? parseInt(searchParams.get('page')!) : null;
+    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : null;
+
+    const where: any = {};
+    if (search) {
+      where.name = { contains: search };
+    }
+    if (brandId) {
+      where.brandId = brandId;
+    }
+
+    // Use parallel queries for efficiency
+    const [subBrands, total] = await Promise.all([
+      db.subBrand.findMany({
+        where,
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          brandId: true,
+        },
+        ...(page && limit ? { skip: (page - 1) * limit, take: limit } : {}),
+      }),
+      db.subBrand.count({ where }),
+    ]);
 
     return NextResponse.json({
       subBrands,
-      total: subBrands.length,
+      total,
+      ...(page && limit ? {
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
+      } : {}),
     });
   } catch (error) {
     console.error("Error fetching sub-brands:", error);

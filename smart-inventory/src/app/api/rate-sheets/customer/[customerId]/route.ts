@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { cache, cacheKeys, cacheTTL } from '@/lib/cache';
 
 // GET /api/rate-sheets/customer/[customerId] - Get the active rate sheet for a customer
 // This is used during sales order creation to calculate discounted prices
@@ -10,15 +11,31 @@ export async function GET(
   try {
     const { customerId } = await params;
 
-    // Verify customer exists
-    const customer = await db.customer.findUnique({
-      where: { id: customerId },
-      select: {
-        id: true,
-        customerNumber: true,
-        name: true,
+    // Use cache for frequently accessed rate sheets
+    const cachedData = await cache.getOrSet(
+      cacheKeys.rateSheet(customerId),
+      async () => {
+        // Fetch customer and rate sheet in parallel
+        const [customer, rateSheet] = await Promise.all([
+          db.customer.findUnique({
+            where: { id: customerId },
+            select: {
+              id: true,
+              customerNumber: true,
+              name: true,
+            },
+          }),
+          db.rateSheet.findUnique({
+            where: { customerId },
+          }),
+        ]);
+
+        return { customer, rateSheet };
       },
-    });
+      cacheTTL.RATE_SHEET
+    );
+
+    const { customer, rateSheet } = cachedData;
 
     if (!customer) {
       return NextResponse.json(
@@ -28,11 +45,6 @@ export async function GET(
     }
 
     const now = new Date();
-
-    // Find active rate sheet for this customer
-    const rateSheet = await db.rateSheet.findUnique({
-      where: { customerId },
-    });
 
     // Check if rate sheet is valid and active
     if (!rateSheet) {

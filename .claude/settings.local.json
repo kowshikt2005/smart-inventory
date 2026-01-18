@@ -19,7 +19,8 @@
       "Bash(npm run lint)",
       "mcp__playwright__browser_press_key",
       "mcp__playwright__browser_wait_for",
-      "mcp__playwright__browser_run_code"
+      "mcp__playwright__browser_run_code",
+      "WebFetch(domain:ui.aceternity.com)"
     ]
   },
   "enableAllProjectMcpServers": true,

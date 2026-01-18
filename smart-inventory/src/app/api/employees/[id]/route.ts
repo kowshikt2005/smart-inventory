@@ -21,23 +21,31 @@ export async function GET(
 
     const { id } = await params;
 
-    const employee = await db.employee.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        employeeNumber: true,
-        name: true,
-        email: true,
-        phone: true,
-        designation: true,
-        department: true,
-        salary: true,
-        joinDate: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    // Fetch employee and user role in parallel (fixes N+1)
+    const [employee, user] = await Promise.all([
+      db.employee.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          employeeNumber: true,
+          name: true,
+          email: true,
+          phone: true,
+          designation: true,
+          department: true,
+          salary: true,
+          joinDate: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      db.employee.findUnique({ where: { id }, select: { email: true } })
+        .then(emp => emp?.email ? db.user.findUnique({
+          where: { email: emp.email },
+          select: { role: true },
+        }) : null),
+    ]);
 
     if (!employee) {
       return NextResponse.json(
@@ -45,12 +53,6 @@ export async function GET(
         { status: 404 }
       );
     }
-
-    // Get user role
-    const user = employee.email ? await db.user.findUnique({
-      where: { email: employee.email },
-      select: { role: true },
-    }) : null;
 
     return NextResponse.json({
       ...employee,
@@ -174,18 +176,16 @@ export async function PUT(
         console.log('✅ User account updated successfully');
       }
 
-      return employee;
+      // Return role directly from the update to avoid extra query
+      const updatedRole = body.role || (existingEmployee.email ?
+        (await tx.user.findUnique({ where: { email: existingEmployee.email }, select: { role: true } }))?.role : null);
+
+      return { employee, role: updatedRole };
     });
 
-    // Get updated user role
-    const user = result.email ? await db.user.findUnique({
-      where: { email: result.email },
-      select: { role: true },
-    }) : null;
-
     const responseData = {
-      ...result,
-      role: user?.role || 'SALESMAN',
+      ...result.employee,
+      role: result.role || 'SALESMAN',
     };
 
     console.log('✅ Employee update completed');
