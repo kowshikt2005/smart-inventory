@@ -91,10 +91,10 @@ export async function POST(request: Request) {
     // Generate unique item code
     const itemCode = `item-${Date.now()}`;
 
-    // Create item with inventory record
-    const item = await db.$transaction(async (tx) => {
-      // Create the item
-      const newItem = await tx.item.create({
+    // Create item with inventory record in transaction (without includes for speed)
+    const newItem = await db.$transaction(async (tx) => {
+      // Create the item (without includes to keep transaction fast)
+      const item = await tx.item.create({
         data: {
           itemCode: itemCode,
           name: body.name,
@@ -109,23 +109,29 @@ export async function POST(request: Request) {
           unit: body.unit || 'PCS',
           isActive: body.isActive !== undefined ? body.isActive : true,
         },
-        include: {
-          brand: true,
-          subBrand: true,
-        },
       });
 
       // Create inventory record
       await tx.inventory.create({
         data: {
-          itemId: newItem.id,
+          itemId: item.id,
           physicalStock: 0,
           reservedQuantity: 0,
           minStockLevel: body.minStock || 0,
         },
       });
 
-      return newItem;
+      return item;
+    });
+
+    // Fetch the full item with relations AFTER transaction completes
+    const item = await db.item.findUnique({
+      where: { id: newItem.id },
+      include: {
+        brand: true,
+        subBrand: true,
+        inventory: true,
+      },
     });
 
     return NextResponse.json(item, { status: 201 });
