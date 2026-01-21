@@ -42,6 +42,9 @@ export async function GET(
                 hsnCode: true,
                 gstRate: true,
                 standardPrice: true,
+                purchasePrice: true, // MRP
+                mrp: true,
+                discountPercent: true,
                 inventory: {
                   select: {
                     physicalStock: true,
@@ -71,7 +74,7 @@ export async function GET(
             changedAt: 'desc',
           },
         },
-        invoice: {
+        invoices: {
           select: {
             id: true,
             invoiceNumber: true,

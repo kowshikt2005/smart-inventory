@@ -170,7 +170,7 @@ export async function POST(request: Request) {
             item: true,
           },
         },
-        invoice: true,
+        invoices: true,
       },
     });
 
@@ -190,9 +190,9 @@ export async function POST(request: Request) {
     }
 
     // Check if invoice already exists
-    if (salesOrder.invoice) {
+    if (salesOrder.invoices && salesOrder.invoices.length > 0) {
       return NextResponse.json(
-        { error: 'Invoice already exists for this order', invoiceId: salesOrder.invoice.id },
+        { error: 'Invoice already exists for this order', invoiceId: salesOrder.invoices[0].id },
         { status: 409 }
       );
     }

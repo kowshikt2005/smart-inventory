@@ -41,6 +41,9 @@ interface Item {
   hsnCode: string | null;
   gstRate: number;
   standardPrice: number;
+  purchasePrice: number; // MRP is stored as purchasePrice
+  mrp?: number | null;
+  discountPercent?: number | null;
   inventory?: {
     physicalStock: number;
     reservedQuantity: number;
@@ -130,7 +133,8 @@ function NewSalesOrderPageContent() {
   const fetchItems = useCallback(async () => {
     try {
       setIsLoadingItems(true);
-      const response = await fetch("/api/items?limit=1000&activeOnly=true");
+      // Fetch only essential fields for better performance
+      const response = await fetch("/api/items?limit=500&activeOnly=true&isActive=true");
       if (response.ok) {
         const data = await response.json();
         setItems(data.items || []);
@@ -694,6 +698,12 @@ function NewSalesOrderPageContent() {
                         </th>
                         <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
                           HSN
+                        </th>
+                        <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
+                          MRP
+                        </th>
+                        <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
+                          Disc %
                         </th>
                         <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
                           Qty

@@ -30,6 +30,10 @@ export function AddCustomerModal({
     city: "",
     addressLine1: "",
     addressLine2: "",
+    shippingAddress: "",
+    shippingAddressLine2: "",
+    shippingCity: "",
+    shippingState: "",
     openingBalance: "0",
     openingAsOfDate: new Date().toISOString().split("T")[0],
     creditDays: "0",
@@ -37,6 +41,8 @@ export function AddCustomerModal({
     hasPriceList: false,
     rateSheet: "",
   });
+
+  const [sameAsBilling, setSameAsBilling] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +84,10 @@ export function AddCustomerModal({
         city: "",
         addressLine1: "",
         addressLine2: "",
+        shippingAddress: "",
+        shippingAddressLine2: "",
+        shippingCity: "",
+        shippingState: "",
         openingBalance: "0",
         openingAsOfDate: new Date().toISOString().split("T")[0],
         creditDays: "0",
@@ -85,6 +95,7 @@ export function AddCustomerModal({
         hasPriceList: false,
         rateSheet: "",
       });
+      setSameAsBilling(false);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       setError(errorMessage);
@@ -102,6 +113,19 @@ export function AddCustomerModal({
       [name]:
         type === "checkbox" ? (e.target as HTMLInputElement).checked : value,
     }));
+  };
+
+  const handleSameAsBillingChange = (checked: boolean) => {
+    setSameAsBilling(checked);
+    if (checked) {
+      setFormData((prev) => ({
+        ...prev,
+        shippingAddress: prev.addressLine1,
+        shippingAddressLine2: prev.addressLine2,
+        shippingCity: prev.city,
+        shippingState: prev.state,
+      }));
+    }
   };
 
   // Handle Escape key to close modal
@@ -292,10 +316,10 @@ export function AddCustomerModal({
             </div>
           </div>
 
-          {/* Address */}
+          {/* Billing Address */}
           <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
-              Address
+              Billing Address
             </h3>
             <div className="space-y-4">
               <div>
@@ -312,7 +336,7 @@ export function AddCustomerModal({
                   value={formData.addressLine1}
                   onChange={handleChange}
                   required
-                  placeholder="Street address"
+                  placeholder="Street address, building name"
                 />
               </div>
               <div>
@@ -328,8 +352,105 @@ export function AddCustomerModal({
                   name="addressLine2"
                   value={formData.addressLine2}
                   onChange={handleChange}
-                  placeholder="Apartment, suite, etc. (optional)"
+                  placeholder="Apartment, suite, floor (optional)"
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Shipping Address */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-900">
+                Shipping Address
+              </h3>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sameAsBilling}
+                  onChange={(e) => handleSameAsBillingChange(e.target.checked)}
+                  className="h-4 w-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                />
+                <span className="text-sm text-gray-700">Same as billing address</span>
+              </label>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label
+                  htmlFor="customer-shipping-address"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Address Line 1 <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  id="customer-shipping-address"
+                  type="text"
+                  name="shippingAddress"
+                  value={formData.shippingAddress}
+                  onChange={handleChange}
+                  required
+                  disabled={sameAsBilling}
+                  placeholder="Street address, building name"
+                  className={sameAsBilling ? "bg-gray-100" : ""}
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="customer-shipping-address2"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Address Line 2
+                </label>
+                <Input
+                  id="customer-shipping-address2"
+                  type="text"
+                  name="shippingAddressLine2"
+                  value={formData.shippingAddressLine2}
+                  onChange={handleChange}
+                  disabled={sameAsBilling}
+                  placeholder="Apartment, suite, floor (optional)"
+                  className={sameAsBilling ? "bg-gray-100" : ""}
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label
+                    htmlFor="customer-shipping-city"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    City <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    id="customer-shipping-city"
+                    type="text"
+                    name="shippingCity"
+                    value={formData.shippingCity}
+                    onChange={handleChange}
+                    required
+                    disabled={sameAsBilling}
+                    placeholder="City name"
+                    className={sameAsBilling ? "bg-gray-100" : ""}
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="customer-shipping-state"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    State <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    id="customer-shipping-state"
+                    type="text"
+                    name="shippingState"
+                    value={formData.shippingState}
+                    onChange={handleChange}
+                    required
+                    disabled={sameAsBilling}
+                    placeholder="State name"
+                    className={sameAsBilling ? "bg-gray-100" : ""}
+                  />
+                </div>
               </div>
             </div>
           </div>

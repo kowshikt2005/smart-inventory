@@ -73,6 +73,9 @@ interface OrderItem {
     unit: string;
     hsnCode: string | null;
     gstRate: number;
+    purchasePrice: number; // MRP is stored as purchasePrice
+    mrp: number | null;
+    discountPercent: number | null;
   };
 }
 
@@ -505,11 +508,13 @@ export default function SalesOrderDetailPage() {
                 <TableRow className="bg-gray-50">
                   <TableHead className="font-semibold">Item</TableHead>
                   <TableHead className="font-semibold">HSN</TableHead>
+                  <TableHead className="font-semibold text-right">MRP</TableHead>
+                  <TableHead className="font-semibold text-right">Item Disc %</TableHead>
                   <TableHead className="font-semibold text-right">Qty</TableHead>
                   <TableHead className="font-semibold text-center">Stock Status</TableHead>
                   <TableHead className="font-semibold text-right">Rate</TableHead>
                   <TableHead className="font-semibold text-right">
-                    Discount %
+                    Order Disc %
                   </TableHead>
                   <TableHead className="font-semibold text-right">
                     Tax %
@@ -522,6 +527,13 @@ export default function SalesOrderDetailPage() {
                   const stockInfo = item.stockInfo;
                   const hasStockInfo = stockInfo !== undefined;
                   const itemHasStock = hasStockInfo ? stockInfo.stockStatus === 'Available' : item.hasStock;
+
+                  // Calculate discount percentage from MRP (purchasePrice) and Rate
+                  const mrp = item.item.purchasePrice ? Number(item.item.purchasePrice) : null;
+                  const rate = Number(item.rate);
+                  const calculatedDiscount = mrp && rate && mrp > rate && mrp > 0
+                    ? ((mrp - rate) / mrp) * 100
+                    : null;
 
                   return (
                     <TableRow
@@ -538,6 +550,12 @@ export default function SalesOrderDetailPage() {
                       </TableCell>
                       <TableCell className="text-sm">
                         {item.item.hsnCode || "-"}
+                      </TableCell>
+                      <TableCell className="text-right text-sm text-gray-900 font-medium">
+                        {mrp ? formatCurrency(mrp) : "-"}
+                      </TableCell>
+                      <TableCell className="text-right text-sm text-green-600 font-medium">
+                        {calculatedDiscount !== null ? `${calculatedDiscount.toFixed(2)}%` : "-"}
                       </TableCell>
                       <TableCell className="text-right">
                         {Number(item.quantity)} {item.item.unit}

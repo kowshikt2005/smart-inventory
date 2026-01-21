@@ -60,6 +60,9 @@ export async function GET(request: Request) {
                   hsnCode: true,
                   gstRate: true,
                   standardPrice: true,
+                  purchasePrice: true, // MRP
+                  mrp: true,
+                  discountPercent: true,
                   inventory: {
                     select: {
                       physicalStock: true,
@@ -395,6 +398,8 @@ export async function POST(request: Request) {
                   itemCode: true,
                   name: true,
                   unit: true,
+                  mrp: true,
+                  discountPercent: true,
                 },
               },
             },

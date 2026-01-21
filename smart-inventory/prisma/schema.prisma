@@ -32,6 +32,8 @@ enum SalesOrderStatus {
   OPEN
   HOLD
   REJECTED
+  PARTIALLY_INVOICED
+  FULLY_INVOICED
 }
 
 enum StockMovementType {
@@ -260,6 +262,8 @@ model Item {
   gstRate       Decimal  @default(0) @db.Decimal(5, 2) // GST percentage
   standardPrice Decimal  @default(0) @db.Decimal(15, 2)
   purchasePrice Decimal  @default(0) @db.Decimal(15, 2)
+  mrp           Decimal? @db.Decimal(15, 2) // Maximum Retail Price
+  discountPercent Decimal? @db.Decimal(5, 2) // Default discount percentage
   minStock      Decimal  @default(0) @db.Decimal(15, 3)
   unit          String   @default("PCS") // PCS, KG, LTR, etc.
   isActive      Boolean  @default(true)
@@ -373,7 +377,7 @@ model SalesOrder {
   customer       Customer             @relation(fields: [customerId], references: [id])
   user           User                 @relation(fields: [createdBy], references: [id])
   items          SalesOrderItem[]
-  invoice        Invoice?
+  invoices       Invoice[]            // Multiple invoices allowed for partial invoicing
   statusHistory  OrderStatusHistory[]
 
   @@index([orderNumber])
@@ -384,15 +388,16 @@ model SalesOrder {
 }
 
 model SalesOrderItem {
-  id            String  @id @default(uuid())
-  salesOrderId  String
-  itemId        String
-  quantity      Decimal @db.Decimal(15, 3)
-  rate          Decimal @db.Decimal(15, 2)
+  id              String  @id @default(uuid())
+  salesOrderId    String
+  itemId          String
+  quantity        Decimal @db.Decimal(15, 3)
+  invoicedQuantity Decimal @default(0) @db.Decimal(15, 3) // Track how much has been invoiced
+  rate            Decimal @db.Decimal(15, 2)
   discountPercent Decimal @default(0) @db.Decimal(5, 2)
-  taxRate       Decimal @default(0) @db.Decimal(5, 2)
-  taxAmount     Decimal @default(0) @db.Decimal(15, 2)
-  amount        Decimal @default(0) @db.Decimal(15, 2)
+  taxRate         Decimal @default(0) @db.Decimal(5, 2)
+  taxAmount       Decimal @default(0) @db.Decimal(15, 2)
+  amount          Decimal @default(0) @db.Decimal(15, 2)
 
   // Relations
   salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
@@ -522,8 +527,8 @@ model Invoice {
   id            String        @id @default(uuid())
   invoiceNumber String        @unique // INV-xxxx
   invoiceDate   DateTime
-  salesOrderId  String?       @unique // Optional - order deleted after invoice creation
-  orderNumber   String?       // Stored for reference after order deletion
+  salesOrderId  String?       // Optional - Allow multiple invoices per order
+  orderNumber   String?       // Stored for reference
   customerId    String
   subtotal      Decimal       @default(0) @db.Decimal(15, 2)
   cgst          Decimal       @default(0) @db.Decimal(15, 2)
@@ -555,15 +560,16 @@ model Invoice {
 }
 
 model InvoiceItem {
-  id            String  @id @default(uuid())
-  invoiceId     String
-  itemId        String
-  quantity      Decimal @db.Decimal(15, 3)
-  rate          Decimal @db.Decimal(15, 2)
+  id              String  @id @default(uuid())
+  invoiceId       String
+  itemId          String
+  salesOrderItemId String? // Link to source order item for tracking
+  quantity        Decimal @db.Decimal(15, 3)
+  rate            Decimal @db.Decimal(15, 2)
   discountPercent Decimal @default(0) @db.Decimal(5, 2)
-  taxRate       Decimal @default(0) @db.Decimal(5, 2)
-  taxAmount     Decimal @default(0) @db.Decimal(15, 2)
-  amount        Decimal @default(0) @db.Decimal(15, 2)
+  taxRate         Decimal @default(0) @db.Decimal(5, 2)
+  taxAmount       Decimal @default(0) @db.Decimal(15, 2)
+  amount          Decimal @default(0) @db.Decimal(15, 2)
 
   // Relations
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
@@ -571,6 +577,7 @@ model InvoiceItem {
 
   @@index([invoiceId])
   @@index([itemId])
+  @@index([salesOrderItemId])
   @@map("invoice_items")
 }
 

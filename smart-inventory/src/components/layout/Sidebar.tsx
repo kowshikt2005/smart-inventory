@@ -24,7 +24,7 @@ import {
   ClipboardList,
   Truck,
 } from "lucide-react";
-import { useState, memo } from "react";
+import { useState, memo, useMemo } from "react";
 
 // Role-based access control
 const ROLE_PERMISSIONS = {
@@ -73,38 +73,38 @@ export const Sidebar = memo(function Sidebar() {
   const userRole = session?.user?.role || "SALESMAN";
   const permissions = ROLE_PERMISSIONS[userRole as keyof typeof ROLE_PERMISSIONS] || ROLE_PERMISSIONS.SALESMAN;
 
-  const salesItems = [
+  const salesItems = useMemo(() => [
     { icon: FileText, label: "Orders", href: "/sales/orders" },
     { icon: Receipt, label: "Invoices", href: "/sales/invoices" },
     { icon: CreditCard, label: "Receipts", href: "/sales/receipts" },
     { icon: RotateCcw, label: "Returns", href: "/sales/returns" },
-  ];
+  ], []);
 
-  const purchaseItems = [
+  const purchaseItems = useMemo(() => [
     { icon: FileText, label: "Orders", href: "/purchases/orders" },
     { icon: Receipt, label: "Invoices", href: "/purchases/invoices" },
     { icon: CreditCard, label: "Payments", href: "/purchases/payments" },
     { icon: RotateCcw, label: "Returns", href: "/purchases/returns" },
-  ];
+  ], []);
 
-  const masterItems = [
+  const masterItems = useMemo(() => [
     { icon: Users, label: "Customers", href: "/masters/customers" },
     { icon: Building2, label: "Vendors", href: "/masters/vendors" },
     ...(permissions.employees ? [{ icon: UserCircle, label: "Employees", href: "/masters/employees" }] : []),
     { icon: DollarSign, label: "Rate Sheets", href: "/masters/rate-sheets" },
-  ];
+  ], [permissions.employees]);
 
-  const itemSubMenu = [
+  const itemSubMenu = useMemo(() => [
     { icon: Tag, label: "Brands", href: "/masters/items/brands" },
     { icon: Layers, label: "Sub-brands", href: "/masters/items/sub-brands" },
     { icon: Package, label: "Items", href: "/masters/items" },
-  ];
+  ], []);
 
-  const ledgerItems = [
+  const ledgerItems = useMemo(() => [
     { icon: Users, label: "Customer Ledger", href: "/ledger/customers" },
     { icon: Package, label: "Stock Ledger", href: "/ledger/items" },
     { icon: ClipboardList, label: "Stock Journal", href: "/ledger/stock-journal" },
-  ];
+  ], []);
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-primary border-r border-primary/20 flex flex-col shadow-lg">
