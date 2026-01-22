@@ -47,3 +47,14 @@ agents
 playwright-mcp
 
 /src/generated/prisma
+
+# EC2/Server deployment
+*.log
+logs/
+*.pid
+ecosystem.config.js
+.pm2/
+*.crt
+*.key
+ssl/
+*.zip
