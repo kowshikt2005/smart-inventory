@@ -6,22 +6,41 @@ export const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 /**
  * Generate the next order number in sequence (SO-0001, SO-0002, etc.)
+ * Checks both SalesOrder table AND Invoice table (which stores orderNumber from deleted orders)
  */
 export async function generateOrderNumber(db: PrismaClient): Promise<string> {
-  const lastOrder = await db.salesOrder.findFirst({
-    orderBy: { orderNumber: 'desc' },
-    select: { orderNumber: true },
-  });
+  // Check both tables to find the highest SO number ever used
+  const [lastSalesOrder, lastInvoice] = await Promise.all([
+    db.salesOrder.findFirst({
+      orderBy: { orderNumber: 'desc' },
+      select: { orderNumber: true },
+    }),
+    db.invoice.findFirst({
+      where: { orderNumber: { startsWith: 'SO-' } },
+      orderBy: { orderNumber: 'desc' },
+      select: { orderNumber: true },
+    }),
+  ]);
 
-  let nextNum = 1;
-  if (lastOrder) {
-    const match = lastOrder.orderNumber.match(/SO-(\d+)/);
+  let maxNum = 0;
+
+  // Extract number from sales order
+  if (lastSalesOrder) {
+    const match = lastSalesOrder.orderNumber.match(/SO-(\d+)/);
     if (match) {
-      nextNum = parseInt(match[1], 10) + 1;
+      maxNum = Math.max(maxNum, parseInt(match[1], 10));
     }
   }
 
-  return `SO-${String(nextNum).padStart(4, '0')}`;
+  // Extract number from invoice (deleted orders end up here)
+  if (lastInvoice?.orderNumber) {
+    const match = lastInvoice.orderNumber.match(/SO-(\d+)/);
+    if (match) {
+      maxNum = Math.max(maxNum, parseInt(match[1], 10));
+    }
+  }
+
+  return `SO-${String(maxNum + 1).padStart(4, '0')}`;
 }
 
 /**
