@@ -30,8 +30,9 @@ interface Item {
   itemCode: string;
   name: string;
   description?: string;
-  standardPrice: string | number; // Prisma Decimal comes as string
-  purchasePrice: string | number; // Prisma Decimal comes as string
+  purchasePrice: string | number; // Cost price
+  mrp: string | number; // Maximum Retail Price
+  sellingPrice: string | number; // Actual selling price
   unit: string;
   hsnCode?: string;
   gstRate: string | number; // Prisma Decimal comes as string
@@ -208,8 +209,9 @@ export default function ItemsPage() {
                 <TableHead scope="col" className="font-semibold">HSN</TableHead>
                 <TableHead scope="col" className="font-semibold">UOM</TableHead>
                 <TableHead scope="col" className="font-semibold">Tax</TableHead>
-                <TableHead scope="col" className="font-semibold">Sales Price</TableHead>
+                <TableHead scope="col" className="font-semibold">Cost</TableHead>
                 <TableHead scope="col" className="font-semibold">MRP</TableHead>
+                <TableHead scope="col" className="font-semibold">Selling</TableHead>
                 <TableHead scope="col" className="font-semibold">Available</TableHead>
                 <TableHead scope="col" className="font-semibold">Actions</TableHead>
               </TableRow>
@@ -217,7 +219,7 @@ export default function ItemsPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center text-gray-500 py-12">
+                  <TableCell colSpan={12} className="text-center text-gray-500 py-12">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Loading items...</span>
@@ -226,7 +228,7 @@ export default function ItemsPage() {
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center text-red-600 py-8">
+                  <TableCell colSpan={12} className="text-center text-red-600 py-8">
                     <div className="space-y-2">
                       <p>Error: {error.message || "Failed to load items"}</p>
                       <Button onClick={() => mutate()} variant="outline" size="sm">
@@ -237,7 +239,7 @@ export default function ItemsPage() {
                 </TableRow>
               ) : paginatedItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center text-gray-500 py-8">
+                  <TableCell colSpan={12} className="text-center text-gray-500 py-8">
                     {searchQuery
                       ? "No items found matching your search"
                       : "No items yet. Click 'Add Item' to get started."}
@@ -253,8 +255,9 @@ export default function ItemsPage() {
                     <TableCell>{item.hsnCode || "N/A"}</TableCell>
                     <TableCell>{item.unit}</TableCell>
                     <TableCell>GST @ {Number(item.gstRate)}%</TableCell>
-                    <TableCell>₹{Number(item.standardPrice).toFixed(2)}</TableCell>
                     <TableCell>₹{Number(item.purchasePrice).toFixed(2)}</TableCell>
+                    <TableCell>₹{Number(item.mrp).toFixed(2)}</TableCell>
+                    <TableCell>₹{Number(item.sellingPrice).toFixed(2)}</TableCell>
                     <TableCell>
                       <div className="text-sm">
                         <div className={`font-medium ${

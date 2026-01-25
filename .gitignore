@@ -6,3 +6,12 @@ smart-inventory/nul
 node_modules/
 package-lock.json
 package.json
+
+# Claude, Kiro, Playwright MCP
+.claude/
+.kiro/
+.playwright-mcp/
+agents/
+
+# Zip files
+*.zip

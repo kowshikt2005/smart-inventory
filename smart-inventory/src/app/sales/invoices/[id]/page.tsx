@@ -298,12 +298,12 @@ export default function InvoiceDetailPage() {
                   <TableHead className="font-semibold">Item</TableHead>
                   <TableHead className="font-semibold">HSN</TableHead>
                   <TableHead className="font-semibold text-right">Qty</TableHead>
-                  <TableHead className="font-semibold text-right">Rate</TableHead>
+                  <TableHead className="font-semibold text-right">Rate (Incl. Tax)</TableHead>
                   <TableHead className="font-semibold text-right">
-                    Tax %
+                    GST %
                   </TableHead>
                   <TableHead className="font-semibold text-right">
-                    Amount
+                    Total
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -329,7 +329,7 @@ export default function InvoiceDetailPage() {
                       {Number(item.taxRate)}%
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {formatCurrency(Number(item.amount) + Number(item.taxAmount))}
+                      {formatCurrency(Number(item.quantity) * Number(item.rate))}
                     </TableCell>
                   </TableRow>
                 ))}

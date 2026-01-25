@@ -78,17 +78,6 @@ export async function PUT(
       updateData.validTo = body.validTo ? new Date(body.validTo) : null;
     }
 
-    if (body.itemRatePercent !== undefined) {
-      const itemRatePercent = parseFloat(body.itemRatePercent);
-      if (itemRatePercent < 0 || itemRatePercent > 200) {
-        return NextResponse.json(
-          { error: 'Item rate percent must be between 0 and 200' },
-          { status: 400 }
-        );
-      }
-      updateData.itemRatePercent = itemRatePercent;
-    }
-
     if (body.discountPercent !== undefined) {
       const discountPercent = parseFloat(body.discountPercent);
       if (discountPercent < 0 || discountPercent > 100) {
@@ -100,20 +89,20 @@ export async function PUT(
       updateData.discountPercent = discountPercent;
     }
 
-    if (body.currency !== undefined) {
-      updateData.currency = body.currency;
-    }
-
-    if (body.roundOff !== undefined) {
-      updateData.roundOff = body.roundOff;
-    }
-
     if (body.isActive !== undefined) {
       updateData.isActive = body.isActive;
     }
 
     if (body.excludedItemIds !== undefined) {
       updateData.excludedItemIds = body.excludedItemIds || [];
+    }
+
+    if (body.excludedBrandIds !== undefined) {
+      updateData.excludedBrandIds = body.excludedBrandIds || [];
+    }
+
+    if (body.excludedSubBrandIds !== undefined) {
+      updateData.excludedSubBrandIds = body.excludedSubBrandIds || [];
     }
 
     const rateSheet = await db.rateSheet.update({

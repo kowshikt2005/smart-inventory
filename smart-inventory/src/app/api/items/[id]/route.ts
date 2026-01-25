@@ -71,7 +71,7 @@ export async function PUT(
 
     // Update item and inventory
     const updatedItem = await db.$transaction(async (tx) => {
-      // Update the item
+      // Update the item with all three price fields
       const item = await tx.item.update({
         where: { id },
         data: {
@@ -82,8 +82,9 @@ export async function PUT(
           subBrandId: body.subBrandId !== undefined ? body.subBrandId : existingItem.subBrandId,
           hsnCode: body.hsnCode !== undefined ? body.hsnCode : existingItem.hsnCode,
           gstRate: body.gstRate !== undefined ? body.gstRate : existingItem.gstRate,
-          standardPrice: body.standardPrice !== undefined ? body.standardPrice : existingItem.standardPrice,
           purchasePrice: body.purchasePrice !== undefined ? body.purchasePrice : existingItem.purchasePrice,
+          mrp: body.mrp !== undefined ? body.mrp : existingItem.mrp,
+          sellingPrice: body.sellingPrice !== undefined ? body.sellingPrice : existingItem.sellingPrice,
           minStock: body.minStock !== undefined ? body.minStock : existingItem.minStock,
           unit: body.unit || existingItem.unit,
           isActive: body.isActive !== undefined ? body.isActive : existingItem.isActive,

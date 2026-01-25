@@ -102,9 +102,9 @@ export async function POST(request: Request) {
           subBrandId: body.subBrandId || null,
           hsnCode: body.hsnCode || null,
           gstRate: body.gstRate || 0,
-          standardPrice: body.standardPrice || 0,
-          purchasePrice: body.purchasePrice || 0,
-          mrp: body.mrp || null,
+          purchasePrice: body.purchasePrice || 0, // Cost price
+          mrp: body.mrp || 0, // Maximum Retail Price
+          sellingPrice: body.sellingPrice || body.mrp || 0, // Selling price (defaults to MRP if not provided)
           discountPercent: body.discountPercent || null,
           minStock: body.minStock || 0,
           unit: body.unit || 'PCS',
