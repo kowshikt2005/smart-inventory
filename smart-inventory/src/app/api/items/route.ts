@@ -40,57 +40,62 @@ export async function GET(request: Request) {
     // Optimize query based on limit - for large fetches, use select instead of include
     const useLightweightQuery = limit > 100;
 
-    const [items, total] = await Promise.all([
-      db.item.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        ...(useLightweightQuery
-          ? {
-              // Lightweight query for bulk fetches (e.g., sales order page)
+    // Separate queries to avoid TypeScript issues with conditional select/include
+    const itemsPromise = useLightweightQuery
+      ? db.item.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          // Lightweight query for bulk fetches (e.g., sales order page)
+          select: {
+            id: true,
+            itemCode: true,
+            name: true,
+            description: true,
+            unit: true,
+            hsnCode: true,
+            gstRate: true,
+            standardPrice: true,
+            purchasePrice: true,
+            mrp: true,
+            discountPercent: true,
+            isActive: true,
+            brand: {
               select: {
                 id: true,
-                itemCode: true,
                 name: true,
-                description: true,
-                unit: true,
-                hsnCode: true,
-                gstRate: true,
-                standardPrice: true,
-                purchasePrice: true, // MRP
-                mrp: true,
-                discountPercent: true,
-                isActive: true,
-                brand: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
-                subBrand: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
-                inventory: {
-                  select: {
-                    physicalStock: true,
-                    reservedQuantity: true,
-                  },
-                },
               },
-            }
-          : {
-              // Full query for detailed views
-              include: {
-                brand: true,
-                subBrand: true,
-                inventory: true,
+            },
+            subBrand: {
+              select: {
+                id: true,
+                name: true,
               },
-            }),
-      }),
+            },
+            inventory: {
+              select: {
+                physicalStock: true,
+                reservedQuantity: true,
+              },
+            },
+          },
+        })
+      : db.item.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          // Full query for detailed views
+          include: {
+            brand: true,
+            subBrand: true,
+            inventory: true,
+          },
+        });
+
+    const [items, total] = await Promise.all([
+      itemsPromise,
       db.item.count({ where }),
     ]);
 
