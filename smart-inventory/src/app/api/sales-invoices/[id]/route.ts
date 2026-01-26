@@ -37,7 +37,7 @@ export async function GET(
                 unit: true,
                 hsnCode: true,
                 gstRate: true,
-                standardPrice: true,
+                sellingPrice: true,
               },
             },
           },

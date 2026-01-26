@@ -28,8 +28,10 @@ interface Customer {
   rateSheet?: {
     id: string;
     isActive: boolean;
-    itemRatePercent: number;
     discountPercent: number;
+    excludedItemIds?: string[];
+    excludedBrandIds?: string[];
+    excludedSubBrandIds?: string[];
   } | null;
 }
 
@@ -40,10 +42,12 @@ interface Item {
   unit: string;
   hsnCode: string | null;
   gstRate: number;
-  standardPrice: number;
-  purchasePrice: number; // MRP is stored as purchasePrice
-  mrp?: number | null;
+  purchasePrice: number; // Cost price
+  mrp: number; // Maximum Retail Price
+  sellingPrice: number; // Actual selling price (used as base rate for orders)
   discountPercent?: number | null;
+  brandId?: string | null;
+  subBrandId?: string | null;
   inventory?: {
     physicalStock: number;
     reservedQuantity: number;
@@ -237,25 +241,41 @@ function NewSalesOrderPageContent() {
   );
 
   // Get effective rate for an item considering customer rate sheet
+  // Uses sellingPrice (tax-inclusive) as the base price, rate sheet discount applies on top
   const getEffectiveRate = useCallback(
     (item: Item, customer?: Customer | null) => {
+      const basePrice = Number(item.sellingPrice);
       const rateSheet = (customer || selectedCustomer)?.rateSheet;
       if (!rateSheet || !rateSheet.isActive) {
-        return Number(item.standardPrice);
+        return basePrice;
       }
 
       // Check if item is excluded from this rate sheet
-      const excludedItemIds = (rateSheet as { excludedItemIds?: string[] }).excludedItemIds || [];
+      const excludedItemIds = rateSheet.excludedItemIds || [];
       if (Array.isArray(excludedItemIds) && excludedItemIds.includes(item.id)) {
-        return Number(item.standardPrice);
+        return basePrice;
       }
 
-      const itemRatePercent = Number(rateSheet.itemRatePercent);
+      // Check if item's brand is excluded
+      if (item.brandId) {
+        const excludedBrandIds = rateSheet.excludedBrandIds || [];
+        if (Array.isArray(excludedBrandIds) && excludedBrandIds.includes(item.brandId)) {
+          return basePrice;
+        }
+      }
+
+      // Check if item's sub-brand is excluded
+      if (item.subBrandId) {
+        const excludedSubBrandIds = rateSheet.excludedSubBrandIds || [];
+        if (Array.isArray(excludedSubBrandIds) && excludedSubBrandIds.includes(item.subBrandId)) {
+          return basePrice;
+        }
+      }
+
       const discountPercent = Number(rateSheet.discountPercent);
 
-      const rateAfterPercent =
-        Number(item.standardPrice) * (itemRatePercent / 100);
-      const effectiveRate = rateAfterPercent * (1 - discountPercent / 100);
+      // Apply rate sheet discount on selling price
+      const effectiveRate = basePrice * (1 - discountPercent / 100);
 
       return Math.round(effectiveRate * 100) / 100;
     },
@@ -274,11 +294,11 @@ function NewSalesOrderPageContent() {
     } catch {
       // Use the customer as-is if fetch fails
     }
-    
+
     setSelectedCustomer(fullCustomer);
     setCustomerSearch("");
 
-    // Recalculate item rates if rate sheet changes
+    // Recalculate item rates if rate sheet changes (using tax-inclusive system)
     if (orderItems.some((item) => item.itemId)) {
       setOrderItems((prev) =>
         prev.map((orderItem) => {
@@ -286,14 +306,16 @@ function NewSalesOrderPageContent() {
           const item = items.find((i) => i.id === orderItem.itemId);
           if (!item) return orderItem;
 
-          const rate = getEffectiveRate(item, fullCustomer);
-          const amount = orderItem.quantity * rate;
-          const taxAmount = amount * (orderItem.taxRate / 100);
+          const rate = getEffectiveRate(item, fullCustomer); // Rate is tax-inclusive
+          const totalInclusive = orderItem.quantity * rate;
+          // Back-calculate base amount and tax from inclusive total
+          const baseAmount = totalInclusive / (1 + orderItem.taxRate / 100);
+          const taxAmount = totalInclusive - baseAmount;
 
           return {
             ...orderItem,
             rate,
-            amount: Math.round(amount * 100) / 100,
+            amount: Math.round(baseAmount * 100) / 100,
             taxAmount: Math.round(taxAmount * 100) / 100,
           };
         })
@@ -318,26 +340,37 @@ function NewSalesOrderPageContent() {
     ]);
   };
 
+  // Calculate tax-inclusive amounts (back-calculate base and tax from inclusive price)
+  const calculateTaxInclusive = (inclusiveAmount: number, taxRate: number) => {
+    const baseAmount = inclusiveAmount / (1 + taxRate / 100);
+    const taxAmount = inclusiveAmount - baseAmount;
+    return {
+      baseAmount: Math.round(baseAmount * 100) / 100,
+      taxAmount: Math.round(taxAmount * 100) / 100,
+    };
+  };
+
   // Handle updating item row
   const handleUpdateItem = (index: number, updatedItem: OrderItemData) => {
     // Apply customer rate sheet if selecting new item or item changed
     const itemChanged = updatedItem.itemId && orderItems[index].itemId !== updatedItem.itemId;
-    
+
     if (itemChanged) {
       const item = items.find((i) => i.id === updatedItem.itemId);
       if (item) {
-        const rate = getEffectiveRate(item);
+        const rate = getEffectiveRate(item); // Rate is tax-inclusive
         const quantity = updatedItem.quantity || 1;
-        const amount = quantity * rate;
-        const taxAmount = amount * (Number(item.gstRate) / 100);
+        const totalInclusive = quantity * rate;
+        const taxRate = Number(item.gstRate);
+        const { baseAmount, taxAmount } = calculateTaxInclusive(totalInclusive, taxRate);
 
         updatedItem = {
           ...updatedItem,
           quantity,
           rate,
-          taxRate: Number(item.gstRate),
-          amount: Math.round(amount * 100) / 100,
-          taxAmount: Math.round(taxAmount * 100) / 100,
+          taxRate,
+          amount: baseAmount,  // Base amount (excluding tax)
+          taxAmount,
         };
       }
     }
@@ -656,9 +689,7 @@ function NewSalesOrderPageContent() {
                           </p>
                           {selectedCustomer.rateSheet?.isActive && (
                             <p className="text-xs text-teal-600 mt-1">
-                              Rate Sheet Applied: {selectedCustomer.rateSheet.itemRatePercent}%
-                              {Number(selectedCustomer.rateSheet.discountPercent) > 0 &&
-                                ` + ${selectedCustomer.rateSheet.discountPercent}% discount`}
+                              Rate Sheet Applied: {selectedCustomer.rateSheet.discountPercent}% discount
                             </p>
                           )}
                         </div>
@@ -712,16 +743,16 @@ function NewSalesOrderPageContent() {
                           Unit
                         </th>
                         <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          Rate
+                          Rate (Incl. Tax)
                         </th>
                         <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
-                          Tax %
+                          GST %
                         </th>
                         <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
                           Tax Amt
                         </th>
                         <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
-                          Amount
+                          Total
                         </th>
                         <th className="px-3 py-3 w-12"></th>
                       </tr>
@@ -794,7 +825,7 @@ function NewSalesOrderPageContent() {
                 </div>
 
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal</span>
+                  <span className="text-gray-600">Taxable Value</span>
                   <span className="font-medium">
                     {formatCurrency(totals.subtotal)}
                   </span>

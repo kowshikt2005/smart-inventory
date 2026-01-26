@@ -49,11 +49,14 @@ export async function GET(
       }
     }
 
-    // Get ledger entries
+    // Get ledger entries - sort by date, then by createdAt for accurate chronological order
     const [entries, total] = await Promise.all([
       db.customerLedger.findMany({
         where,
-        orderBy: { date: 'asc' },
+        orderBy: [
+          { date: 'asc' },
+          { createdAt: 'asc' },
+        ],
         skip,
         take: limit,
       }),

@@ -3,13 +3,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
   X,
@@ -17,6 +10,8 @@ import {
   Search,
   Calendar,
   Percent,
+  Settings2,
+  Check,
 } from "lucide-react";
 
 interface Customer {
@@ -54,11 +49,7 @@ interface RateSheet {
   customerId: string;
   validFrom: string;
   validTo: string | null;
-  itemRatePercent: number;
   discountPercent: number;
-  taxType: string;
-  currency: string;
-  roundOff: string;
   isActive: boolean;
   customer: Customer;
   excludedItemIds?: string[];
@@ -73,20 +64,7 @@ interface AddRateSheetModalProps {
   editingRateSheet?: RateSheet | null;
 }
 
-const CURRENCIES = [
-  { value: "INR", label: "INR - Indian Rupee" },
-  { value: "USD", label: "USD - US Dollar" },
-  { value: "EUR", label: "EUR - Euro" },
-  { value: "GBP", label: "GBP - British Pound" },
-  { value: "AED", label: "AED - UAE Dirham" },
-];
-
-const ROUND_OFF_OPTIONS = [
-  { value: "NONE", label: "None" },
-  { value: "UP", label: "Round Up" },
-  { value: "DOWN", label: "Round Down" },
-  { value: "NEAREST", label: "Nearest" },
-];
+type ExclusionTab = "brands" | "subbrands" | "items";
 
 export function AddRateSheetModal({
   isOpen,
@@ -103,23 +81,21 @@ export function AddRateSheetModal({
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
-  // Items data for exclusions
+  // Data for exclusions
   const [items, setItems] = useState<Item[]>([]);
-  const [isLoadingItems, setIsLoadingItems] = useState(false);
-  const [excludedItemIds, setExcludedItemIds] = useState<string[]>([]);
-  const [itemSearch, setItemSearch] = useState("");
-
-  // Brands data for exclusions
   const [brands, setBrands] = useState<Brand[]>([]);
-  const [isLoadingBrands, setIsLoadingBrands] = useState(false);
-  const [excludedBrandIds, setExcludedBrandIds] = useState<string[]>([]);
-  const [brandSearch, setBrandSearch] = useState("");
-
-  // Sub-brands data for exclusions
   const [subBrands, setSubBrands] = useState<SubBrand[]>([]);
-  const [isLoadingSubBrands, setIsLoadingSubBrands] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+
+  // Exclusions
+  const [excludedItemIds, setExcludedItemIds] = useState<string[]>([]);
+  const [excludedBrandIds, setExcludedBrandIds] = useState<string[]>([]);
   const [excludedSubBrandIds, setExcludedSubBrandIds] = useState<string[]>([]);
-  const [subBrandSearch, setSubBrandSearch] = useState("");
+
+  // Exclusion popup
+  const [showExclusionPopup, setShowExclusionPopup] = useState(false);
+  const [exclusionTab, setExclusionTab] = useState<ExclusionTab>("brands");
+  const [exclusionSearch, setExclusionSearch] = useState("");
 
   // Form fields
   const [name, setName] = useState("");
@@ -127,24 +103,18 @@ export function AddRateSheetModal({
     new Date().toISOString().split("T")[0]
   );
   const [validTo, setValidTo] = useState("");
-  const [itemRatePercent, setItemRatePercent] = useState("100");
   const [discountPercent, setDiscountPercent] = useState("0");
-  const [taxType, setTaxType] = useState("INCLUSIVE");
-  const [currency, setCurrency] = useState("INR");
-  const [roundOff, setRoundOff] = useState("NONE");
   const [isActive, setIsActive] = useState(true);
 
   const isEditing = !!editingRateSheet;
 
-  // Fetch customers, items, brands, and sub-brands
+  // Fetch data
   useEffect(() => {
     if (isOpen) {
       if (!isEditing) {
         fetchCustomers();
       }
-      fetchItems();
-      fetchBrands();
-      fetchSubBrands();
+      fetchData();
     }
   }, [isOpen, isEditing]);
 
@@ -159,18 +129,11 @@ export function AddRateSheetModal({
           ? editingRateSheet.validTo.split("T")[0]
           : ""
       );
-      setItemRatePercent(String(editingRateSheet.itemRatePercent));
       setDiscountPercent(String(editingRateSheet.discountPercent));
-      setTaxType(editingRateSheet.taxType || "INCLUSIVE");
-      setCurrency(editingRateSheet.currency);
-      setRoundOff(editingRateSheet.roundOff);
       setIsActive(editingRateSheet.isActive);
-      const excludedItems = editingRateSheet.excludedItemIds || [];
-      setExcludedItemIds(Array.isArray(excludedItems) ? excludedItems : []);
-      const excludedBrands = editingRateSheet.excludedBrandIds || [];
-      setExcludedBrandIds(Array.isArray(excludedBrands) ? excludedBrands : []);
-      const excludedSubBrands = editingRateSheet.excludedSubBrandIds || [];
-      setExcludedSubBrandIds(Array.isArray(excludedSubBrands) ? excludedSubBrands : []);
+      setExcludedItemIds(Array.isArray(editingRateSheet.excludedItemIds) ? editingRateSheet.excludedItemIds : []);
+      setExcludedBrandIds(Array.isArray(editingRateSheet.excludedBrandIds) ? editingRateSheet.excludedBrandIds : []);
+      setExcludedSubBrandIds(Array.isArray(editingRateSheet.excludedSubBrandIds) ? editingRateSheet.excludedSubBrandIds : []);
     } else {
       resetForm();
     }
@@ -191,48 +154,31 @@ export function AddRateSheetModal({
     }
   };
 
-  const fetchItems = async () => {
+  const fetchData = async () => {
     try {
-      setIsLoadingItems(true);
-      const response = await fetch("/api/items?limit=1000&activeOnly=true");
-      if (response.ok) {
-        const data = await response.json();
+      setIsLoadingData(true);
+      const [itemsRes, brandsRes, subBrandsRes] = await Promise.all([
+        fetch("/api/items?limit=1000&activeOnly=true"),
+        fetch("/api/brands?limit=500"),
+        fetch("/api/sub-brands?limit=500"),
+      ]);
+
+      if (itemsRes.ok) {
+        const data = await itemsRes.json();
         setItems(data.items || []);
       }
-    } catch (err) {
-      console.error("Error fetching items:", err);
-    } finally {
-      setIsLoadingItems(false);
-    }
-  };
-
-  const fetchBrands = async () => {
-    try {
-      setIsLoadingBrands(true);
-      const response = await fetch("/api/brands?limit=500");
-      if (response.ok) {
-        const data = await response.json();
+      if (brandsRes.ok) {
+        const data = await brandsRes.json();
         setBrands(data.brands || []);
       }
-    } catch (err) {
-      console.error("Error fetching brands:", err);
-    } finally {
-      setIsLoadingBrands(false);
-    }
-  };
-
-  const fetchSubBrands = async () => {
-    try {
-      setIsLoadingSubBrands(true);
-      const response = await fetch("/api/sub-brands?limit=500");
-      if (response.ok) {
-        const data = await response.json();
+      if (subBrandsRes.ok) {
+        const data = await subBrandsRes.json();
         setSubBrands(data.subBrands || []);
       }
     } catch (err) {
-      console.error("Error fetching sub-brands:", err);
+      console.error("Error fetching data:", err);
     } finally {
-      setIsLoadingSubBrands(false);
+      setIsLoadingData(false);
     }
   };
 
@@ -242,19 +188,14 @@ export function AddRateSheetModal({
     setCustomerSearch("");
     setValidFrom(new Date().toISOString().split("T")[0]);
     setValidTo("");
-    setItemRatePercent("100");
     setDiscountPercent("0");
-    setTaxType("INCLUSIVE");
-    setCurrency("INR");
-    setRoundOff("NONE");
     setIsActive(true);
     setExcludedItemIds([]);
     setExcludedBrandIds([]);
     setExcludedSubBrandIds([]);
-    setItemSearch("");
-    setBrandSearch("");
-    setSubBrandSearch("");
     setError(null);
+    setShowExclusionPopup(false);
+    setExclusionSearch("");
   };
 
   const handleClose = () => {
@@ -262,7 +203,7 @@ export function AddRateSheetModal({
     onClose();
   };
 
-  // Filter customers based on search (exclude customers who already have rate sheets)
+  // Filter customers based on search
   const filteredCustomers = customers.filter(
     (c) =>
       c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
@@ -276,6 +217,49 @@ export function AddRateSheetModal({
     if (!name || name === "") {
       setName(`${customer.name} - Rate Sheet`);
     }
+  };
+
+  // Get total exclusion count
+  const totalExclusions = excludedBrandIds.length + excludedSubBrandIds.length + excludedItemIds.length;
+
+  // Get filtered exclusion items based on tab and search
+  const getFilteredExclusionItems = () => {
+    const query = exclusionSearch.toLowerCase();
+
+    if (exclusionTab === "brands") {
+      return brands.filter(b => b.name.toLowerCase().includes(query));
+    } else if (exclusionTab === "subbrands") {
+      return subBrands.filter(sb => sb.name.toLowerCase().includes(query));
+    } else {
+      return items.filter(i =>
+        i.name.toLowerCase().includes(query) ||
+        i.itemCode.toLowerCase().includes(query)
+      );
+    }
+  };
+
+  // Toggle exclusion
+  const toggleExclusion = (id: string) => {
+    if (exclusionTab === "brands") {
+      setExcludedBrandIds(prev =>
+        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      );
+    } else if (exclusionTab === "subbrands") {
+      setExcludedSubBrandIds(prev =>
+        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      );
+    } else {
+      setExcludedItemIds(prev =>
+        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      );
+    }
+  };
+
+  // Check if item is excluded
+  const isExcluded = (id: string) => {
+    if (exclusionTab === "brands") return excludedBrandIds.includes(id);
+    if (exclusionTab === "subbrands") return excludedSubBrandIds.includes(id);
+    return excludedItemIds.includes(id);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -298,12 +282,6 @@ export function AddRateSheetModal({
       return;
     }
 
-    const ratePercent = parseFloat(itemRatePercent);
-    if (isNaN(ratePercent) || ratePercent < 0 || ratePercent > 200) {
-      setError("Item rate percent must be between 0 and 200");
-      return;
-    }
-
     const discount = parseFloat(discountPercent);
     if (isNaN(discount) || discount < 0 || discount > 100) {
       setError("Discount percent must be between 0 and 100");
@@ -318,11 +296,7 @@ export function AddRateSheetModal({
         customerId: selectedCustomer.id,
         validFrom,
         validTo: validTo || null,
-        itemRatePercent: ratePercent,
         discountPercent: discount,
-        taxType,
-        currency,
-        roundOff,
         isActive,
         excludedItemIds,
         excludedBrandIds,
@@ -367,7 +341,7 @@ export function AddRateSheetModal({
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
           <h2 className="text-xl font-semibold text-gray-900">
@@ -390,28 +364,25 @@ export function AddRateSheetModal({
             </div>
           )}
 
-          <div className="space-y-6">
+          <div className="space-y-5">
             {/* Rate Sheet Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Name <span className="text-red-500">*</span>
               </label>
               <Input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Premium Customer Rate Sheet"
+                placeholder="e.g., Premium Customer Rate"
                 className="w-full"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                A descriptive name for this rate sheet
-              </p>
             </div>
 
             {/* Customer Selection */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Applicable to Customer <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Customer <span className="text-red-500">*</span>
               </label>
               {isEditing ? (
                 <div className="p-3 bg-gray-50 border rounded-lg">
@@ -454,7 +425,7 @@ export function AddRateSheetModal({
                             <p className="font-medium">{customer.name}</p>
                             <p className="text-xs text-gray-500">
                               {customer.customerNumber}
-                              {customer.gstin && ` • ${customer.gstin}`}
+                              {customer.gstin && ` | ${customer.gstin}`}
                             </p>
                           </button>
                         ))
@@ -469,7 +440,6 @@ export function AddRateSheetModal({
                         </p>
                         <p className="text-xs text-teal-700">
                           {selectedCustomer.customerNumber}
-                          {selectedCustomer.gstin && ` • ${selectedCustomer.gstin}`}
                         </p>
                       </div>
                       <button
@@ -485,228 +455,33 @@ export function AddRateSheetModal({
               )}
             </div>
 
-            {/* Exclusions Section */}
-            <div className="space-y-4">
-              <label className="block text-sm font-medium text-gray-700">
-                Exclude from Discount <span className="text-gray-400">(Optional)</span>
+            {/* Discount Percentage - Main Field */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Discount Percentage <span className="text-red-500">*</span>
               </label>
-
-              {/* Excluded Brands */}
-              <div className="border rounded-lg p-3">
-                <p className="text-sm font-medium text-gray-700 mb-2">Brands</p>
-                {isLoadingBrands ? (
-                  <div className="flex items-center gap-2 text-gray-500 text-sm">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading...
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <Input
-                        type="text"
-                        placeholder="Search brands..."
-                        value={brandSearch}
-                        onChange={(e) => setBrandSearch(e.target.value)}
-                        className="pl-10 h-9 text-sm"
-                      />
-                    </div>
-                    {excludedBrandIds.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {excludedBrandIds.map((id) => {
-                          const brand = brands.find((b) => b.id === id);
-                          if (!brand) return null;
-                          return (
-                            <div
-                              key={id}
-                              className="flex items-center gap-1 px-2 py-1 bg-amber-50 border border-amber-200 rounded text-xs"
-                            >
-                              <span>{brand.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => setExcludedBrandIds((prev) => prev.filter((i) => i !== id))}
-                                className="text-amber-600 hover:text-amber-800"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {brandSearch && (
-                      <div className="border rounded-lg max-h-32 overflow-y-auto">
-                        {brands
-                          .filter((b) => b.name.toLowerCase().includes(brandSearch.toLowerCase()) && !excludedBrandIds.includes(b.id))
-                          .slice(0, 10)
-                          .map((brand) => (
-                            <button
-                              key={brand.id}
-                              type="button"
-                              onClick={() => {
-                                setExcludedBrandIds((prev) => [...prev, brand.id]);
-                                setBrandSearch("");
-                              }}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b last:border-b-0 text-sm"
-                            >
-                              {brand.name}
-                            </button>
-                          ))}
-                        {brands.filter((b) => b.name.toLowerCase().includes(brandSearch.toLowerCase()) && !excludedBrandIds.includes(b.id)).length === 0 && (
-                          <p className="p-2 text-gray-500 text-xs">No brands found</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+              <div className="relative">
+                <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={discountPercent}
+                  onChange={(e) => setDiscountPercent(e.target.value)}
+                  className="pl-10 text-lg font-semibold"
+                  placeholder="0"
+                />
               </div>
-
-              {/* Excluded Sub-Brands */}
-              <div className="border rounded-lg p-3">
-                <p className="text-sm font-medium text-gray-700 mb-2">Sub-Brands</p>
-                {isLoadingSubBrands ? (
-                  <div className="flex items-center gap-2 text-gray-500 text-sm">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading...
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <Input
-                        type="text"
-                        placeholder="Search sub-brands..."
-                        value={subBrandSearch}
-                        onChange={(e) => setSubBrandSearch(e.target.value)}
-                        className="pl-10 h-9 text-sm"
-                      />
-                    </div>
-                    {excludedSubBrandIds.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {excludedSubBrandIds.map((id) => {
-                          const subBrand = subBrands.find((sb) => sb.id === id);
-                          if (!subBrand) return null;
-                          return (
-                            <div
-                              key={id}
-                              className="flex items-center gap-1 px-2 py-1 bg-amber-50 border border-amber-200 rounded text-xs"
-                            >
-                              <span>{subBrand.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => setExcludedSubBrandIds((prev) => prev.filter((i) => i !== id))}
-                                className="text-amber-600 hover:text-amber-800"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {subBrandSearch && (
-                      <div className="border rounded-lg max-h-32 overflow-y-auto">
-                        {subBrands
-                          .filter((sb) => sb.name.toLowerCase().includes(subBrandSearch.toLowerCase()) && !excludedSubBrandIds.includes(sb.id))
-                          .slice(0, 10)
-                          .map((subBrand) => (
-                            <button
-                              key={subBrand.id}
-                              type="button"
-                              onClick={() => {
-                                setExcludedSubBrandIds((prev) => [...prev, subBrand.id]);
-                                setSubBrandSearch("");
-                              }}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b last:border-b-0 text-sm"
-                            >
-                              {subBrand.name}
-                            </button>
-                          ))}
-                        {subBrands.filter((sb) => sb.name.toLowerCase().includes(subBrandSearch.toLowerCase()) && !excludedSubBrandIds.includes(sb.id)).length === 0 && (
-                          <p className="p-2 text-gray-500 text-xs">No sub-brands found</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Excluded Items */}
-              <div className="border rounded-lg p-3">
-                <p className="text-sm font-medium text-gray-700 mb-2">Items</p>
-                {isLoadingItems ? (
-                  <div className="flex items-center gap-2 text-gray-500 text-sm">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading...
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <Input
-                        type="text"
-                        placeholder="Search items..."
-                        value={itemSearch}
-                        onChange={(e) => setItemSearch(e.target.value)}
-                        className="pl-10 h-9 text-sm"
-                      />
-                    </div>
-                    {excludedItemIds.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {excludedItemIds.map((id) => {
-                          const item = items.find((i) => i.id === id);
-                          if (!item) return null;
-                          return (
-                            <div
-                              key={id}
-                              className="flex items-center gap-1 px-2 py-1 bg-amber-50 border border-amber-200 rounded text-xs"
-                            >
-                              <span>{item.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => setExcludedItemIds((prev) => prev.filter((i) => i !== id))}
-                                className="text-amber-600 hover:text-amber-800"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {itemSearch && (
-                      <div className="border rounded-lg max-h-32 overflow-y-auto">
-                        {items
-                          .filter((item) => (item.name.toLowerCase().includes(itemSearch.toLowerCase()) || item.itemCode.toLowerCase().includes(itemSearch.toLowerCase())) && !excludedItemIds.includes(item.id))
-                          .slice(0, 10)
-                          .map((item) => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => {
-                                setExcludedItemIds((prev) => [...prev, item.id]);
-                                setItemSearch("");
-                              }}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b last:border-b-0"
-                            >
-                              <p className="font-medium text-sm">{item.name}</p>
-                              <p className="text-xs text-gray-500">{item.itemCode}</p>
-                            </button>
-                          ))}
-                        {items.filter((item) => (item.name.toLowerCase().includes(itemSearch.toLowerCase()) || item.itemCode.toLowerCase().includes(itemSearch.toLowerCase())) && !excludedItemIds.includes(item.id)).length === 0 && (
-                          <p className="p-2 text-gray-500 text-xs">No items found</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                e.g., 10% discount means customer pays 90% of base price
+              </p>
             </div>
 
             {/* Validity Dates */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Valid From <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
@@ -720,7 +495,7 @@ export function AddRateSheetModal({
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Valid To <span className="text-gray-400">(Optional)</span>
                 </label>
                 <div className="relative">
@@ -736,83 +511,27 @@ export function AddRateSheetModal({
               </div>
             </div>
 
-
-            {/* Item Rate and Discount in a row */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Item Rate (%) <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="200"
-                    value={itemRatePercent}
-                    onChange={(e) => setItemRatePercent(e.target.value)}
-                    className="pl-10"
-                    placeholder="100"
-                  />
+            {/* Exclusions Button */}
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-between"
+                onClick={() => setShowExclusionPopup(true)}
+              >
+                <div className="flex items-center gap-2">
+                  <Settings2 className="h-4 w-4" />
+                  <span>Configure Exclusions</span>
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Discount (%)
-                </label>
-                <div className="relative">
-                  <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="100"
-                    value={discountPercent}
-                    onChange={(e) => setDiscountPercent(e.target.value)}
-                    className="pl-10"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Currency and Round Off */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Currency
-                </label>
-                <Select value={currency} onValueChange={setCurrency}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select currency" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CURRENCIES.map((curr) => (
-                      <SelectItem key={curr.value} value={curr.value}>
-                        {curr.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Round Off
-                </label>
-                <Select value={roundOff} onValueChange={setRoundOff}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select rounding" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROUND_OFF_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                {totalExclusions > 0 && (
+                  <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full">
+                    {totalExclusions} excluded
+                  </span>
+                )}
+              </Button>
+              <p className="text-xs text-gray-500 mt-1">
+                Exclude specific brands, sub-brands, or items from this rate sheet
+              </p>
             </div>
 
             {/* Active Toggle */}
@@ -822,7 +541,7 @@ export function AddRateSheetModal({
                 <p className="text-sm text-gray-500">
                   {isActive
                     ? "Discount will be applied to orders"
-                    : "Discount will NOT be applied to orders"}
+                    : "Discount will NOT be applied"}
                 </p>
               </div>
               <Switch
@@ -857,6 +576,163 @@ export function AddRateSheetModal({
           </Button>
         </div>
       </div>
+
+      {/* Exclusion Popup */}
+      {showExclusionPopup && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setShowExclusionPopup(false)}
+          />
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md max-h-[80vh] overflow-hidden">
+            {/* Popup Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+              <h3 className="text-lg font-semibold">Configure Exclusions</h3>
+              <button
+                onClick={() => setShowExclusionPopup(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b">
+              <button
+                type="button"
+                onClick={() => { setExclusionTab("brands"); setExclusionSearch(""); }}
+                className={`flex-1 px-4 py-2.5 text-sm font-medium ${
+                  exclusionTab === "brands"
+                    ? "text-teal-600 border-b-2 border-teal-500 bg-teal-50/50"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Brands
+                {excludedBrandIds.length > 0 && (
+                  <span className="ml-1.5 bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">
+                    {excludedBrandIds.length}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setExclusionTab("subbrands"); setExclusionSearch(""); }}
+                className={`flex-1 px-4 py-2.5 text-sm font-medium ${
+                  exclusionTab === "subbrands"
+                    ? "text-teal-600 border-b-2 border-teal-500 bg-teal-50/50"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Sub-Brands
+                {excludedSubBrandIds.length > 0 && (
+                  <span className="ml-1.5 bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">
+                    {excludedSubBrandIds.length}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setExclusionTab("items"); setExclusionSearch(""); }}
+                className={`flex-1 px-4 py-2.5 text-sm font-medium ${
+                  exclusionTab === "items"
+                    ? "text-teal-600 border-b-2 border-teal-500 bg-teal-50/50"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Items
+                {excludedItemIds.length > 0 && (
+                  <span className="ml-1.5 bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">
+                    {excludedItemIds.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Search */}
+            <div className="p-3 border-b">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder={`Search ${exclusionTab}...`}
+                  value={exclusionSearch}
+                  onChange={(e) => setExclusionSearch(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="overflow-y-auto max-h-[400px]">
+              {isLoadingData ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {getFilteredExclusionItems().slice(0, 100).map((item: Brand | SubBrand | Item) => {
+                    const id = item.id;
+                    const excluded = isExcluded(id);
+
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => toggleExclusion(id)}
+                        className={`w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors ${
+                          excluded ? "bg-amber-50" : ""
+                        }`}
+                      >
+                        <div className="text-left">
+                          <p className="font-medium text-sm">
+                            {item.name}
+                          </p>
+                          {"itemCode" in item && (
+                            <p className="text-xs text-gray-500">{item.itemCode}</p>
+                          )}
+                          {"brandId" in item && item.brandId && (
+                            <p className="text-xs text-gray-500">
+                              {brands.find(b => b.id === item.brandId)?.name || ""}
+                            </p>
+                          )}
+                        </div>
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                          excluded
+                            ? "bg-amber-500 border-amber-500"
+                            : "border-gray-300"
+                        }`}>
+                          {excluded && <Check className="h-3 w-3 text-white" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {getFilteredExclusionItems().length === 0 && (
+                    <p className="text-center text-gray-500 py-8 text-sm">
+                      No {exclusionTab} found
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Popup Footer */}
+            <div className="border-t px-4 py-3 bg-gray-50">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-600">
+                  {totalExclusions} total exclusions
+                </p>
+                <Button
+                  type="button"
+                  onClick={() => setShowExclusionPopup(false)}
+                  className="bg-teal-500 hover:bg-teal-600 text-white"
+                >
+                  Done
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

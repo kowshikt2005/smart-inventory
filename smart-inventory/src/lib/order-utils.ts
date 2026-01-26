@@ -6,26 +6,70 @@ export const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 /**
  * Generate the next order number in sequence (SO-0001, SO-0002, etc.)
+ * Checks both SalesOrder table AND Invoice table (which stores orderNumber from deleted orders)
  */
 export async function generateOrderNumber(db: PrismaClient): Promise<string> {
-  const lastOrder = await db.salesOrder.findFirst({
-    orderBy: { orderNumber: 'desc' },
-    select: { orderNumber: true },
-  });
+  // Check both tables to find the highest SO number ever used
+  const [lastSalesOrder, lastInvoice] = await Promise.all([
+    db.salesOrder.findFirst({
+      orderBy: { orderNumber: 'desc' },
+      select: { orderNumber: true },
+    }),
+    db.invoice.findFirst({
+      where: { orderNumber: { startsWith: 'SO-' } },
+      orderBy: { orderNumber: 'desc' },
+      select: { orderNumber: true },
+    }),
+  ]);
 
-  let nextNum = 1;
-  if (lastOrder) {
-    const match = lastOrder.orderNumber.match(/SO-(\d+)/);
+  let maxNum = 0;
+
+  // Extract number from sales order
+  if (lastSalesOrder) {
+    const match = lastSalesOrder.orderNumber.match(/SO-(\d+)/);
     if (match) {
-      nextNum = parseInt(match[1], 10) + 1;
+      maxNum = Math.max(maxNum, parseInt(match[1], 10));
     }
   }
 
-  return `SO-${String(nextNum).padStart(4, '0')}`;
+  // Extract number from invoice (deleted orders end up here)
+  if (lastInvoice?.orderNumber) {
+    const match = lastInvoice.orderNumber.match(/SO-(\d+)/);
+    if (match) {
+      maxNum = Math.max(maxNum, parseInt(match[1], 10));
+    }
+  }
+
+  return `SO-${String(maxNum + 1).padStart(4, '0')}`;
 }
 
 /**
- * Calculate tax amount based on taxable amount and rate
+ * Calculate tax amount from tax-inclusive amount (back-calculation)
+ * For tax-inclusive pricing: inclusiveAmount = baseAmount + tax
+ * So: baseAmount = inclusiveAmount / (1 + taxRate/100)
+ * And: taxAmount = inclusiveAmount - baseAmount
+ */
+export function calculateTaxInclusive(inclusiveAmount: number, taxRate: number): {
+  baseAmount: number;
+  taxAmount: number;
+  cgst: number;
+  sgst: number
+} {
+  const baseAmount = inclusiveAmount / (1 + taxRate / 100);
+  const taxAmount = inclusiveAmount - baseAmount;
+  const cgst = taxAmount / 2;
+  const sgst = taxAmount / 2;
+
+  return {
+    baseAmount: Math.round(baseAmount * 100) / 100,
+    taxAmount: Math.round(taxAmount * 100) / 100,
+    cgst: Math.round(cgst * 100) / 100,
+    sgst: Math.round(sgst * 100) / 100,
+  };
+}
+
+/**
+ * Calculate tax amount based on taxable amount and rate (tax exclusive - kept for backward compatibility)
  */
 export function calculateTax(amount: number, taxRate: number): { taxAmount: number; cgst: number; sgst: number } {
   const taxAmount = amount * (taxRate / 100);
@@ -40,7 +84,8 @@ export function calculateTax(amount: number, taxRate: number): { taxAmount: numb
 }
 
 /**
- * Calculate line item totals
+ * Calculate line item totals (Tax Inclusive System)
+ * Rate is the tax-inclusive price (MRP). We back-calculate the base amount and tax.
  */
 export function calculateLineItem(
   quantity: number,
@@ -48,19 +93,21 @@ export function calculateLineItem(
   taxRate: number,
   discountPercent: number = 0
 ): {
-  amount: number;
-  taxAmount: number;
-  totalAmount: number;
+  amount: number;      // Base amount (excluding tax)
+  taxAmount: number;   // Tax amount
+  totalAmount: number; // Total (amount + tax) = quantity * rate after discount
 } {
-  const grossAmount = quantity * rate;
-  const discountAmount = grossAmount * (discountPercent / 100);
-  const amount = grossAmount - discountAmount;
-  const { taxAmount } = calculateTax(amount, taxRate);
-  const totalAmount = amount + taxAmount;
+  // Rate is tax-inclusive, so total line value is simply quantity * rate
+  const grossTotal = quantity * rate;
+  const discountAmount = grossTotal * (discountPercent / 100);
+  const totalAmount = grossTotal - discountAmount;
+
+  // Back-calculate base amount and tax from the inclusive total
+  const { baseAmount, taxAmount } = calculateTaxInclusive(totalAmount, taxRate);
 
   return {
-    amount: Math.round(amount * 100) / 100,
-    taxAmount: Math.round(taxAmount * 100) / 100,
+    amount: baseAmount,  // Base amount (taxable value)
+    taxAmount: taxAmount,
     totalAmount: Math.round(totalAmount * 100) / 100,
   };
 }
@@ -95,61 +142,64 @@ export function calculateOrderTotals(
 
 /**
  * Get effective rate considering customer rate sheet
+ * @param sellingPrice - The item's selling price (tax-inclusive)
  */
 export function getEffectiveRate(
-  standardPrice: number,
+  sellingPrice: number,
   rateSheet?: {
     isActive: boolean;
-    itemRatePercent: number | Decimal;
     discountPercent: number | Decimal;
     excludedItemIds?: string[];
     excludedBrandIds?: string[];
     excludedSubBrandIds?: string[];
   } | null,
-  itemId?: string,
-  brandId?: string,
-  subBrandId?: string
+  item?: {
+    id: string;
+    brandId?: string | null;
+    subBrandId?: string | null;
+  }
 ): number {
   if (!rateSheet || !rateSheet.isActive) {
-    return standardPrice;
+    return sellingPrice;
   }
 
   // Check if item is excluded from this rate sheet
-  if (itemId && rateSheet.excludedItemIds) {
-    const excludedIds = Array.isArray(rateSheet.excludedItemIds)
-      ? rateSheet.excludedItemIds
-      : [];
-    if (excludedIds.includes(itemId)) {
-      return standardPrice;
+  if (item) {
+    // Check item exclusion
+    if (rateSheet.excludedItemIds) {
+      const excludedIds = Array.isArray(rateSheet.excludedItemIds)
+        ? rateSheet.excludedItemIds
+        : [];
+      if (excludedIds.includes(item.id)) {
+        return sellingPrice;
+      }
+    }
+
+    // Check brand exclusion
+    if (item.brandId && rateSheet.excludedBrandIds) {
+      const excludedBrandIds = Array.isArray(rateSheet.excludedBrandIds)
+        ? rateSheet.excludedBrandIds
+        : [];
+      if (excludedBrandIds.includes(item.brandId)) {
+        return sellingPrice;
+      }
+    }
+
+    // Check sub-brand exclusion
+    if (item.subBrandId && rateSheet.excludedSubBrandIds) {
+      const excludedSubBrandIds = Array.isArray(rateSheet.excludedSubBrandIds)
+        ? rateSheet.excludedSubBrandIds
+        : [];
+      if (excludedSubBrandIds.includes(item.subBrandId)) {
+        return sellingPrice;
+      }
     }
   }
 
-  // Check if brand is excluded from this rate sheet
-  if (brandId && rateSheet.excludedBrandIds) {
-    const excludedBrandIds = Array.isArray(rateSheet.excludedBrandIds)
-      ? rateSheet.excludedBrandIds
-      : [];
-    if (excludedBrandIds.includes(brandId)) {
-      return standardPrice;
-    }
-  }
-
-  // Check if sub-brand is excluded from this rate sheet
-  if (subBrandId && rateSheet.excludedSubBrandIds) {
-    const excludedSubBrandIds = Array.isArray(rateSheet.excludedSubBrandIds)
-      ? rateSheet.excludedSubBrandIds
-      : [];
-    if (excludedSubBrandIds.includes(subBrandId)) {
-      return standardPrice;
-    }
-  }
-
-  const itemRatePercent = Number(rateSheet.itemRatePercent);
   const discountPercent = Number(rateSheet.discountPercent);
 
-  // Apply item rate percent first, then discount
-  const rateAfterPercent = standardPrice * (itemRatePercent / 100);
-  const effectiveRate = rateAfterPercent * (1 - discountPercent / 100);
+  // Apply rate sheet discount on selling price
+  const effectiveRate = sellingPrice * (1 - discountPercent / 100);
 
   return Math.round(effectiveRate * 100) / 100;
 }

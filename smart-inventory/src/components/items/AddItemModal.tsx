@@ -29,8 +29,9 @@ interface EditItem {
   itemCode: string;
   name: string;
   description?: string;
-  standardPrice: string | number;
-  purchasePrice: string | number;
+  purchasePrice: string | number; // Cost price
+  mrp: string | number; // Maximum Retail Price
+  sellingPrice: string | number; // Actual selling price
   unit: string;
   hsnCode?: string;
   gstRate: string | number;
@@ -66,8 +67,9 @@ export function AddItemModal({
     subBrandId: "",
     hsnCode: "",
     gstRate: "18",
-    standardPrice: "0",
-    purchasePrice: "0",
+    purchasePrice: "0", // Cost price
+    mrp: "0", // Maximum Retail Price
+    sellingPrice: "0", // Actual selling price
     minStock: "0",
     unit: "PCS",
   });
@@ -88,8 +90,9 @@ export function AddItemModal({
         subBrandId: editItem.subBrand?.id || "",
         hsnCode: editItem.hsnCode || "",
         gstRate: String(editItem.gstRate) || "18",
-        standardPrice: String(editItem.standardPrice) || "0",
         purchasePrice: String(editItem.purchasePrice) || "0",
+        mrp: String(editItem.mrp) || "0",
+        sellingPrice: String(editItem.sellingPrice) || "0",
         minStock: String(editItem.inventory?.minStockLevel || 0),
         unit: editItem.unit || "PCS",
       });
@@ -102,8 +105,9 @@ export function AddItemModal({
         subBrandId: "",
         hsnCode: "",
         gstRate: "18",
-        standardPrice: "0",
         purchasePrice: "0",
+        mrp: "0",
+        sellingPrice: "0",
         minStock: "0",
         unit: "PCS",
       });
@@ -148,8 +152,9 @@ export function AddItemModal({
           subBrandId: formData.subBrandId || null,
           hsnCode: formData.hsnCode || null,
           gstRate: parseFloat(formData.gstRate) || 0,
-          standardPrice: parseFloat(formData.standardPrice) || 0,
           purchasePrice: parseFloat(formData.purchasePrice) || 0,
+          mrp: parseFloat(formData.mrp) || 0,
+          sellingPrice: parseFloat(formData.sellingPrice) || 0,
           minStock: parseFloat(formData.minStock) || 0,
           unit: formData.unit,
         }),
@@ -173,8 +178,9 @@ export function AddItemModal({
         subBrandId: "",
         hsnCode: "",
         gstRate: "18",
-        standardPrice: "0",
         purchasePrice: "0",
+        mrp: "0",
+        sellingPrice: "0",
         minStock: "0",
         unit: "PCS",
       });
@@ -396,26 +402,7 @@ export function AddItemModal({
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
               Pricing
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label
-                  htmlFor="item-standard-price"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Standard Price (₹) <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  id="item-standard-price"
-                  type="number"
-                  name="standardPrice"
-                  value={formData.standardPrice}
-                  onChange={handleChange}
-                  step="0.01"
-                  min="0"
-                  required
-                  placeholder="0.00"
-                />
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label
                   htmlFor="item-purchase-price"
@@ -434,6 +421,47 @@ export function AddItemModal({
                   required
                   placeholder="0.00"
                 />
+                <p className="text-xs text-gray-500 mt-1">Cost price (what you pay)</p>
+              </div>
+              <div>
+                <label
+                  htmlFor="item-mrp"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  MRP (₹) <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  id="item-mrp"
+                  type="number"
+                  name="mrp"
+                  value={formData.mrp}
+                  onChange={handleChange}
+                  step="0.01"
+                  min="0"
+                  required
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-gray-500 mt-1">Maximum Retail Price</p>
+              </div>
+              <div>
+                <label
+                  htmlFor="item-selling-price"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Selling Price (₹) <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  id="item-selling-price"
+                  type="number"
+                  name="sellingPrice"
+                  value={formData.sellingPrice}
+                  onChange={handleChange}
+                  step="0.01"
+                  min="0"
+                  required
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-gray-500 mt-1">Actual price you sell at</p>
               </div>
             </div>
           </div>

@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
           itemCode: true,
           description: true,
           unit: true,
-          standardPrice: true,
+          sellingPrice: true,
           brand: { select: { name: true } },
           subBrand: { select: { name: true } },
           inventory: { select: { physicalStock: true } },

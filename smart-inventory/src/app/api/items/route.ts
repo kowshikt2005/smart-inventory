@@ -37,65 +37,18 @@ export async function GET(request: Request) {
       where.isActive = isActive === 'true';
     }
 
-    // Optimize query based on limit - for large fetches, use select instead of include
-    const useLightweightQuery = limit > 100;
-
-    // Separate queries to avoid TypeScript issues with conditional select/include
-    const itemsPromise = useLightweightQuery
-      ? db.item.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: { createdAt: 'desc' },
-          // Lightweight query for bulk fetches (e.g., sales order page)
-          select: {
-            id: true,
-            itemCode: true,
-            name: true,
-            description: true,
-            unit: true,
-            hsnCode: true,
-            gstRate: true,
-            standardPrice: true,
-            purchasePrice: true,
-            mrp: true,
-            discountPercent: true,
-            isActive: true,
-            brand: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-            subBrand: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-            inventory: {
-              select: {
-                physicalStock: true,
-                reservedQuantity: true,
-              },
-            },
-          },
-        })
-      : db.item.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: { createdAt: 'desc' },
-          // Full query for detailed views
-          include: {
-            brand: true,
-            subBrand: true,
-            inventory: true,
-          },
-        });
-
     const [items, total] = await Promise.all([
-      itemsPromise,
+      db.item.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          brand: true,
+          subBrand: true,
+          inventory: true,
+        },
+      }),
       db.item.count({ where }),
     ]);
 
@@ -149,9 +102,9 @@ export async function POST(request: Request) {
           subBrandId: body.subBrandId || null,
           hsnCode: body.hsnCode || null,
           gstRate: body.gstRate || 0,
-          standardPrice: body.standardPrice || 0,
           purchasePrice: body.purchasePrice || 0,
-          mrp: body.mrp || null,
+          mrp: body.mrp || 0,
+          sellingPrice: body.sellingPrice || body.mrp || 0,
           discountPercent: body.discountPercent || null,
           minStock: body.minStock || 0,
           unit: body.unit || 'PCS',

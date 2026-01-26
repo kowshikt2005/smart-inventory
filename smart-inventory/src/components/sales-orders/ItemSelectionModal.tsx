@@ -13,9 +13,9 @@ interface Item {
   unit: string;
   hsnCode: string | null;
   gstRate: number;
-  standardPrice: number;
-  purchasePrice: number; // MRP is stored as purchasePrice
-  mrp?: number | null;
+  sellingPrice: number;
+  purchasePrice: number;
+  mrp: number;
   discountPercent?: number | null;
   inventory?: {
     physicalStock: number;
@@ -218,7 +218,7 @@ export function ItemSelectionModal({
                         )}
                       </td>
                       <td className="px-6 py-4 text-right text-sm text-gray-900">
-                        ₹{Number(item.standardPrice).toFixed(2)}
+                        ₹{Number(item.sellingPrice).toFixed(2)}
                       </td>
                     </tr>
                   );

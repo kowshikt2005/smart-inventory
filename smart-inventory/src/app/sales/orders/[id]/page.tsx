@@ -512,14 +512,14 @@ export default function SalesOrderDetailPage() {
                   <TableHead className="font-semibold text-right">Item Disc %</TableHead>
                   <TableHead className="font-semibold text-right">Qty</TableHead>
                   <TableHead className="font-semibold text-center">Stock Status</TableHead>
-                  <TableHead className="font-semibold text-right">Rate</TableHead>
+                  <TableHead className="font-semibold text-right">Rate (Incl. Tax)</TableHead>
                   <TableHead className="font-semibold text-right">
                     Order Disc %
                   </TableHead>
                   <TableHead className="font-semibold text-right">
                     Tax %
                   </TableHead>
-                  <TableHead className="font-semibold text-right">Amount</TableHead>
+                  <TableHead className="font-semibold text-right">Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -608,7 +608,7 @@ export default function SalesOrderDetailPage() {
                         {Number(item.taxRate)}%
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(Number(item.amount) + Number(item.taxAmount))}
+                        {formatCurrency(Number(item.quantity) * Number(item.rate))}
                       </TableCell>
                     </TableRow>
                   );

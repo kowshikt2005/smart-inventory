@@ -41,8 +41,8 @@ export async function GET(
                 unit: true,
                 hsnCode: true,
                 gstRate: true,
-                standardPrice: true,
-                purchasePrice: true, // MRP
+                sellingPrice: true,
+                purchasePrice: true,
                 mrp: true,
                 discountPercent: true,
                 inventory: {

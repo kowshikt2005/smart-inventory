@@ -106,15 +106,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate itemRatePercent (must be between 0 and 200)
-    const itemRatePercent = parseFloat(body.itemRatePercent) || 100;
-    if (itemRatePercent < 0 || itemRatePercent > 200) {
-      return NextResponse.json(
-        { error: 'Item rate percent must be between 0 and 200' },
-        { status: 400 }
-      );
-    }
-
     // Validate discountPercent (must be between 0 and 100)
     const discountPercent = parseFloat(body.discountPercent) || 0;
     if (discountPercent < 0 || discountPercent > 100) {
@@ -131,14 +122,10 @@ export async function POST(request: Request) {
         customerId: body.customerId,
         validFrom: new Date(body.validFrom),
         validTo: body.validTo ? new Date(body.validTo) : null,
-        itemRatePercent,
         discountPercent,
-        taxType: body.taxType || 'INCLUSIVE',
         excludedItemIds: body.excludedItemIds || [],
         excludedBrandIds: body.excludedBrandIds || [],
         excludedSubBrandIds: body.excludedSubBrandIds || [],
-        currency: body.currency || 'INR',
-        roundOff: body.roundOff || 'NONE',
         isActive: body.isActive !== false, // Default to true
       },
       include: {

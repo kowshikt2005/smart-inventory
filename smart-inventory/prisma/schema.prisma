@@ -260,9 +260,9 @@ model Item {
   subBrandId    String?
   hsnCode       String?  @db.VarChar(8) // HSN/SAC code for GST
   gstRate       Decimal  @default(0) @db.Decimal(5, 2) // GST percentage
-  standardPrice Decimal  @default(0) @db.Decimal(15, 2)
-  purchasePrice Decimal  @default(0) @db.Decimal(15, 2)
-  mrp           Decimal? @db.Decimal(15, 2) // Maximum Retail Price
+  purchasePrice Decimal  @default(0) @db.Decimal(15, 2) // Cost price (what you pay to buy the item)
+  mrp           Decimal  @default(0) @db.Decimal(15, 2) // MRP - Maximum Retail Price (legal max, tax-inclusive)
+  sellingPrice  Decimal  @default(0) @db.Decimal(15, 2) // Selling price (actual price you sell at, tax-inclusive, <= MRP)
   discountPercent Decimal? @db.Decimal(5, 2) // Default discount percentage
   minStock      Decimal  @default(0) @db.Decimal(15, 3)
   unit          String   @default("PCS") // PCS, KG, LTR, etc.
@@ -495,25 +495,19 @@ enum CurrencyType {
   AED
 }
 
-enum TaxType {
-  INCLUSIVE
-  EXCLUSIVE
-}
-
 model RateSheet {
   id                  String       @id @default(uuid())
   name                String       // Rate sheet name for reference
   customerId          String       @unique // One rate sheet per customer
   validFrom           DateTime
   validTo             DateTime?
-  itemRatePercent     Decimal      @default(100) @db.Decimal(5, 2) // % of base sales rate (100 = full price)
-  discountPercent     Decimal      @default(0) @db.Decimal(5, 2)   // Additional discount %
-  taxType             TaxType      @default(INCLUSIVE) // Tax calculation type
+  itemRatePercent     Decimal      @default(100) @db.Decimal(5, 2) // DEPRECATED: Keep for backward compatibility
+  discountPercent     Decimal      @default(0) @db.Decimal(5, 2)   // Discount % off base price
   excludedItemIds     Json?        // Array of item IDs to exclude from this rate sheet
   excludedBrandIds    Json?        // Array of brand IDs to exclude from this rate sheet
   excludedSubBrandIds Json?        // Array of sub-brand IDs to exclude from this rate sheet
-  currency            CurrencyType @default(INR)
-  roundOff            RoundOffType @default(NONE)
+  currency            CurrencyType @default(INR) // DEPRECATED: Keep for backward compatibility
+  roundOff            RoundOffType @default(NONE) // DEPRECATED: Keep for backward compatibility
   isActive            Boolean      @default(true)
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt

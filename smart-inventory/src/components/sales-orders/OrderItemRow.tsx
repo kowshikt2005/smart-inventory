@@ -13,9 +13,9 @@ interface Item {
   unit: string;
   hsnCode: string | null;
   gstRate: number;
-  standardPrice: number;
-  purchasePrice: number; // MRP is stored as purchasePrice
-  mrp?: number | null;
+  purchasePrice: number; // Cost price
+  mrp: number; // Maximum Retail Price
+  sellingPrice: number; // Actual selling price (used as base rate)
   discountPercent?: number | null;
   inventory?: {
     physicalStock: number;
@@ -70,14 +70,14 @@ export function OrderItemRow({
 
   const hasStockWarning = selectedItem && item.quantity > availableStock;
 
-  // Calculate discount percentage from MRP (purchasePrice) and Rate
+  // Calculate discount percentage from Selling Price and actual Rate
   const calculatedDiscountPercent = useMemo(() => {
-    if (!selectedItem?.purchasePrice || !item.rate) return null;
-    const mrp = Number(selectedItem.purchasePrice); // MRP is stored as purchasePrice
+    if (!selectedItem || !item.rate) return null;
+    const sellingPrice = Number(selectedItem.sellingPrice);
     const rate = Number(item.rate);
-    if (mrp <= 0 || rate >= mrp) return null;
-    return ((mrp - rate) / mrp) * 100;
-  }, [selectedItem?.purchasePrice, item.rate]);
+    if (sellingPrice <= 0 || rate >= sellingPrice) return null;
+    return ((sellingPrice - rate) / sellingPrice) * 100;
+  }, [selectedItem, item.rate]);
 
   // Handle item selection
   const handleItemSelect = (selectedItemData: Item) => {
@@ -89,31 +89,42 @@ export function OrderItemRow({
     });
   };
 
+  // Calculate tax-inclusive amounts
+  // Rate is tax-inclusive (MRP). We back-calculate base amount and tax.
+  const calculateTaxInclusive = (inclusiveAmount: number, taxRate: number) => {
+    const baseAmount = inclusiveAmount / (1 + taxRate / 100);
+    const taxAmount = inclusiveAmount - baseAmount;
+    return {
+      baseAmount: Math.round(baseAmount * 100) / 100,
+      taxAmount: Math.round(taxAmount * 100) / 100,
+    };
+  };
+
   // Handle quantity change
   const handleQuantityChange = (value: string) => {
     const quantity = parseFloat(value) || 0;
-    const amount = quantity * item.rate;
-    const taxAmount = amount * (item.taxRate / 100);
+    const totalInclusive = quantity * item.rate; // Rate is tax-inclusive
+    const { baseAmount, taxAmount } = calculateTaxInclusive(totalInclusive, item.taxRate);
 
     onUpdate({
       ...item,
       quantity,
-      taxAmount: Math.round(taxAmount * 100) / 100,
-      amount: Math.round(amount * 100) / 100,
+      taxAmount,
+      amount: baseAmount, // Base amount (excluding tax)
     });
   };
 
   // Handle rate change
   const handleRateChange = (value: string) => {
     const rate = parseFloat(value) || 0;
-    const amount = item.quantity * rate;
-    const taxAmount = amount * (item.taxRate / 100);
+    const totalInclusive = item.quantity * rate; // Rate is tax-inclusive
+    const { baseAmount, taxAmount } = calculateTaxInclusive(totalInclusive, item.taxRate);
 
     onUpdate({
       ...item,
       rate,
-      taxAmount: Math.round(taxAmount * 100) / 100,
-      amount: Math.round(amount * 100) / 100,
+      taxAmount,
+      amount: baseAmount, // Base amount (excluding tax)
     });
   };
 
@@ -180,8 +191,8 @@ export function OrderItemRow({
 
       {/* MRP */}
       <td className="px-3 py-2 text-sm text-gray-900 font-medium text-right">
-        {selectedItem?.purchasePrice && Number(selectedItem.purchasePrice) > 0
-          ? formatCurrency(Number(selectedItem.purchasePrice))
+        {selectedItem && Number(selectedItem.mrp) > 0
+          ? formatCurrency(Number(selectedItem.mrp))
           : "-"}
       </td>
 
@@ -233,9 +244,9 @@ export function OrderItemRow({
         {formatCurrency(item.taxAmount)}
       </td>
 
-      {/* Amount */}
+      {/* Total (Rate is tax-inclusive, so total = quantity × rate) */}
       <td className="px-3 py-2 text-sm font-medium text-right">
-        {formatCurrency(item.amount + item.taxAmount)}
+        {formatCurrency(item.quantity * item.rate)}
       </td>
 
       {/* Actions */}

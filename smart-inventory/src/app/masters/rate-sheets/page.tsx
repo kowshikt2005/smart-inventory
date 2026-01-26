@@ -52,11 +52,7 @@ interface RateSheet {
   customerId: string;
   validFrom: string;
   validTo: string | null;
-  itemRatePercent: number;
   discountPercent: number;
-  taxType: string;
-  currency: string;
-  roundOff: string;
   isActive: boolean;
   createdAt: string;
   customer: Customer;
@@ -165,13 +161,12 @@ export default function RateSheetsPage() {
     return true;
   };
 
-  // Calculate effective discount
-  const getEffectiveDiscount = (rs: RateSheet) => {
-    const itemRate = Number(rs.itemRatePercent);
-    const discount = Number(rs.discountPercent);
-    // Effective = 100 - (itemRatePercent * (1 - discountPercent/100))
-    const effectiveRate = itemRate * (1 - discount / 100);
-    return Math.round((100 - effectiveRate) * 100) / 100;
+  // Count total exclusions
+  const getTotalExclusions = (rs: RateSheet) => {
+    const itemExclusions = Array.isArray(rs.excludedItemIds) ? rs.excludedItemIds.length : 0;
+    const brandExclusions = Array.isArray(rs.excludedBrandIds) ? rs.excludedBrandIds.length : 0;
+    const subBrandExclusions = Array.isArray(rs.excludedSubBrandIds) ? rs.excludedSubBrandIds.length : 0;
+    return itemExclusions + brandExclusions + subBrandExclusions;
   };
 
   const rateSheets = data?.rateSheets || [];
@@ -184,7 +179,7 @@ export default function RateSheetsPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Rate Sheets</h1>
           <p className="text-gray-600">
-            Manage customer-specific pricing and discounts that apply to all orders
+            Manage customer-specific pricing and discounts
           </p>
         </div>
 
@@ -222,7 +217,7 @@ export default function RateSheetsPage() {
               <div>
                 <p className="text-sm text-gray-600">Customers with Discounts</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {rateSheets.filter((rs: RateSheet) => getEffectiveDiscount(rs) > 0).length}
+                  {rateSheets.filter((rs: RateSheet) => Number(rs.discountPercent) > 0).length}
                 </p>
               </div>
             </div>
@@ -291,22 +286,16 @@ export default function RateSheetsPage() {
                   Customer
                 </TableHead>
                 <TableHead scope="col" className="font-semibold text-center">
-                  Item Rate %
-                </TableHead>
-                <TableHead scope="col" className="font-semibold text-center">
                   Discount %
                 </TableHead>
                 <TableHead scope="col" className="font-semibold text-center">
-                  Effective Discount
+                  Exclusions
                 </TableHead>
                 <TableHead scope="col" className="font-semibold">
                   Valid From
                 </TableHead>
                 <TableHead scope="col" className="font-semibold">
                   Valid To
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  Currency
                 </TableHead>
                 <TableHead scope="col" className="font-semibold text-center">
                   Status
@@ -320,7 +309,7 @@ export default function RateSheetsPage() {
               {isLoading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={10}
+                    colSpan={8}
                     className="text-center text-gray-500 py-12"
                   >
                     <div className="flex items-center justify-center gap-2">
@@ -332,7 +321,7 @@ export default function RateSheetsPage() {
               ) : error ? (
                 <TableRow>
                   <TableCell
-                    colSpan={10}
+                    colSpan={8}
                     className="text-center text-red-600 py-8"
                   >
                     <div className="space-y-2">
@@ -350,7 +339,7 @@ export default function RateSheetsPage() {
               ) : paginatedRateSheets.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={10}
+                    colSpan={8}
                     className="text-center text-gray-500 py-8"
                   >
                     {searchQuery
@@ -360,8 +349,7 @@ export default function RateSheetsPage() {
                 </TableRow>
               ) : (
                 paginatedRateSheets.map((rateSheet: RateSheet) => {
-                  const _isValid = isRateSheetValid(rateSheet);
-                  const effectiveDiscount = getEffectiveDiscount(rateSheet);
+                  const totalExclusions = getTotalExclusions(rateSheet);
                   const isExpired =
                     rateSheet.validTo && new Date(rateSheet.validTo) < new Date();
                   const isPending =
@@ -381,33 +369,22 @@ export default function RateSheetsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        <span
-                          className={
-                            Number(rateSheet.itemRatePercent) < 100
-                              ? "text-green-600 font-medium"
-                              : "text-gray-600"
-                          }
-                        >
-                          {rateSheet.itemRatePercent}%
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center">
                         {Number(rateSheet.discountPercent) > 0 ? (
-                          <span className="text-orange-600 font-medium">
-                            {rateSheet.discountPercent}%
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {effectiveDiscount > 0 ? (
                           <Badge className="bg-green-100 text-green-700">
                             <Percent className="h-3 w-3 mr-1" />
-                            {effectiveDiscount.toFixed(1)}% off
+                            {rateSheet.discountPercent}% off
                           </Badge>
                         ) : (
                           <span className="text-gray-400">No discount</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {totalExclusions > 0 ? (
+                          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                            {totalExclusions} excluded
+                          </Badge>
+                        ) : (
+                          <span className="text-gray-400">-</span>
                         )}
                       </TableCell>
                       <TableCell>{formatDate(rateSheet.validFrom)}</TableCell>
@@ -415,9 +392,6 @@ export default function RateSheetsPage() {
                         {rateSheet.validTo
                           ? formatDate(rateSheet.validTo)
                           : "No expiry"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{rateSheet.currency}</Badge>
                       </TableCell>
                       <TableCell className="text-center">
                         {!rateSheet.isActive ? (

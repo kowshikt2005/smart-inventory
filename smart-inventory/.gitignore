@@ -41,10 +41,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.claude
-agents
-.kiro
-playwright-mcp
+# Claude, Kiro, Playwright MCP
+.claude/
+.kiro/
+.playwright-mcp/
+agents/
 
 /src/generated/prisma
 
