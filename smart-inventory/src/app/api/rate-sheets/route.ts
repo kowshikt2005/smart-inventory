@@ -133,7 +133,10 @@ export async function POST(request: Request) {
         validTo: body.validTo ? new Date(body.validTo) : null,
         itemRatePercent,
         discountPercent,
+        taxType: body.taxType || 'INCLUSIVE',
         excludedItemIds: body.excludedItemIds || [],
+        excludedBrandIds: body.excludedBrandIds || [],
+        excludedSubBrandIds: body.excludedSubBrandIds || [],
         currency: body.currency || 'INR',
         roundOff: body.roundOff || 'NONE',
         isActive: body.isActive !== false, // Default to true

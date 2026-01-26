@@ -54,11 +54,15 @@ interface RateSheet {
   validTo: string | null;
   itemRatePercent: number;
   discountPercent: number;
+  taxType: string;
   currency: string;
   roundOff: string;
   isActive: boolean;
   createdAt: string;
   customer: Customer;
+  excludedItemIds?: string[];
+  excludedBrandIds?: string[];
+  excludedSubBrandIds?: string[];
 }
 
 export default function RateSheetsPage() {

@@ -103,8 +103,12 @@ export function getEffectiveRate(
     itemRatePercent: number | Decimal;
     discountPercent: number | Decimal;
     excludedItemIds?: string[];
+    excludedBrandIds?: string[];
+    excludedSubBrandIds?: string[];
   } | null,
-  itemId?: string
+  itemId?: string,
+  brandId?: string,
+  subBrandId?: string
 ): number {
   if (!rateSheet || !rateSheet.isActive) {
     return standardPrice;
@@ -116,6 +120,26 @@ export function getEffectiveRate(
       ? rateSheet.excludedItemIds
       : [];
     if (excludedIds.includes(itemId)) {
+      return standardPrice;
+    }
+  }
+
+  // Check if brand is excluded from this rate sheet
+  if (brandId && rateSheet.excludedBrandIds) {
+    const excludedBrandIds = Array.isArray(rateSheet.excludedBrandIds)
+      ? rateSheet.excludedBrandIds
+      : [];
+    if (excludedBrandIds.includes(brandId)) {
+      return standardPrice;
+    }
+  }
+
+  // Check if sub-brand is excluded from this rate sheet
+  if (subBrandId && rateSheet.excludedSubBrandIds) {
+    const excludedSubBrandIds = Array.isArray(rateSheet.excludedSubBrandIds)
+      ? rateSheet.excludedSubBrandIds
+      : [];
+    if (excludedSubBrandIds.includes(subBrandId)) {
       return standardPrice;
     }
   }

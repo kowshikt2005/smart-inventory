@@ -112,8 +112,20 @@ export async function PUT(
       updateData.isActive = body.isActive;
     }
 
+    if (body.taxType !== undefined) {
+      updateData.taxType = body.taxType;
+    }
+
     if (body.excludedItemIds !== undefined) {
       updateData.excludedItemIds = body.excludedItemIds || [];
+    }
+
+    if (body.excludedBrandIds !== undefined) {
+      updateData.excludedBrandIds = body.excludedBrandIds || [];
+    }
+
+    if (body.excludedSubBrandIds !== undefined) {
+      updateData.excludedSubBrandIds = body.excludedSubBrandIds || [];
     }
 
     const rateSheet = await db.rateSheet.update({
