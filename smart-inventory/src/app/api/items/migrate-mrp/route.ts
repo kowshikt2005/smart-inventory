@@ -10,7 +10,7 @@ export async function POST() {
         id: true,
         mrp: true,
         sellingPrice: true,
-        // @ts-ignore - standardPrice might still exist in DB during migration
+        // @ts-expect-error - standardPrice might still exist in DB during migration
         standardPrice: true
       },
     });
@@ -19,7 +19,7 @@ export async function POST() {
     const updates = [];
 
     for (const item of itemsToUpdate) {
-      // @ts-ignore - standardPrice might still exist
+      // @ts-expect-error - standardPrice might still exist
       const standardPrice = Number(item.standardPrice || 0);
       const currentMrp = Number(item.mrp || 0);
       const currentSellingPrice = Number(item.sellingPrice || 0);
