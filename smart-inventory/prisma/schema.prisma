@@ -502,10 +502,15 @@ model RateSheet {
   validFrom           DateTime
   validTo             DateTime?
   itemRatePercent     Decimal      @default(100) @db.Decimal(5, 2) // DEPRECATED: Keep for backward compatibility
-  discountPercent     Decimal      @default(0) @db.Decimal(5, 2)   // Discount % off base price
+  discountPercent     Decimal      @default(0) @db.Decimal(5, 2)   // Discount % off base price (used for exclusion model)
   excludedItemIds     Json?        // Array of item IDs to exclude from this rate sheet
   excludedBrandIds    Json?        // Array of brand IDs to exclude from this rate sheet
   excludedSubBrandIds Json?        // Array of sub-brand IDs to exclude from this rate sheet
+
+  // NEW: Inclusion model fields
+  useInclusionModel   Boolean      @default(true) // true = inclusion model, false = exclusion model
+  inclusionDiscounts  Json?        @default("{}") // Structure: { brands: [{id, discountPercent}], subBrands: [{id, discountPercent}], items: [{id, discountPercent}] }
+
   currency            CurrencyType @default(INR) // DEPRECATED: Keep for backward compatibility
   roundOff            RoundOffType @default(NONE) // DEPRECATED: Keep for backward compatibility
   isActive            Boolean      @default(true)

@@ -198,7 +198,8 @@ export default function SalesOrderDetailPage() {
       const data = await response.json();
 
       if (response.status === 409 && data.invoiceId) {
-        router.push(`/sales/invoices/${data.invoiceId}`);
+        // Invoice already exists, redirect to invoices list
+        router.push("/sales/invoices");
         return;
       }
 
@@ -218,7 +219,8 @@ export default function SalesOrderDetailPage() {
         throw new Error(data.error || "Failed to create invoice");
       }
 
-      router.push(`/sales/invoices/${data.id}`);
+      // Redirect to invoices list after successful creation
+      router.push("/sales/invoices");
     } catch (err) {
       console.error("Error creating invoice:", err);
       alert(err instanceof Error ? err.message : "Failed to create invoice");

@@ -109,6 +109,14 @@ export async function PUT(
       updateData.excludedSubBrandIds = body.excludedSubBrandIds || [];
     }
 
+    if (body.useInclusionModel !== undefined) {
+      updateData.useInclusionModel = body.useInclusionModel;
+    }
+
+    if (body.inclusionDiscounts !== undefined) {
+      updateData.inclusionDiscounts = body.inclusionDiscounts || {};
+    }
+
     const rateSheet = await db.rateSheet.update({
       where: { id },
       data: updateData,

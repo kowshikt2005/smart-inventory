@@ -70,13 +70,14 @@ export function OrderItemRow({
 
   const hasStockWarning = selectedItem && item.quantity > availableStock;
 
-  // Calculate discount percentage from Selling Price and actual Rate
+  // Calculate discount percentage from MRP and actual Rate
+  // MRP is the base price for rate sheet customers, so discount is shown relative to MRP
   const calculatedDiscountPercent = useMemo(() => {
     if (!selectedItem || !item.rate) return null;
-    const sellingPrice = Number(selectedItem.sellingPrice);
+    const mrp = Number(selectedItem.mrp);
     const rate = Number(item.rate);
-    if (sellingPrice <= 0 || rate >= sellingPrice) return null;
-    return ((sellingPrice - rate) / sellingPrice) * 100;
+    if (mrp <= 0 || rate >= mrp) return null;
+    return ((mrp - rate) / mrp) * 100;
   }, [selectedItem, item.rate]);
 
   // Handle item selection
@@ -232,6 +233,13 @@ export function OrderItemRow({
           className="w-28 text-right"
           disabled={disabled || !item.itemId}
         />
+      </td>
+
+      {/* Net Rate (Rate excluding tax) */}
+      <td className="px-3 py-2 text-sm text-gray-600 text-right">
+        {item.rate > 0 && item.taxRate >= 0
+          ? formatCurrency(item.rate / (1 + item.taxRate / 100))
+          : "-"}
       </td>
 
       {/* Tax Rate */}

@@ -118,6 +118,28 @@ export default function StockLedgerPage() {
     }
   }, [selectedItemId, fromDate, toDate]);
 
+  // Format date only
+  const formatDateOnly = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
+
+  // Format time from createdAt (actual entry timestamp)
+  const formatTimeOnly = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    // Check if it's a valid date
+    if (isNaN(date.getTime())) return '-';
+    const hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = (hours % 12 || 12).toString().padStart(2, '0');
+    return `${displayHours}:${minutes} ${ampm}`;
+  };
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-IN", {
       day: "2-digit",
@@ -268,6 +290,7 @@ export default function StockLedgerPage() {
                 <TableHeader>
                   <TableRow className="bg-gray-50">
                     <TableHead className="font-semibold">Date</TableHead>
+                    <TableHead className="font-semibold">Time</TableHead>
                     <TableHead className="font-semibold">Particulars</TableHead>
                     <TableHead className="font-semibold">Type</TableHead>
                     <TableHead className="font-semibold text-right">In Qty</TableHead>
@@ -282,6 +305,7 @@ export default function StockLedgerPage() {
                       <TableCell className="font-medium">
                         {fromDate ? formatDate(fromDate) : "Opening"}
                       </TableCell>
+                      <TableCell className="text-sm text-gray-500">-</TableCell>
                       <TableCell className="font-medium">Opening Balance</TableCell>
                       <TableCell>-</TableCell>
                       <TableCell className="text-right">-</TableCell>
@@ -295,7 +319,10 @@ export default function StockLedgerPage() {
                   {/* Movement Rows */}
                   {movements.map((movement) => (
                     <TableRow key={movement.id} className="hover:bg-gray-50">
-                      <TableCell className="text-sm">{formatDate(movement.date)}</TableCell>
+                      <TableCell className="text-sm whitespace-nowrap">{formatDateOnly(movement.date)}</TableCell>
+                      <TableCell className="text-sm text-gray-600 whitespace-nowrap">
+                        {formatTimeOnly(movement.date)}
+                      </TableCell>
                       <TableCell className="max-w-xs">
                         <p className="truncate" title={movement.particulars}>
                           {movement.particulars}
@@ -322,6 +349,7 @@ export default function StockLedgerPage() {
                   {summary && (
                     <TableRow className="bg-gray-100 font-semibold">
                       <TableCell>{toDate ? formatDate(toDate) : "Closing"}</TableCell>
+                      <TableCell className="text-gray-500">-</TableCell>
                       <TableCell>Closing Balance</TableCell>
                       <TableCell>-</TableCell>
                       <TableCell className="text-right text-green-600">

@@ -126,6 +126,8 @@ export async function POST(request: Request) {
         excludedItemIds: body.excludedItemIds || [],
         excludedBrandIds: body.excludedBrandIds || [],
         excludedSubBrandIds: body.excludedSubBrandIds || [],
+        useInclusionModel: body.useInclusionModel !== false, // Default to true (inclusion model)
+        inclusionDiscounts: body.inclusionDiscounts || {},
         isActive: body.isActive !== false, // Default to true
       },
       include: {

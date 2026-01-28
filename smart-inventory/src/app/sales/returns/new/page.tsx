@@ -4,6 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -20,8 +21,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Loader2, Plus, Save, Trash2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { ArrowLeft, Loader2, Save, CheckSquare, Square } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 interface Customer {
@@ -35,20 +36,18 @@ interface Invoice {
   invoiceNumber: string;
 }
 
-interface Item {
-  id: string;
-  itemCode: string;
-  name: string;
-  unit: string;
-  gstRate: number;
-  standardPrice: number;
-}
-
-interface ReturnItem {
+interface InvoiceItem {
   id: string;
   itemId: string;
-  itemName: string;
-  unit: string;
+  item: {
+    id: string;
+    itemCode: string;
+    name: string;
+    unit: string;
+    hsnCode: string | null;
+    gstRate: number;
+    sellingPrice: number;
+  };
   quantity: number;
   rate: number;
   taxRate: number;
@@ -56,12 +55,27 @@ interface ReturnItem {
   amount: number;
 }
 
+
+interface ReturnItem {
+  id: string;
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  unit: string;
+  quantity: number;
+  maxQuantity: number; // Original invoice quantity (for validation)
+  rate: number;
+  taxRate: number;
+  taxAmount: number;
+  amount: number;
+  selected: boolean;
+}
+
 export default function NewSalesReturnPage() {
   const router = useRouter();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
 
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
@@ -73,36 +87,26 @@ export default function NewSalesReturnPage() {
 
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
-  const [isLoadingItems, setIsLoadingItems] = useState(true);
+  const [isLoadingInvoiceItems, setIsLoadingInvoiceItems] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch customers and items on mount
+  // Fetch customers on mount
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchCustomers = async () => {
       try {
-        const [customersRes, itemsRes] = await Promise.all([
-          fetch("/api/customers?limit=1000"),
-          fetch("/api/items?limit=1000"),
-        ]);
-
-        if (customersRes.ok) {
-          const customersData = await customersRes.json();
-          setCustomers(customersData.customers || []);
-        }
-
-        if (itemsRes.ok) {
-          const itemsData = await itemsRes.json();
-          setItems(itemsData.items || []);
+        const response = await fetch("/api/customers?limit=1000");
+        if (response.ok) {
+          const data = await response.json();
+          setCustomers(data.customers || []);
         }
       } catch (err) {
-        console.error("Error fetching data:", err);
+        console.error("Error fetching customers:", err);
       } finally {
         setIsLoadingCustomers(false);
-        setIsLoadingItems(false);
       }
     };
-    fetchData();
+    fetchCustomers();
   }, []);
 
   // Fetch invoices when customer is selected
@@ -132,34 +136,88 @@ export default function NewSalesReturnPage() {
     fetchInvoices();
   }, [selectedCustomerId]);
 
-  // Add item to return
-  const handleAddItem = () => {
-    setReturnItems((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        itemId: "",
-        itemName: "",
-        unit: "",
-        quantity: 1,
-        rate: 0,
-        taxRate: 0,
-        taxAmount: 0,
-        amount: 0,
-      },
-    ]);
+  // Fetch invoice items when invoice is selected
+  const fetchInvoiceItems = useCallback(async (invoiceId: string) => {
+    if (!invoiceId) {
+      setReturnItems([]);
+      return;
+    }
+
+    try {
+      setIsLoadingInvoiceItems(true);
+      const response = await fetch(`/api/sales-invoices/${invoiceId}`);
+      if (response.ok) {
+        const invoice = await response.json();
+        const invoiceItems: InvoiceItem[] = invoice.items || [];
+
+        // Auto-populate all items from the invoice
+        const loadedItems: ReturnItem[] = invoiceItems.map((invItem) => {
+          const baseAmount = Number(invItem.quantity) * Number(invItem.rate);
+          const taxAmount = baseAmount * (Number(invItem.taxRate) / 100);
+
+          return {
+            id: crypto.randomUUID(),
+            itemId: invItem.item.id,
+            itemName: invItem.item.name,
+            itemCode: invItem.item.itemCode,
+            unit: invItem.item.unit,
+            quantity: Number(invItem.quantity),
+            maxQuantity: Number(invItem.quantity), // Original quantity for validation
+            rate: Number(invItem.rate),
+            taxRate: Number(invItem.taxRate),
+            taxAmount: taxAmount,
+            amount: baseAmount,
+            selected: true, // Selected by default
+          };
+        });
+
+        setReturnItems(loadedItems);
+      }
+    } catch (err) {
+      console.error("Error fetching invoice items:", err);
+    } finally {
+      setIsLoadingInvoiceItems(false);
+    }
+  }, []);
+
+  // Handle invoice selection
+  const handleInvoiceChange = (value: string) => {
+    setSelectedInvoiceId(value);
+    if (value) {
+      fetchInvoiceItems(value);
+    } else {
+      setReturnItems([]);
+    }
   };
 
-  // Remove item from return
-  const handleRemoveItem = (id: string) => {
-    setReturnItems((prev) => prev.filter((item) => item.id !== id));
+  // Toggle item selection
+  const handleToggleItem = (id: string) => {
+    setReturnItems((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, selected: !item.selected } : item
+      )
+    );
   };
 
-  // Update item
+  // Select all items
+  const handleSelectAll = () => {
+    setReturnItems((prev) =>
+      prev.map((item) => ({ ...item, selected: true }))
+    );
+  };
+
+  // Deselect all items
+  const handleDeselectAll = () => {
+    setReturnItems((prev) =>
+      prev.map((item) => ({ ...item, selected: false }))
+    );
+  };
+
+  // Update item quantity or rate
   const handleItemChange = (
     id: string,
     field: keyof ReturnItem,
-    value: string | number
+    value: string | number | boolean
   ) => {
     setReturnItems((prev) =>
       prev.map((item) => {
@@ -167,14 +225,11 @@ export default function NewSalesReturnPage() {
 
         const updated = { ...item, [field]: value };
 
-        // If item selection changed, update item details
-        if (field === "itemId") {
-          const selectedItem = items.find((i) => i.id === value);
-          if (selectedItem) {
-            updated.itemName = selectedItem.name;
-            updated.unit = selectedItem.unit;
-            updated.rate = Number(selectedItem.standardPrice);
-            updated.taxRate = Number(selectedItem.gstRate);
+        // Validate quantity against max
+        if (field === "quantity" && updated.maxQuantity > 0) {
+          const newQty = Number(value);
+          if (newQty > updated.maxQuantity) {
+            updated.quantity = updated.maxQuantity;
           }
         }
 
@@ -193,12 +248,17 @@ export default function NewSalesReturnPage() {
     );
   };
 
-  // Calculate totals
-  const subtotal = returnItems.reduce((sum, item) => sum + item.amount, 0);
-  const totalTax = returnItems.reduce((sum, item) => sum + item.taxAmount, 0);
+  // Calculate totals (only for selected items)
+  const selectedItems = returnItems.filter((item) => item.selected && item.itemId);
+  const subtotal = selectedItems.reduce((sum, item) => sum + item.amount, 0);
+  const totalTax = selectedItems.reduce((sum, item) => sum + item.taxAmount, 0);
   const cgst = totalTax / 2;
   const sgst = totalTax / 2;
   const totalAmount = subtotal + totalTax;
+
+  // Count selected items
+  const selectedCount = returnItems.filter((item) => item.selected).length;
+  const totalCount = returnItems.length;
 
   // Save return
   const handleSave = async () => {
@@ -207,17 +267,18 @@ export default function NewSalesReturnPage() {
       return;
     }
 
-    if (returnItems.length === 0) {
-      setError("Please add at least one item");
+    if (!selectedInvoiceId) {
+      setError("Please select an invoice");
       return;
     }
 
+    // Filter only selected items with valid data
     const validItems = returnItems.filter(
-      (item) => item.itemId && item.quantity > 0 && item.rate > 0
+      (item) => item.selected && item.itemId && item.quantity > 0 && item.rate > 0
     );
 
     if (validItems.length === 0) {
-      setError("Please fill in item details");
+      setError("Please select at least one item with valid quantity and rate");
       return;
     }
 
@@ -230,7 +291,7 @@ export default function NewSalesReturnPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customerId: selectedCustomerId,
-          invoiceId: selectedInvoiceId || null,
+          invoiceId: selectedInvoiceId,
           returnDate,
           reason: reason || null,
           items: validItems.map((item) => ({
@@ -302,7 +363,11 @@ export default function NewSalesReturnPage() {
                   <Label htmlFor="customer">Customer *</Label>
                   <Select
                     value={selectedCustomerId}
-                    onValueChange={setSelectedCustomerId}
+                    onValueChange={(value) => {
+                      setSelectedCustomerId(value);
+                      setSelectedInvoiceId("");
+                      setReturnItems([]);
+                    }}
                     disabled={isLoadingCustomers}
                   >
                     <SelectTrigger id="customer">
@@ -318,19 +383,18 @@ export default function NewSalesReturnPage() {
                   </Select>
                 </div>
 
-                {/* Invoice Selection (Optional) */}
+                {/* Invoice Selection (Required) */}
                 <div>
-                  <Label htmlFor="invoice">Original Invoice (Optional)</Label>
+                  <Label htmlFor="invoice">Original Invoice *</Label>
                   <Select
                     value={selectedInvoiceId}
-                    onValueChange={(value) => setSelectedInvoiceId(value === "none" ? "" : value)}
+                    onValueChange={handleInvoiceChange}
                     disabled={!selectedCustomerId || isLoadingInvoices}
                   >
                     <SelectTrigger id="invoice">
                       <SelectValue placeholder="Select invoice..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
                       {invoices.map((invoice) => (
                         <SelectItem key={invoice.id} value={invoice.id}>
                           {invoice.invoiceNumber}
@@ -338,6 +402,21 @@ export default function NewSalesReturnPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {!selectedCustomerId && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Select a customer first to see their invoices
+                    </p>
+                  )}
+                  {selectedCustomerId && invoices.length === 0 && !isLoadingInvoices && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      No invoices found for this customer
+                    </p>
+                  )}
+                  {selectedInvoiceId && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Items will be auto-loaded from the selected invoice
+                    </p>
+                  )}
                 </div>
 
                 {/* Return Date */}
@@ -370,6 +449,11 @@ export default function NewSalesReturnPage() {
               <h2 className="text-lg font-semibold mb-4">Summary</h2>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Items Selected</span>
+                  <span className="font-medium">{selectedCount} of {totalCount}</span>
+                </div>
+                <hr />
+                <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal</span>
                   <span className="font-medium">{formatCurrency(subtotal)}</span>
                 </div>
@@ -390,7 +474,7 @@ export default function NewSalesReturnPage() {
 
               <Button
                 onClick={handleSave}
-                disabled={isSaving || returnItems.length === 0}
+                disabled={isSaving || selectedCount === 0}
                 className="w-full mt-6 bg-teal-500 hover:bg-teal-600"
               >
                 {isSaving ? (
@@ -413,26 +497,51 @@ export default function NewSalesReturnPage() {
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold">Return Items</h2>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddItem}
-                  disabled={isLoadingItems}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Item
-                </Button>
+                <div className="flex items-center gap-2">
+                  {returnItems.length > 0 && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSelectAll}
+                      >
+                        <CheckSquare className="h-4 w-4 mr-2" />
+                        Select All
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleDeselectAll}
+                      >
+                        <Square className="h-4 w-4 mr-2" />
+                        Deselect All
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
 
-              {returnItems.length === 0 ? (
+              {isLoadingInvoiceItems ? (
                 <div className="text-center py-12 text-gray-500">
-                  No items added. Click &quot;Add Item&quot; to add items to return.
+                  <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+                  Loading invoice items...
+                </div>
+              ) : returnItems.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  {selectedInvoiceId ? (
+                    "No items found in the selected invoice."
+                  ) : (
+                    "Select an invoice to load items for return."
+                  )}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-gray-50">
+                        <TableHead className="font-semibold w-[50px]">
+                          Select
+                        </TableHead>
                         <TableHead className="font-semibold w-[250px]">
                           Item
                         </TableHead>
@@ -454,42 +563,47 @@ export default function NewSalesReturnPage() {
                     </TableHeader>
                     <TableBody>
                       {returnItems.map((item) => (
-                        <TableRow key={item.id}>
+                        <TableRow
+                          key={item.id}
+                          className={!item.selected ? "opacity-50 bg-gray-50" : ""}
+                        >
                           <TableCell>
-                            <Select
-                              value={item.itemId}
-                              onValueChange={(value) =>
-                                handleItemChange(item.id, "itemId", value)
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select item..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {items.map((i) => (
-                                  <SelectItem key={i.id} value={i.id}>
-                                    {i.name} ({i.itemCode})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <Checkbox
+                              checked={item.selected}
+                              onCheckedChange={() => handleToggleItem(item.id)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{item.itemName}</div>
+                              <div className="text-xs text-gray-500">{item.itemCode}</div>
+                            </div>
                           </TableCell>
                           <TableCell className="text-sm">{item.unit}</TableCell>
                           <TableCell>
-                            <Input
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={item.quantity}
-                              onChange={(e) =>
-                                handleItemChange(
-                                  item.id,
-                                  "quantity",
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                              className="w-20 text-right"
-                            />
+                            <div className="flex flex-col items-end gap-1">
+                              <Input
+                                type="number"
+                                min="1"
+                                max={item.maxQuantity > 0 ? item.maxQuantity : undefined}
+                                step="1"
+                                value={item.quantity}
+                                onChange={(e) =>
+                                  handleItemChange(
+                                    item.id,
+                                    "quantity",
+                                    parseFloat(e.target.value) || 0
+                                  )
+                                }
+                                className="w-20 text-right"
+                                disabled={!item.selected}
+                              />
+                              {item.maxQuantity > 0 && (
+                                <span className="text-xs text-gray-500">
+                                  Max: {item.maxQuantity}
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <Input
@@ -505,6 +619,7 @@ export default function NewSalesReturnPage() {
                                 )
                               }
                               className="w-24 text-right"
+                              disabled={!item.selected}
                             />
                           </TableCell>
                           <TableCell className="text-right text-sm">
@@ -514,14 +629,7 @@ export default function NewSalesReturnPage() {
                             {formatCurrency(item.amount + item.taxAmount)}
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveItem(item.id)}
-                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {/* Reserved for future actions */}
                           </TableCell>
                         </TableRow>
                       ))}

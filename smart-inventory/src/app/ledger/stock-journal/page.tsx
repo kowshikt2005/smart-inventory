@@ -117,6 +117,28 @@ export default function StockJournalPage() {
     }
   };
 
+  // Format date only
+  const formatDateOnly = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
+
+  // Format time from createdAt (actual entry timestamp)
+  const formatTimeOnly = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    // Check if it's a valid date
+    if (isNaN(date.getTime())) return '-';
+    const hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = (hours % 12 || 12).toString().padStart(2, '0');
+    return `${displayHours}:${minutes} ${ampm}`;
+  };
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-IN", {
       day: "2-digit",
@@ -176,6 +198,7 @@ export default function StockJournalPage() {
               <TableRow className="bg-gray-50">
                 <TableHead className="font-semibold">Journal No</TableHead>
                 <TableHead className="font-semibold">Date</TableHead>
+                <TableHead className="font-semibold">Time</TableHead>
                 <TableHead className="font-semibold">Item</TableHead>
                 <TableHead className="font-semibold">Type</TableHead>
                 <TableHead className="font-semibold text-right">Quantity</TableHead>
@@ -186,7 +209,7 @@ export default function StockJournalPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12">
+                  <TableCell colSpan={8} className="text-center py-12">
                     <div className="flex items-center justify-center gap-2 text-gray-500">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Loading journals...</span>
@@ -195,7 +218,7 @@ export default function StockJournalPage() {
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-red-600 py-8">
+                  <TableCell colSpan={8} className="text-center text-red-600 py-8">
                     <p>Error loading journals</p>
                     <Button onClick={() => mutate()} variant="outline" size="sm" className="mt-2">
                       Try Again
@@ -204,7 +227,7 @@ export default function StockJournalPage() {
                 </TableRow>
               ) : paginatedJournals.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-gray-500 py-12">
+                  <TableCell colSpan={8} className="text-center text-gray-500 py-12">
                     <FileText className="h-12 w-12 mx-auto mb-4 text-gray-400" />
                     <p>
                       {searchQuery
@@ -219,7 +242,10 @@ export default function StockJournalPage() {
                   return (
                     <TableRow key={journal.id} className="hover:bg-gray-50">
                       <TableCell className="font-mono font-medium">{journal.journalNumber}</TableCell>
-                      <TableCell>{formatDate(journal.date)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatDateOnly(journal.date)}</TableCell>
+                      <TableCell className="text-sm text-gray-600 whitespace-nowrap">
+                        {formatTimeOnly(journal.createdAt)}
+                      </TableCell>
                       <TableCell>
                         <div>
                           <p className="font-medium">{journal.item?.name || "Unknown"}</p>

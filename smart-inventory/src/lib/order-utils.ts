@@ -141,8 +141,28 @@ export function calculateOrderTotals(
 }
 
 /**
- * Get effective rate considering customer rate sheet
- * @param sellingPrice - The item's selling price (tax-inclusive)
+ * Inclusion discounts structure
+ */
+interface InclusionDiscount {
+  id: string;
+  discountPercent: number;
+}
+
+interface InclusionDiscounts {
+  brands?: InclusionDiscount[];
+  subBrands?: InclusionDiscount[];
+  items?: InclusionDiscount[];
+}
+
+/**
+ * Get effective rate considering customer rate sheet (Legacy function)
+ *
+ * Logic:
+ * - Customer WITH rate sheet: Use MRP as base, apply rate sheet discounts (inclusive GST)
+ * - Customer WITHOUT rate sheet: Use sellingPrice as base, no discount (inclusive GST)
+ *
+ * @param sellingPrice - The item's selling price (tax-inclusive) - used when no rate sheet
+ * @param mrp - The item's MRP (tax-inclusive) - used when customer has rate sheet
  */
 export function getEffectiveRate(
   sellingPrice: number,
@@ -157,11 +177,16 @@ export function getEffectiveRate(
     id: string;
     brandId?: string | null;
     subBrandId?: string | null;
-  }
+  },
+  mrp?: number
 ): number {
+  // No rate sheet - use sellingPrice, no discount
   if (!rateSheet || !rateSheet.isActive) {
     return sellingPrice;
   }
+
+  // Customer has rate sheet - use MRP as base (fallback to sellingPrice if MRP not provided)
+  const basePrice = mrp !== undefined ? mrp : sellingPrice;
 
   // Check if item is excluded from this rate sheet
   if (item) {
@@ -171,7 +196,8 @@ export function getEffectiveRate(
         ? rateSheet.excludedItemIds
         : [];
       if (excludedIds.includes(item.id)) {
-        return sellingPrice;
+        // Excluded item - use MRP with 0% discount
+        return basePrice;
       }
     }
 
@@ -181,7 +207,8 @@ export function getEffectiveRate(
         ? rateSheet.excludedBrandIds
         : [];
       if (excludedBrandIds.includes(item.brandId)) {
-        return sellingPrice;
+        // Excluded brand - use MRP with 0% discount
+        return basePrice;
       }
     }
 
@@ -191,17 +218,157 @@ export function getEffectiveRate(
         ? rateSheet.excludedSubBrandIds
         : [];
       if (excludedSubBrandIds.includes(item.subBrandId)) {
-        return sellingPrice;
+        // Excluded sub-brand - use MRP with 0% discount
+        return basePrice;
       }
     }
   }
 
   const discountPercent = Number(rateSheet.discountPercent);
 
-  // Apply rate sheet discount on selling price
-  const effectiveRate = sellingPrice * (1 - discountPercent / 100);
+  // Apply rate sheet discount on MRP
+  const effectiveRate = basePrice * (1 - discountPercent / 100);
 
   return Math.round(effectiveRate * 100) / 100;
+}
+
+/**
+ * Resolve discount from inclusion model using cascade logic
+ * Priority: Item discount > Sub-brand discount > Brand discount > 0%
+ */
+export function resolveInclusionDiscount(
+  itemId: string,
+  brandId: string | null | undefined,
+  subBrandId: string | null | undefined,
+  inclusionDiscounts: InclusionDiscounts | null | undefined
+): number {
+  if (!inclusionDiscounts) return 0;
+
+  // Check item first (highest priority)
+  if (inclusionDiscounts.items && Array.isArray(inclusionDiscounts.items)) {
+    const itemDiscount = inclusionDiscounts.items.find(i => i.id === itemId);
+    if (itemDiscount) return Number(itemDiscount.discountPercent);
+  }
+
+  // Check sub-brand second
+  if (subBrandId && inclusionDiscounts.subBrands && Array.isArray(inclusionDiscounts.subBrands)) {
+    const subBrandDiscount = inclusionDiscounts.subBrands.find(sb => sb.id === subBrandId);
+    if (subBrandDiscount) return Number(subBrandDiscount.discountPercent);
+  }
+
+  // Check brand last
+  if (brandId && inclusionDiscounts.brands && Array.isArray(inclusionDiscounts.brands)) {
+    const brandDiscount = inclusionDiscounts.brands.find(b => b.id === brandId);
+    if (brandDiscount) return Number(brandDiscount.discountPercent);
+  }
+
+  // Item not included in rate sheet
+  return 0;
+}
+
+/**
+ * Calculate inclusive tax pricing rate
+ * Formula: Final = (baseAmount/(1+(gstRate/100)))*(1-(discountPercent/100))*(1+(gstRate/100))
+ * Simplified: Final = baseAmount * (1 - discountPercent/100)
+ *
+ * This applies discount correctly on tax-inclusive prices
+ */
+export function calculateInclusiveTaxRate(
+  baseAmount: number,
+  gstRate: number,
+  discountPercent: number
+): number {
+  const gstFactor = 1 + (gstRate / 100);
+  // Extract base price, apply discount, then add tax back
+  const result = (baseAmount / gstFactor) * (1 - discountPercent / 100) * gstFactor;
+  return Math.round(result * 100) / 100;
+}
+
+/**
+ * Get effective rate V2 - Uses MRP for rate sheet customers, sellingPrice for non-rate sheet customers
+ * GST is always inclusive in both cases.
+ *
+ * @param item - Item details including MRP and sellingPrice
+ * @param rateSheet - Customer's rate sheet (if any)
+ *
+ * Logic:
+ * - Customer WITH rate sheet: Use MRP as base, apply rate sheet discounts (inclusive GST)
+ * - Customer WITHOUT rate sheet: Use sellingPrice as base, no discount (inclusive GST)
+ */
+export function getEffectiveRateV2(
+  item: {
+    id: string;
+    mrp: number | Decimal;
+    sellingPrice: number | Decimal;
+    gstRate: number | Decimal;
+    brandId?: string | null;
+    subBrandId?: string | null;
+  },
+  rateSheet?: {
+    isActive: boolean;
+    useInclusionModel?: boolean;
+    discountPercent: number | Decimal;
+    inclusionDiscounts?: InclusionDiscounts | null;
+    excludedItemIds?: string[];
+    excludedBrandIds?: string[];
+    excludedSubBrandIds?: string[];
+  } | null
+): { rate: number; discountPercent: number } {
+  const mrp = Number(item.mrp);
+  const sellingPrice = Number(item.sellingPrice);
+  const gstRate = Number(item.gstRate);
+
+  // No rate sheet - use sellingPrice as base, no discount (GST inclusive)
+  if (!rateSheet || !rateSheet.isActive) {
+    return { rate: sellingPrice, discountPercent: 0 };
+  }
+
+  // Customer has rate sheet - always use MRP as base (GST inclusive)
+  // Check if using inclusion model (new system)
+  const useInclusionModel = rateSheet.useInclusionModel !== false;
+
+  if (useInclusionModel && rateSheet.inclusionDiscounts) {
+    // Inclusion model: Use MRP as base, apply cascade discount
+    const discountPercent = resolveInclusionDiscount(
+      item.id,
+      item.brandId,
+      item.subBrandId,
+      rateSheet.inclusionDiscounts
+    );
+
+    if (discountPercent > 0) {
+      // Apply inclusive tax pricing formula on MRP
+      const rate = calculateInclusiveTaxRate(mrp, gstRate, discountPercent);
+      return { rate, discountPercent };
+    }
+
+    // Item not in inclusion list - use MRP with 0% discount
+    return { rate: mrp, discountPercent: 0 };
+  }
+
+  // Legacy exclusion model - still use MRP as base for rate sheet customers
+  // Check if item is excluded
+  const excludedItemIds = Array.isArray(rateSheet.excludedItemIds) ? rateSheet.excludedItemIds : [];
+  const excludedBrandIds = Array.isArray(rateSheet.excludedBrandIds) ? rateSheet.excludedBrandIds : [];
+  const excludedSubBrandIds = Array.isArray(rateSheet.excludedSubBrandIds) ? rateSheet.excludedSubBrandIds : [];
+
+  if (excludedItemIds.includes(item.id)) {
+    // Excluded item - use MRP with 0% discount
+    return { rate: mrp, discountPercent: 0 };
+  }
+  if (item.brandId && excludedBrandIds.includes(item.brandId)) {
+    // Excluded brand - use MRP with 0% discount
+    return { rate: mrp, discountPercent: 0 };
+  }
+  if (item.subBrandId && excludedSubBrandIds.includes(item.subBrandId)) {
+    // Excluded sub-brand - use MRP with 0% discount
+    return { rate: mrp, discountPercent: 0 };
+  }
+
+  // Apply discount percent on MRP
+  const discountPercent = Number(rateSheet.discountPercent);
+  const rate = calculateInclusiveTaxRate(mrp, gstRate, discountPercent);
+  return { rate, discountPercent };
 }
 
 /**

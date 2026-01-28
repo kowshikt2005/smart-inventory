@@ -18,17 +18,32 @@ import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { mutate } from "swr";
 
+interface InclusionDiscount {
+  id: string;
+  discountPercent: number;
+}
+
+interface InclusionDiscounts {
+  brands?: InclusionDiscount[];
+  subBrands?: InclusionDiscount[];
+  items?: InclusionDiscount[];
+}
+
 interface Customer {
   id: string;
   customerNumber: string;
   name: string;
   gstin: string | null;
+  address: string | null;
   city: string | null;
   state: string | null;
+  pincode: string | null;
   rateSheet?: {
     id: string;
     isActive: boolean;
     discountPercent: number;
+    useInclusionModel?: boolean;
+    inclusionDiscounts?: InclusionDiscounts;
     excludedItemIds?: string[];
     excludedBrandIds?: string[];
     excludedSubBrandIds?: string[];
@@ -240,46 +255,114 @@ function NewSalesOrderPageContent() {
     [orderItems]
   );
 
+  // Resolve discount from inclusion model using cascade logic
+  // Priority: Item discount > Sub-brand discount > Brand discount > 0%
+  const resolveInclusionDiscount = useCallback(
+    (itemId: string, brandId: string | null | undefined, subBrandId: string | null | undefined, inclusionDiscounts: InclusionDiscounts | undefined): number => {
+      if (!inclusionDiscounts) return 0;
+
+      // Check item first (highest priority)
+      if (inclusionDiscounts.items && Array.isArray(inclusionDiscounts.items)) {
+        const itemDiscount = inclusionDiscounts.items.find(i => i.id === itemId);
+        if (itemDiscount) return Number(itemDiscount.discountPercent);
+      }
+
+      // Check sub-brand second
+      if (subBrandId && inclusionDiscounts.subBrands && Array.isArray(inclusionDiscounts.subBrands)) {
+        const subBrandDiscount = inclusionDiscounts.subBrands.find(sb => sb.id === subBrandId);
+        if (subBrandDiscount) return Number(subBrandDiscount.discountPercent);
+      }
+
+      // Check brand last
+      if (brandId && inclusionDiscounts.brands && Array.isArray(inclusionDiscounts.brands)) {
+        const brandDiscount = inclusionDiscounts.brands.find(b => b.id === brandId);
+        if (brandDiscount) return Number(brandDiscount.discountPercent);
+      }
+
+      return 0; // Item not included
+    },
+    []
+  );
+
+  // Calculate inclusive tax pricing rate
+  // Formula: Final = (baseAmount/(1+(gstRate/100)))*(1-(discountPercent/100))*(1+(gstRate/100))
+  const calculateInclusiveTaxRate = useCallback(
+    (baseAmount: number, gstRate: number, discountPercent: number): number => {
+      const gstFactor = 1 + (gstRate / 100);
+      const result = (baseAmount / gstFactor) * (1 - discountPercent / 100) * gstFactor;
+      return Math.round(result * 100) / 100;
+    },
+    []
+  );
+
   // Get effective rate for an item considering customer rate sheet
-  // Uses sellingPrice (tax-inclusive) as the base price, rate sheet discount applies on top
+  // GST is always inclusive in both cases.
+  //
+  // Logic:
+  // - Customer WITH rate sheet: Use MRP as base, apply rate sheet discounts (inclusive GST)
+  // - Customer WITHOUT rate sheet: Use sellingPrice as base, no discount (inclusive GST)
   const getEffectiveRate = useCallback(
     (item: Item, customer?: Customer | null) => {
-      const basePrice = Number(item.sellingPrice);
+      const mrp = Number(item.mrp);
+      const sellingPrice = Number(item.sellingPrice);
+      const gstRate = Number(item.gstRate);
       const rateSheet = (customer || selectedCustomer)?.rateSheet;
+
+      // No rate sheet - use sellingPrice, no discount (GST inclusive)
       if (!rateSheet || !rateSheet.isActive) {
-        return basePrice;
+        return sellingPrice;
       }
 
-      // Check if item is excluded from this rate sheet
+      // Customer has rate sheet - always use MRP as base (GST inclusive)
+      // Check if using inclusion model (new system)
+      const useInclusionModel = rateSheet.useInclusionModel !== false;
+
+      if (useInclusionModel && rateSheet.inclusionDiscounts) {
+        // Inclusion model: Use MRP as base, apply cascade discount
+        const discountPercent = resolveInclusionDiscount(
+          item.id,
+          item.brandId,
+          item.subBrandId,
+          rateSheet.inclusionDiscounts
+        );
+
+        if (discountPercent > 0) {
+          // Apply inclusive tax pricing formula on MRP
+          return calculateInclusiveTaxRate(mrp, gstRate, discountPercent);
+        }
+
+        // Item not in inclusion list - use MRP with 0% discount
+        return mrp;
+      }
+
+      // Legacy exclusion model - still use MRP as base for rate sheet customers
       const excludedItemIds = rateSheet.excludedItemIds || [];
       if (Array.isArray(excludedItemIds) && excludedItemIds.includes(item.id)) {
-        return basePrice;
+        // Excluded item - use MRP with 0% discount
+        return mrp;
       }
 
-      // Check if item's brand is excluded
       if (item.brandId) {
         const excludedBrandIds = rateSheet.excludedBrandIds || [];
         if (Array.isArray(excludedBrandIds) && excludedBrandIds.includes(item.brandId)) {
-          return basePrice;
+          // Excluded brand - use MRP with 0% discount
+          return mrp;
         }
       }
 
-      // Check if item's sub-brand is excluded
       if (item.subBrandId) {
         const excludedSubBrandIds = rateSheet.excludedSubBrandIds || [];
         if (Array.isArray(excludedSubBrandIds) && excludedSubBrandIds.includes(item.subBrandId)) {
-          return basePrice;
+          // Excluded sub-brand - use MRP with 0% discount
+          return mrp;
         }
       }
 
+      // Apply discount percent on MRP (legacy model)
       const discountPercent = Number(rateSheet.discountPercent);
-
-      // Apply rate sheet discount on selling price
-      const effectiveRate = basePrice * (1 - discountPercent / 100);
-
-      return Math.round(effectiveRate * 100) / 100;
+      return calculateInclusiveTaxRate(mrp, gstRate, discountPercent);
     },
-    [selectedCustomer]
+    [selectedCustomer, resolveInclusionDiscount, calculateInclusiveTaxRate]
   );
 
   // Handle customer selection
@@ -677,29 +760,51 @@ function NewSalesOrderPageContent() {
                       </div>
                     )}
                     {selectedCustomer && (
-                      <div className="flex items-center justify-between p-4 bg-teal-50 border border-teal-200 rounded-lg">
-                        <div>
-                          <p className="font-medium text-teal-900">
-                            {selectedCustomer.name}
-                          </p>
-                          <p className="text-sm text-teal-700">
-                            {selectedCustomer.customerNumber}
-                            {selectedCustomer.gstin &&
-                              ` | GSTIN: ${selectedCustomer.gstin}`}
-                          </p>
-                          {selectedCustomer.rateSheet?.isActive && (
-                            <p className="text-xs text-teal-600 mt-1">
-                              Rate Sheet Applied: {selectedCustomer.rateSheet.discountPercent}% discount
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-4 bg-teal-50 border border-teal-200 rounded-lg">
+                          <div>
+                            <p className="font-medium text-teal-900">
+                              {selectedCustomer.name}
                             </p>
-                          )}
+                            <p className="text-sm text-teal-700">
+                              {selectedCustomer.customerNumber}
+                              {selectedCustomer.gstin &&
+                                ` | GSTIN: ${selectedCustomer.gstin}`}
+                            </p>
+                            {selectedCustomer.rateSheet?.isActive && (
+                              <p className="text-xs text-teal-600 mt-1">
+                                Rate Sheet Applied: {selectedCustomer.rateSheet.discountPercent}% discount
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCustomer(null)}
+                            className="text-teal-600 hover:text-teal-800"
+                          >
+                            <X className="h-5 w-5" />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedCustomer(null)}
-                          className="text-teal-600 hover:text-teal-800"
-                        >
-                          <X className="h-5 w-5" />
-                        </button>
+                        {/* Billing Address Section */}
+                        {(selectedCustomer.address || selectedCustomer.city || selectedCustomer.state || selectedCustomer.pincode) && (
+                          <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                            <p className="text-sm font-medium text-gray-700 mb-2">Billing Address</p>
+                            <div className="text-sm text-gray-600">
+                              {selectedCustomer.address && (
+                                <p>{selectedCustomer.address}</p>
+                              )}
+                              <p>
+                                {[
+                                  selectedCustomer.city,
+                                  selectedCustomer.state,
+                                  selectedCustomer.pincode,
+                                ]
+                                  .filter(Boolean)
+                                  .join(", ")}
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -744,6 +849,9 @@ function NewSalesOrderPageContent() {
                         </th>
                         <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
                           Rate (Incl. Tax)
+                        </th>
+                        <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
+                          Net Rate
                         </th>
                         <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
                           GST %

@@ -163,6 +163,15 @@ export async function DELETE(
       where: { id },
       include: {
         allocations: true,
+        items: {
+          include: {
+            item: {
+              include: {
+                inventory: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -181,7 +190,7 @@ export async function DELETE(
       );
     }
 
-    // Cancel invoice and reverse ledger entry in transaction
+    // Cancel invoice, restore inventory, and reverse ledger entry in transaction
     await db.$transaction(async (tx) => {
       // Update invoice status to cancelled
       await tx.invoice.update({
@@ -190,6 +199,48 @@ export async function DELETE(
           paymentStatus: 'CANCELLED',
         },
       });
+
+      // Restore inventory for each item
+      const inventoryUpdates: Promise<any>[] = [];
+      const stockMovements: any[] = [];
+
+      for (const invoiceItem of invoice.items) {
+        const inventory = invoiceItem.item.inventory;
+        if (inventory) {
+          // Restore physical stock
+          inventoryUpdates.push(
+            tx.inventory.update({
+              where: { id: inventory.id },
+              data: {
+                physicalStock: {
+                  increment: Number(invoiceItem.quantity),
+                },
+              },
+            })
+          );
+
+          // Create stock movement entry for the restoration
+          stockMovements.push({
+            inventoryId: inventory.id,
+            itemId: invoiceItem.itemId,
+            quantity: Number(invoiceItem.quantity),
+            type: 'ADJUSTMENT_IN',
+            referenceType: 'INVOICE_CANCELLED',
+            referenceId: invoice.id,
+            notes: `Invoice cancelled - ${invoice.invoiceNumber}`,
+          });
+        }
+      }
+
+      // Execute all inventory updates in parallel
+      await Promise.all(inventoryUpdates);
+
+      // Batch create all stock movements
+      if (stockMovements.length > 0) {
+        await tx.stockMovement.createMany({
+          data: stockMovements,
+        });
+      }
 
       // Create reversal ledger entry
       const lastLedgerEntry = await tx.customerLedger.findFirst({

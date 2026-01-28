@@ -43,6 +43,17 @@ interface SubBrand {
   brandId: string;
 }
 
+interface InclusionDiscount {
+  id: string;
+  discountPercent: number;
+}
+
+interface InclusionDiscounts {
+  brands: InclusionDiscount[];
+  subBrands: InclusionDiscount[];
+  items: InclusionDiscount[];
+}
+
 interface RateSheet {
   id: string;
   name: string;
@@ -52,6 +63,8 @@ interface RateSheet {
   discountPercent: number;
   isActive: boolean;
   customer: Customer;
+  useInclusionModel?: boolean;
+  inclusionDiscounts?: InclusionDiscounts;
   excludedItemIds?: string[];
   excludedBrandIds?: string[];
   excludedSubBrandIds?: string[];
@@ -64,7 +77,7 @@ interface AddRateSheetModalProps {
   editingRateSheet?: RateSheet | null;
 }
 
-type ExclusionTab = "brands" | "subbrands" | "items";
+type InclusionTab = "brands" | "subbrands" | "items";
 
 export function AddRateSheetModal({
   isOpen,
@@ -81,21 +94,26 @@ export function AddRateSheetModal({
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
-  // Data for exclusions
+  // Data for inclusions
   const [items, setItems] = useState<Item[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [subBrands, setSubBrands] = useState<SubBrand[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
-  // Exclusions
-  const [excludedItemIds, setExcludedItemIds] = useState<string[]>([]);
-  const [excludedBrandIds, setExcludedBrandIds] = useState<string[]>([]);
-  const [excludedSubBrandIds, setExcludedSubBrandIds] = useState<string[]>([]);
+  // Inclusion discounts (new model)
+  const [inclusionDiscounts, setInclusionDiscounts] = useState<InclusionDiscounts>({
+    brands: [],
+    subBrands: [],
+    items: [],
+  });
 
-  // Exclusion popup
-  const [showExclusionPopup, setShowExclusionPopup] = useState(false);
-  const [exclusionTab, setExclusionTab] = useState<ExclusionTab>("brands");
-  const [exclusionSearch, setExclusionSearch] = useState("");
+  // Default discount for quick add
+  const [defaultDiscount, setDefaultDiscount] = useState("30");
+
+  // Inclusion popup
+  const [showInclusionPopup, setShowInclusionPopup] = useState(false);
+  const [inclusionTab, setInclusionTab] = useState<InclusionTab>("brands");
+  const [inclusionSearch, setInclusionSearch] = useState("");
 
   // Form fields
   const [name, setName] = useState("");
@@ -103,7 +121,6 @@ export function AddRateSheetModal({
     new Date().toISOString().split("T")[0]
   );
   const [validTo, setValidTo] = useState("");
-  const [discountPercent, setDiscountPercent] = useState("0");
   const [isActive, setIsActive] = useState(true);
 
   const isEditing = !!editingRateSheet;
@@ -129,11 +146,16 @@ export function AddRateSheetModal({
           ? editingRateSheet.validTo.split("T")[0]
           : ""
       );
-      setDiscountPercent(String(editingRateSheet.discountPercent));
       setIsActive(editingRateSheet.isActive);
-      setExcludedItemIds(Array.isArray(editingRateSheet.excludedItemIds) ? editingRateSheet.excludedItemIds : []);
-      setExcludedBrandIds(Array.isArray(editingRateSheet.excludedBrandIds) ? editingRateSheet.excludedBrandIds : []);
-      setExcludedSubBrandIds(Array.isArray(editingRateSheet.excludedSubBrandIds) ? editingRateSheet.excludedSubBrandIds : []);
+
+      // Load inclusion discounts
+      if (editingRateSheet.inclusionDiscounts) {
+        setInclusionDiscounts({
+          brands: editingRateSheet.inclusionDiscounts.brands || [],
+          subBrands: editingRateSheet.inclusionDiscounts.subBrands || [],
+          items: editingRateSheet.inclusionDiscounts.items || [],
+        });
+      }
     } else {
       resetForm();
     }
@@ -188,14 +210,12 @@ export function AddRateSheetModal({
     setCustomerSearch("");
     setValidFrom(new Date().toISOString().split("T")[0]);
     setValidTo("");
-    setDiscountPercent("0");
     setIsActive(true);
-    setExcludedItemIds([]);
-    setExcludedBrandIds([]);
-    setExcludedSubBrandIds([]);
+    setInclusionDiscounts({ brands: [], subBrands: [], items: [] });
+    setDefaultDiscount("30");
     setError(null);
-    setShowExclusionPopup(false);
-    setExclusionSearch("");
+    setShowInclusionPopup(false);
+    setInclusionSearch("");
   };
 
   const handleClose = () => {
@@ -219,16 +239,16 @@ export function AddRateSheetModal({
     }
   };
 
-  // Get total exclusion count
-  const totalExclusions = excludedBrandIds.length + excludedSubBrandIds.length + excludedItemIds.length;
+  // Get total inclusion count
+  const totalInclusions = inclusionDiscounts.brands.length + inclusionDiscounts.subBrands.length + inclusionDiscounts.items.length;
 
-  // Get filtered exclusion items based on tab and search
-  const getFilteredExclusionItems = () => {
-    const query = exclusionSearch.toLowerCase();
+  // Get filtered inclusion items based on tab and search
+  const getFilteredInclusionItems = () => {
+    const query = inclusionSearch.toLowerCase();
 
-    if (exclusionTab === "brands") {
+    if (inclusionTab === "brands") {
       return brands.filter(b => b.name.toLowerCase().includes(query));
-    } else if (exclusionTab === "subbrands") {
+    } else if (inclusionTab === "subbrands") {
       return subBrands.filter(sb => sb.name.toLowerCase().includes(query));
     } else {
       return items.filter(i =>
@@ -238,28 +258,109 @@ export function AddRateSheetModal({
     }
   };
 
-  // Toggle exclusion
-  const toggleExclusion = (id: string) => {
-    if (exclusionTab === "brands") {
-      setExcludedBrandIds(prev =>
-        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-      );
-    } else if (exclusionTab === "subbrands") {
-      setExcludedSubBrandIds(prev =>
-        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-      );
+  // Get discount for an item
+  const getDiscount = (id: string): number | null => {
+    if (inclusionTab === "brands") {
+      const found = inclusionDiscounts.brands.find(b => b.id === id);
+      return found ? found.discountPercent : null;
+    } else if (inclusionTab === "subbrands") {
+      const found = inclusionDiscounts.subBrands.find(sb => sb.id === id);
+      return found ? found.discountPercent : null;
     } else {
-      setExcludedItemIds(prev =>
-        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-      );
+      const found = inclusionDiscounts.items.find(i => i.id === id);
+      return found ? found.discountPercent : null;
     }
   };
 
-  // Check if item is excluded
-  const isExcluded = (id: string) => {
-    if (exclusionTab === "brands") return excludedBrandIds.includes(id);
-    if (exclusionTab === "subbrands") return excludedSubBrandIds.includes(id);
-    return excludedItemIds.includes(id);
+  // Check if included
+  const isIncluded = (id: string): boolean => {
+    return getDiscount(id) !== null;
+  };
+
+  // Toggle inclusion with default discount
+  const toggleInclusion = (id: string) => {
+    const discount = parseFloat(defaultDiscount) || 0;
+
+    if (inclusionTab === "brands") {
+      setInclusionDiscounts(prev => {
+        const existing = prev.brands.find(b => b.id === id);
+        if (existing) {
+          return { ...prev, brands: prev.brands.filter(b => b.id !== id) };
+        } else {
+          return { ...prev, brands: [...prev.brands, { id, discountPercent: discount }] };
+        }
+      });
+    } else if (inclusionTab === "subbrands") {
+      setInclusionDiscounts(prev => {
+        const existing = prev.subBrands.find(sb => sb.id === id);
+        if (existing) {
+          return { ...prev, subBrands: prev.subBrands.filter(sb => sb.id !== id) };
+        } else {
+          return { ...prev, subBrands: [...prev.subBrands, { id, discountPercent: discount }] };
+        }
+      });
+    } else {
+      setInclusionDiscounts(prev => {
+        const existing = prev.items.find(i => i.id === id);
+        if (existing) {
+          return { ...prev, items: prev.items.filter(i => i.id !== id) };
+        } else {
+          return { ...prev, items: [...prev.items, { id, discountPercent: discount }] };
+        }
+      });
+    }
+  };
+
+  // Update discount for an item
+  const updateDiscount = (id: string, discountPercent: number) => {
+    if (inclusionTab === "brands") {
+      setInclusionDiscounts(prev => ({
+        ...prev,
+        brands: prev.brands.map(b => b.id === id ? { ...b, discountPercent } : b),
+      }));
+    } else if (inclusionTab === "subbrands") {
+      setInclusionDiscounts(prev => ({
+        ...prev,
+        subBrands: prev.subBrands.map(sb => sb.id === id ? { ...sb, discountPercent } : sb),
+      }));
+    } else {
+      setInclusionDiscounts(prev => ({
+        ...prev,
+        items: prev.items.map(i => i.id === id ? { ...i, discountPercent } : i),
+      }));
+    }
+  };
+
+  // Get inherited discount info for display
+  const getInheritedDiscount = (itemData: Item | SubBrand): string | null => {
+    if (inclusionTab === "items") {
+      const item = itemData as Item;
+      // Check sub-brand first
+      if (item.subBrandId) {
+        const subBrand = inclusionDiscounts.subBrands.find(sb => sb.id === item.subBrandId);
+        if (subBrand) {
+          const sbName = subBrands.find(s => s.id === item.subBrandId)?.name || "Sub-brand";
+          return `Inherits ${subBrand.discountPercent}% from ${sbName}`;
+        }
+      }
+      // Check brand
+      if (item.brandId) {
+        const brand = inclusionDiscounts.brands.find(b => b.id === item.brandId);
+        if (brand) {
+          const brandName = brands.find(b => b.id === item.brandId)?.name || "Brand";
+          return `Inherits ${brand.discountPercent}% from ${brandName}`;
+        }
+      }
+    } else if (inclusionTab === "subbrands") {
+      const subBrand = itemData as SubBrand;
+      // Check brand
+      const brand = inclusionDiscounts.brands.find(b => b.id === subBrand.brandId);
+      if (brand) {
+        const brandName = brands.find(b => b.id === subBrand.brandId)?.name || "Brand";
+        return `Inherits ${brand.discountPercent}% from ${brandName}`;
+      }
+    }
+    return null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -282,9 +383,8 @@ export function AddRateSheetModal({
       return;
     }
 
-    const discount = parseFloat(discountPercent);
-    if (isNaN(discount) || discount < 0 || discount > 100) {
-      setError("Discount percent must be between 0 and 100");
+    if (totalInclusions === 0) {
+      setError("Please add at least one brand, sub-brand, or item to the rate sheet");
       return;
     }
 
@@ -296,11 +396,14 @@ export function AddRateSheetModal({
         customerId: selectedCustomer.id,
         validFrom,
         validTo: validTo || null,
-        discountPercent: discount,
+        discountPercent: 0, // Legacy field - not used in inclusion model
         isActive,
-        excludedItemIds,
-        excludedBrandIds,
-        excludedSubBrandIds,
+        useInclusionModel: true,
+        inclusionDiscounts,
+        // Clear exclusion fields when using inclusion model
+        excludedItemIds: [],
+        excludedBrandIds: [],
+        excludedSubBrandIds: [],
       };
 
       const url = isEditing
@@ -455,29 +558,6 @@ export function AddRateSheetModal({
               )}
             </div>
 
-            {/* Discount Percentage - Main Field */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Discount Percentage <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  value={discountPercent}
-                  onChange={(e) => setDiscountPercent(e.target.value)}
-                  className="pl-10 text-lg font-semibold"
-                  placeholder="0"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                e.g., 10% discount means customer pays 90% of base price
-              </p>
-            </div>
-
             {/* Validity Dates */}
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -511,28 +591,50 @@ export function AddRateSheetModal({
               </div>
             </div>
 
-            {/* Exclusions Button */}
+            {/* Inclusions Button */}
             <div>
               <Button
                 type="button"
                 variant="outline"
                 className="w-full justify-between"
-                onClick={() => setShowExclusionPopup(true)}
+                onClick={() => setShowInclusionPopup(true)}
               >
                 <div className="flex items-center gap-2">
                   <Settings2 className="h-4 w-4" />
-                  <span>Configure Exclusions</span>
+                  <span>Configure Discounts</span>
                 </div>
-                {totalExclusions > 0 && (
-                  <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full">
-                    {totalExclusions} excluded
+                {totalInclusions > 0 ? (
+                  <span className="bg-teal-100 text-teal-800 text-xs px-2 py-0.5 rounded-full">
+                    {totalInclusions} configured
+                  </span>
+                ) : (
+                  <span className="text-gray-400 text-xs">
+                    Click to add
                   </span>
                 )}
               </Button>
               <p className="text-xs text-gray-500 mt-1">
-                Exclude specific brands, sub-brands, or items from this rate sheet
+                Add brands, sub-brands, or items with specific discount percentages
               </p>
             </div>
+
+            {/* Summary of inclusions */}
+            {totalInclusions > 0 && (
+              <div className="p-3 bg-gray-50 rounded-lg border text-sm">
+                <p className="font-medium text-gray-700 mb-2">Configured Discounts:</p>
+                <div className="space-y-1 text-gray-600">
+                  {inclusionDiscounts.brands.length > 0 && (
+                    <p>{inclusionDiscounts.brands.length} brand(s)</p>
+                  )}
+                  {inclusionDiscounts.subBrands.length > 0 && (
+                    <p>{inclusionDiscounts.subBrands.length} sub-brand(s)</p>
+                  )}
+                  {inclusionDiscounts.items.length > 0 && (
+                    <p>{inclusionDiscounts.items.length} item(s)</p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Active Toggle */}
             <div className="flex items-center justify-between p-4 bg-gray-50 border rounded-lg">
@@ -540,8 +642,8 @@ export function AddRateSheetModal({
                 <p className="font-medium text-gray-900">Active</p>
                 <p className="text-sm text-gray-500">
                   {isActive
-                    ? "Discount will be applied to orders"
-                    : "Discount will NOT be applied"}
+                    ? "Discounts will be applied to orders"
+                    : "Discounts will NOT be applied"}
                 </p>
               </div>
               <Switch
@@ -577,72 +679,91 @@ export function AddRateSheetModal({
         </div>
       </div>
 
-      {/* Exclusion Popup */}
-      {showExclusionPopup && (
+      {/* Inclusion Popup */}
+      {showInclusionPopup && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/30"
-            onClick={() => setShowExclusionPopup(false)}
+            onClick={() => setShowInclusionPopup(false)}
           />
           <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md max-h-[80vh] overflow-hidden">
             {/* Popup Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-              <h3 className="text-lg font-semibold">Configure Exclusions</h3>
+              <h3 className="text-lg font-semibold">Configure Discounts</h3>
               <button
-                onClick={() => setShowExclusionPopup(false)}
+                onClick={() => setShowInclusionPopup(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
+            {/* Default discount input */}
+            <div className="px-4 py-3 border-b bg-teal-50">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-teal-800">Default discount for new items:</span>
+                <div className="relative w-20">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={defaultDiscount}
+                    onChange={(e) => setDefaultDiscount(e.target.value)}
+                    className="pr-6 h-8 text-sm"
+                  />
+                  <Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+                </div>
+              </div>
+            </div>
+
             {/* Tabs */}
             <div className="flex border-b">
               <button
                 type="button"
-                onClick={() => { setExclusionTab("brands"); setExclusionSearch(""); }}
+                onClick={() => { setInclusionTab("brands"); setInclusionSearch(""); }}
                 className={`flex-1 px-4 py-2.5 text-sm font-medium ${
-                  exclusionTab === "brands"
+                  inclusionTab === "brands"
                     ? "text-teal-600 border-b-2 border-teal-500 bg-teal-50/50"
                     : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 Brands
-                {excludedBrandIds.length > 0 && (
-                  <span className="ml-1.5 bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">
-                    {excludedBrandIds.length}
+                {inclusionDiscounts.brands.length > 0 && (
+                  <span className="ml-1.5 bg-teal-100 text-teal-700 text-xs px-1.5 py-0.5 rounded-full">
+                    {inclusionDiscounts.brands.length}
                   </span>
                 )}
               </button>
               <button
                 type="button"
-                onClick={() => { setExclusionTab("subbrands"); setExclusionSearch(""); }}
+                onClick={() => { setInclusionTab("subbrands"); setInclusionSearch(""); }}
                 className={`flex-1 px-4 py-2.5 text-sm font-medium ${
-                  exclusionTab === "subbrands"
+                  inclusionTab === "subbrands"
                     ? "text-teal-600 border-b-2 border-teal-500 bg-teal-50/50"
                     : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 Sub-Brands
-                {excludedSubBrandIds.length > 0 && (
-                  <span className="ml-1.5 bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">
-                    {excludedSubBrandIds.length}
+                {inclusionDiscounts.subBrands.length > 0 && (
+                  <span className="ml-1.5 bg-teal-100 text-teal-700 text-xs px-1.5 py-0.5 rounded-full">
+                    {inclusionDiscounts.subBrands.length}
                   </span>
                 )}
               </button>
               <button
                 type="button"
-                onClick={() => { setExclusionTab("items"); setExclusionSearch(""); }}
+                onClick={() => { setInclusionTab("items"); setInclusionSearch(""); }}
                 className={`flex-1 px-4 py-2.5 text-sm font-medium ${
-                  exclusionTab === "items"
+                  inclusionTab === "items"
                     ? "text-teal-600 border-b-2 border-teal-500 bg-teal-50/50"
                     : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 Items
-                {excludedItemIds.length > 0 && (
-                  <span className="ml-1.5 bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">
-                    {excludedItemIds.length}
+                {inclusionDiscounts.items.length > 0 && (
+                  <span className="ml-1.5 bg-teal-100 text-teal-700 text-xs px-1.5 py-0.5 rounded-full">
+                    {inclusionDiscounts.items.length}
                   </span>
                 )}
               </button>
@@ -654,9 +775,9 @@ export function AddRateSheetModal({
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   type="text"
-                  placeholder={`Search ${exclusionTab}...`}
-                  value={exclusionSearch}
-                  onChange={(e) => setExclusionSearch(e.target.value)}
+                  placeholder={`Search ${inclusionTab}...`}
+                  value={inclusionSearch}
+                  onChange={(e) => setInclusionSearch(e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -670,45 +791,69 @@ export function AddRateSheetModal({
                 </div>
               ) : (
                 <div className="divide-y">
-                  {getFilteredExclusionItems().slice(0, 100).map((item: Brand | SubBrand | Item) => {
-                    const id = item.id;
-                    const excluded = isExcluded(id);
+                  {getFilteredInclusionItems().slice(0, 100).map((itemData: Brand | SubBrand | Item) => {
+                    const id = itemData.id;
+                    const included = isIncluded(id);
+                    const discount = getDiscount(id);
+                    const inheritedInfo = getInheritedDiscount(itemData as Item | SubBrand);
 
                     return (
-                      <button
+                      <div
                         key={id}
-                        type="button"
-                        onClick={() => toggleExclusion(id)}
-                        className={`w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors ${
-                          excluded ? "bg-amber-50" : ""
-                        }`}
+                        className={`px-4 py-3 ${included ? "bg-teal-50" : ""}`}
                       >
-                        <div className="text-left">
-                          <p className="font-medium text-sm">
-                            {item.name}
-                          </p>
-                          {"itemCode" in item && (
-                            <p className="text-xs text-gray-500">{item.itemCode}</p>
-                          )}
-                          {"brandId" in item && item.brandId && (
-                            <p className="text-xs text-gray-500">
-                              {brands.find(b => b.id === item.brandId)?.name || ""}
-                            </p>
+                        <div className="flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => toggleInclusion(id)}
+                            className="flex items-center gap-3 text-left flex-1"
+                          >
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                              included
+                                ? "bg-teal-500 border-teal-500"
+                                : "border-gray-300"
+                            }`}>
+                              {included && <Check className="h-3 w-3 text-white" />}
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">
+                                {itemData.name}
+                              </p>
+                              {"itemCode" in itemData && (
+                                <p className="text-xs text-gray-500">{itemData.itemCode}</p>
+                              )}
+                              {"brandId" in itemData && "name" in itemData && !("itemCode" in itemData) && (
+                                <p className="text-xs text-gray-500">
+                                  {brands.find(b => b.id === (itemData as SubBrand).brandId)?.name || ""}
+                                </p>
+                              )}
+                              {!included && inheritedInfo && (
+                                <p className="text-xs text-blue-600">{inheritedInfo}</p>
+                              )}
+                            </div>
+                          </button>
+                          {included && (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                                value={discount || 0}
+                                onChange={(e) => updateDiscount(id, parseFloat(e.target.value) || 0)}
+                                className="w-20 h-8 text-sm text-right"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <span className="text-sm text-gray-500">%</span>
+                            </div>
                           )}
                         </div>
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                          excluded
-                            ? "bg-amber-500 border-amber-500"
-                            : "border-gray-300"
-                        }`}>
-                          {excluded && <Check className="h-3 w-3 text-white" />}
-                        </div>
-                      </button>
+                      </div>
                     );
                   })}
-                  {getFilteredExclusionItems().length === 0 && (
+                  {getFilteredInclusionItems().length === 0 && (
                     <p className="text-center text-gray-500 py-8 text-sm">
-                      No {exclusionTab} found
+                      No {inclusionTab} found
                     </p>
                   )}
                 </div>
@@ -719,11 +864,11 @@ export function AddRateSheetModal({
             <div className="border-t px-4 py-3 bg-gray-50">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-600">
-                  {totalExclusions} total exclusions
+                  {totalInclusions} total configured
                 </p>
                 <Button
                   type="button"
-                  onClick={() => setShowExclusionPopup(false)}
+                  onClick={() => setShowInclusionPopup(false)}
                   className="bg-teal-500 hover:bg-teal-600 text-white"
                 >
                   Done

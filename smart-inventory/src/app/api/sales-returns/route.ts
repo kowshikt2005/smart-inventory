@@ -103,6 +103,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!body.invoiceId) {
+      return NextResponse.json(
+        { error: 'Invoice is required' },
+        { status: 400 }
+      );
+    }
+
     if (!body.returnDate) {
       return NextResponse.json(
         { error: 'Return date is required' },
@@ -129,25 +136,23 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate invoice if provided
-    if (body.invoiceId) {
-      const invoice = await db.invoice.findUnique({
-        where: { id: body.invoiceId },
-      });
+    // Validate invoice
+    const invoice = await db.invoice.findUnique({
+      where: { id: body.invoiceId },
+    });
 
-      if (!invoice) {
-        return NextResponse.json(
-          { error: 'Invoice not found' },
-          { status: 404 }
-        );
-      }
+    if (!invoice) {
+      return NextResponse.json(
+        { error: 'Invoice not found' },
+        { status: 404 }
+      );
+    }
 
-      if (invoice.customerId !== body.customerId) {
-        return NextResponse.json(
-          { error: 'Invoice does not belong to this customer' },
-          { status: 400 }
-        );
-      }
+    if (invoice.customerId !== body.customerId) {
+      return NextResponse.json(
+        { error: 'Invoice does not belong to this customer' },
+        { status: 400 }
+      );
     }
 
     // Validate all items exist
@@ -203,7 +208,7 @@ export async function POST(request: Request) {
           returnNumber,
           returnDate: new Date(body.returnDate),
           customerId: body.customerId,
-          invoiceId: body.invoiceId || null,
+          invoiceId: body.invoiceId,
           subtotal,
           cgst,
           sgst,
