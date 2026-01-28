@@ -145,13 +145,29 @@ export default function NewSalesReturnPage() {
 
     try {
       setIsLoadingInvoiceItems(true);
+      setError(null);
       const response = await fetch(`/api/sales-invoices/${invoiceId}`);
-      if (response.ok) {
-        const invoice = await response.json();
-        const invoiceItems: InvoiceItem[] = invoice.items || [];
 
-        // Auto-populate all items from the invoice
-        const loadedItems: ReturnItem[] = invoiceItems.map((invItem) => {
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to fetch invoice (${response.status})`);
+      }
+
+      const invoice = await response.json();
+      console.log("Fetched invoice:", invoice); // Debug log
+
+      const invoiceItems: InvoiceItem[] = invoice.items || [];
+      console.log("Invoice items:", invoiceItems); // Debug log
+
+      if (invoiceItems.length === 0) {
+        setReturnItems([]);
+        return;
+      }
+
+      // Auto-populate all items from the invoice
+      const loadedItems: ReturnItem[] = invoiceItems
+        .filter((invItem) => invItem && invItem.item) // Filter out any invalid items
+        .map((invItem) => {
           const baseAmount = Number(invItem.quantity) * Number(invItem.rate);
           const taxAmount = baseAmount * (Number(invItem.taxRate) / 100);
 
@@ -171,10 +187,12 @@ export default function NewSalesReturnPage() {
           };
         });
 
-        setReturnItems(loadedItems);
-      }
+      console.log("Loaded return items:", loadedItems); // Debug log
+      setReturnItems(loadedItems);
     } catch (err) {
       console.error("Error fetching invoice items:", err);
+      setError(err instanceof Error ? err.message : "Failed to load invoice items");
+      setReturnItems([]);
     } finally {
       setIsLoadingInvoiceItems(false);
     }

@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, Loader2, CreditCard, Ban } from "lucide-react";
+import { ArrowLeft, Loader2, Save, Ban } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 
@@ -92,6 +92,7 @@ export default function InvoiceDetailPage() {
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -128,6 +129,33 @@ export default function InvoiceDetailPage() {
     } catch (err) {
       console.error("Error cancelling invoice:", err);
       alert(err instanceof Error ? err.message : "Failed to cancel invoice");
+    }
+  };
+
+  const handleSaveInvoice = async () => {
+    if (!invoice) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/sales-invoices/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(invoice),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to save invoice");
+      }
+
+      alert("Invoice saved successfully!");
+    } catch (err) {
+      console.error("Error saving invoice:", err);
+      alert(err instanceof Error ? err.message : "Failed to save invoice");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -209,15 +237,16 @@ export default function InvoiceDetailPage() {
                 invoice.effectiveStatus !== "CANCELLED" && (
                   <>
                     <Button
-                      onClick={() =>
-                        router.push(
-                          `/sales/receipts/new?customerId=${invoice.customer.id}`
-                        )
-                      }
+                      onClick={handleSaveInvoice}
+                      disabled={isSaving}
                       className="bg-teal-500 hover:bg-teal-600"
                     >
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Record Payment
+                      {isSaving ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-2" />
+                      )}
+                      Save Invoice
                     </Button>
                     <Button
                       onClick={handleCancel}
