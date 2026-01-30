@@ -63,11 +63,11 @@ const ROLE_PERMISSIONS = {
 export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const [salesOpen, setSalesOpen] = useState(true);
-  const [purchasesOpen, setPurchasesOpen] = useState(true);
-  const [mastersOpen, setMastersOpen] = useState(true);
+  const [salesOpen, setSalesOpen] = useState(false);
+  const [purchasesOpen, setPurchasesOpen] = useState(false);
+  const [mastersOpen, setMastersOpen] = useState(false);
   const [itemsOpen, setItemsOpen] = useState(false);
-  const [ledgerOpen, setLedgerOpen] = useState(true);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
 
   // Get user permissions
   const userRole = session?.user?.role || "SALESMAN";

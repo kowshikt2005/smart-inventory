@@ -36,6 +36,7 @@ interface SubBrand {
   id: string;
   name: string;
   brandId: string;
+  discountPercent: number | null;
   brand?: { name: string };
   createdAt: string;
   updatedAt: string;
@@ -49,7 +50,8 @@ export default function SubBrandsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newSubBrand, setNewSubBrand] = useState({ name: "", brandId: "" });
+  const [editingSubBrand, setEditingSubBrand] = useState<SubBrand | null>(null);
+  const [newSubBrand, setNewSubBrand] = useState({ name: "", brandId: "", discountPercent: "" });
   const itemsPerPage = 10;
 
   const fetchBrands = useCallback(async () => {
@@ -108,15 +110,20 @@ export default function SubBrandsPage() {
 
   const handleAddSubBrand = async () => {
     try {
+      const payload = {
+        name: newSubBrand.name,
+        discountPercent: newSubBrand.discountPercent ? parseFloat(newSubBrand.discountPercent) : null,
+      };
+
       const response = await fetch(`/api/brands/${newSubBrand.brandId}/sub-brands`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newSubBrand.name }),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
         setShowAddModal(false);
-        setNewSubBrand({ name: "", brandId: "" });
+        setNewSubBrand({ name: "", brandId: "", discountPercent: "" });
         fetchSubBrands();
       } else {
         const data = await response.json();
@@ -125,6 +132,36 @@ export default function SubBrandsPage() {
     } catch (error) {
       console.error("Error creating sub-brand:", error);
       alert("Failed to create sub-brand");
+    }
+  };
+
+  const handleUpdateSubBrand = async () => {
+    if (!editingSubBrand) return;
+
+    try {
+      const payload = {
+        name: newSubBrand.name,
+        discountPercent: newSubBrand.discountPercent ? parseFloat(newSubBrand.discountPercent) : null,
+      };
+
+      const response = await fetch(`/api/sub-brands/${editingSubBrand.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        setShowAddModal(false);
+        setEditingSubBrand(null);
+        setNewSubBrand({ name: "", brandId: "", discountPercent: "" });
+        fetchSubBrands();
+      } else {
+        const data = await response.json();
+        alert(data.error || "Failed to update sub-brand");
+      }
+    } catch (error) {
+      console.error("Error updating sub-brand:", error);
+      alert("Failed to update sub-brand");
     }
   };
 
@@ -155,9 +192,14 @@ export default function SubBrandsPage() {
     setCurrentPage(1);
   };
 
-  const handleEditSubBrand = (subBrandId: string) => {
-    console.log("Edit sub-brand:", subBrandId);
-    // TODO: Open edit modal
+  const handleEditSubBrand = (subBrand: SubBrand) => {
+    setEditingSubBrand(subBrand);
+    setNewSubBrand({
+      name: subBrand.name,
+      brandId: subBrand.brandId,
+      discountPercent: subBrand.discountPercent ? String(subBrand.discountPercent) : "",
+    });
+    setShowAddModal(true);
   };
 
   return (
@@ -216,6 +258,9 @@ export default function SubBrandsPage() {
                 <TableHead scope="col" className="font-semibold">
                   Parent Brand
                 </TableHead>
+                <TableHead scope="col" className="font-semibold text-center">
+                  Discount %
+                </TableHead>
                 <TableHead scope="col" className="font-semibold">
                   Created Date
                 </TableHead>
@@ -228,7 +273,7 @@ export default function SubBrandsPage() {
               {isLoading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={4}
+                    colSpan={5}
                     className="text-center text-gray-500 py-12"
                   >
                     <div className="flex items-center justify-center gap-2">
@@ -240,7 +285,7 @@ export default function SubBrandsPage() {
               ) : error ? (
                 <TableRow>
                   <TableCell
-                    colSpan={4}
+                    colSpan={5}
                     className="text-center text-red-600 py-8"
                   >
                     <div className="space-y-2">
@@ -254,7 +299,7 @@ export default function SubBrandsPage() {
               ) : paginatedSubBrands.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={4}
+                    colSpan={5}
                     className="text-center text-gray-500 py-8"
                   >
                     {searchQuery
@@ -267,6 +312,13 @@ export default function SubBrandsPage() {
                   <TableRow key={subBrand.id}>
                     <TableCell className="font-medium">{subBrand.name}</TableCell>
                     <TableCell>{subBrand.brand?.name}</TableCell>
+                    <TableCell className="text-center">
+                      {subBrand.discountPercent !== null ? (
+                        <span className="text-green-600 font-medium">{Number(subBrand.discountPercent)}%</span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {new Date(subBrand.createdAt).toLocaleDateString()}
                     </TableCell>
@@ -284,7 +336,7 @@ export default function SubBrandsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => handleEditSubBrand(subBrand.id)}
+                            onClick={() => handleEditSubBrand(subBrand)}
                           >
                             <Edit className="h-4 w-4 mr-2" />
                             Edit Sub-brand
@@ -333,27 +385,31 @@ export default function SubBrandsPage() {
           </div>
         )}
 
-        {/* Add Sub-brand Modal */}
+        {/* Add/Edit Sub-brand Modal */}
         {showAddModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">Add New Sub-brand</h2>
+                <h2 className="text-xl font-bold">{editingSubBrand ? "Edit Sub-brand" : "Add New Sub-brand"}</h2>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditingSubBrand(null);
+                    setNewSubBrand({ name: "", brandId: "", discountPercent: "" });
+                  }}
                 >
                   <X className="h-4 w-4" />
                 </Button>
               </div>
               <p className="text-gray-600 mb-4">
-                Enter the details of the new sub-brand below.
+                {editingSubBrand ? "Update the sub-brand details below." : "Enter the details of the new sub-brand below."}
               </p>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Name</label>
+                  <label className="block text-sm font-medium mb-1">Name <span className="text-red-500">*</span></label>
                   <Input
                     value={newSubBrand.name}
                     onChange={(e) =>
@@ -365,35 +421,67 @@ export default function SubBrandsPage() {
 
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    Parent Brand
+                    Parent Brand <span className="text-red-500">*</span>
                   </label>
-                  <Select
-                    value={newSubBrand.brandId || undefined}
-                    onValueChange={(value) =>
-                      setNewSubBrand({ ...newSubBrand, brandId: value || "" })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a parent brand" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {brands.map((brand) => (
-                        <SelectItem key={brand.id} value={brand.id}>
-                          {brand.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {editingSubBrand ? (
+                    <div className="p-2 bg-gray-100 rounded border text-gray-700">
+                      {editingSubBrand.brand?.name || "Unknown Brand"}
+                    </div>
+                  ) : (
+                    <Select
+                      value={newSubBrand.brandId || ""}
+                      onValueChange={(value) =>
+                        setNewSubBrand({ ...newSubBrand, brandId: value || "" })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a parent brand" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {brands.map((brand) => (
+                          <SelectItem key={brand.id} value={brand.id}>
+                            {brand.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Discount Percentage (%)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={newSubBrand.discountPercent}
+                    onChange={(e) => setNewSubBrand({ ...newSubBrand, discountPercent: e.target.value })}
+                    placeholder="e.g., 10"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    This discount will apply to all items under this sub-brand (unless overridden at item level)
+                  </p>
                 </div>
               </div>
 
-              <div className="flex justify-end mt-6">
+              <div className="flex justify-end gap-2 mt-6">
                 <Button
-                  onClick={handleAddSubBrand}
-                  className="bg-teal-500 hover:bg-teal-600"
-                  disabled={!newSubBrand.name.trim() || !newSubBrand.brandId}
+                  variant="outline"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditingSubBrand(null);
+                    setNewSubBrand({ name: "", brandId: "", discountPercent: "" });
+                  }}
                 >
-                  Save Sub-brand
+                  Cancel
+                </Button>
+                <Button
+                  onClick={editingSubBrand ? handleUpdateSubBrand : handleAddSubBrand}
+                  className="bg-teal-500 hover:bg-teal-600"
+                  disabled={!newSubBrand.name.trim() || (!editingSubBrand && !newSubBrand.brandId)}
+                >
+                  {editingSubBrand ? "Update Sub-brand" : "Save Sub-brand"}
                 </Button>
               </div>
             </div>

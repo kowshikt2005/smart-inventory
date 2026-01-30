@@ -308,13 +308,14 @@ export function AddItemModal({
                   Brand
                 </label>
                 <Select
-                  value={formData.brandId || undefined}
-                  onValueChange={(value) => handleSelectChange("brandId", value || "")}
+                  value={formData.brandId || ""}
+                  onValueChange={(value) => handleSelectChange("brandId", value === "__none__" ? "" : value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a brand" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
                     {brands.map((brand: Brand) => (
                       <SelectItem key={brand.id} value={brand.id}>
                         {brand.name}
@@ -328,14 +329,15 @@ export function AddItemModal({
                   Sub-brand
                 </label>
                 <Select
-                  value={formData.subBrandId || undefined}
-                  onValueChange={(value) => handleSelectChange("subBrandId", value || "")}
+                  value={formData.subBrandId || ""}
+                  onValueChange={(value) => handleSelectChange("subBrandId", value === "__none__" ? "" : value)}
                   disabled={!formData.brandId}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={formData.brandId ? "Select a sub-brand" : "Select brand first"} />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
                     {filteredSubBrands.map((subBrand: SubBrand) => (
                       <SelectItem key={subBrand.id} value={subBrand.id}>
                         {subBrand.name}

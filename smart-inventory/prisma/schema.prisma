@@ -223,10 +223,11 @@ model Vendor {
 // ============================================
 
 model Brand {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(uuid())
+  name            String   @unique
+  discountPercent Decimal? @db.Decimal(5, 2) // Brand-level discount percentage
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // Relations
   items     Item[]
@@ -236,11 +237,12 @@ model Brand {
 }
 
 model SubBrand {
-  id        String   @id @default(uuid())
-  name      String
-  brandId   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(uuid())
+  name            String
+  brandId         String
+  discountPercent Decimal? @db.Decimal(5, 2) // Sub-brand-level discount percentage
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // Relations
   brand Brand  @relation(fields: [brandId], references: [id], onDelete: Cascade)

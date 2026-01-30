@@ -76,6 +76,7 @@ export async function POST(request: Request) {
     const brand = await db.brand.create({
       data: {
         name: body.name,
+        discountPercent: body.discountPercent !== undefined ? parseFloat(body.discountPercent) : null,
       },
     });
 

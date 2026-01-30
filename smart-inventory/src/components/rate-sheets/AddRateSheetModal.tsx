@@ -107,8 +107,8 @@ export function AddRateSheetModal({
     items: [],
   });
 
-  // Default discount for quick add
-  const [defaultDiscount, setDefaultDiscount] = useState("30");
+  // Discount input for adding items (not a "default" - just for convenience)
+  const [discountInput, setDiscountInput] = useState("30");
 
   // Inclusion popup
   const [showInclusionPopup, setShowInclusionPopup] = useState(false);
@@ -279,7 +279,7 @@ export function AddRateSheetModal({
 
   // Toggle inclusion with default discount
   const toggleInclusion = (id: string) => {
-    const discount = parseFloat(defaultDiscount) || 0;
+    const discount = parseFloat(discountInput) || 0;
 
     if (inclusionTab === "brands") {
       setInclusionDiscounts(prev => {
@@ -698,17 +698,17 @@ export function AddRateSheetModal({
               </button>
             </div>
 
-            {/* Default discount input */}
+            {/* Quick discount input */}
             <div className="px-4 py-3 border-b bg-teal-50">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-teal-800">Default discount for new items:</span>
+                <span className="text-sm font-medium text-teal-800">Discount % for new selections:</span>
                 <div className="relative w-20">
                   <Input
                     type="number"
                     min="0"
                     max="100"
                     step="0.01"
-                    value={defaultDiscount}
+                    value={discountInput}
                     onChange={(e) => setDefaultDiscount(e.target.value)}
                     className="pr-6 h-8 text-sm"
                   />

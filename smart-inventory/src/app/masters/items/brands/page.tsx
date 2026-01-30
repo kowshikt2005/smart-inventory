@@ -23,6 +23,7 @@ import { useState, useMemo, useEffect } from "react";
 interface Brand {
   id: string;
   name: string;
+  discountPercent: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,7 +35,8 @@ export default function BrandsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newBrand, setNewBrand] = useState({ name: "" });
+  const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
+  const [newBrand, setNewBrand] = useState({ name: "", discountPercent: "" });
   const itemsPerPage = 10;
 
   // Fetch brands from API
@@ -65,15 +67,20 @@ export default function BrandsPage() {
 
   const handleAddBrand = async () => {
     try {
+      const payload = {
+        name: newBrand.name,
+        discountPercent: newBrand.discountPercent ? parseFloat(newBrand.discountPercent) : null,
+      };
+
       const response = await fetch("/api/brands", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newBrand),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
         setShowAddModal(false);
-        setNewBrand({ name: "" });
+        setNewBrand({ name: "", discountPercent: "" });
         fetchBrands();
       } else {
         const data = await response.json();
@@ -82,6 +89,36 @@ export default function BrandsPage() {
     } catch (error) {
       console.error("Error creating brand:", error);
       alert("Failed to create brand");
+    }
+  };
+
+  const handleUpdateBrand = async () => {
+    if (!editingBrand) return;
+
+    try {
+      const payload = {
+        name: newBrand.name,
+        discountPercent: newBrand.discountPercent ? parseFloat(newBrand.discountPercent) : null,
+      };
+
+      const response = await fetch(`/api/brands/${editingBrand.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        setShowAddModal(false);
+        setEditingBrand(null);
+        setNewBrand({ name: "", discountPercent: "" });
+        fetchBrands();
+      } else {
+        const data = await response.json();
+        alert(data.error || "Failed to update brand");
+      }
+    } catch (error) {
+      console.error("Error updating brand:", error);
+      alert("Failed to update brand");
     }
   };
 
@@ -110,9 +147,13 @@ export default function BrandsPage() {
     setCurrentPage(1);
   };
 
-  const handleEditBrand = (brandId: string) => {
-    console.log("Edit brand:", brandId);
-    // TODO: Open edit modal
+  const handleEditBrand = (brand: Brand) => {
+    setEditingBrand(brand);
+    setNewBrand({
+      name: brand.name,
+      discountPercent: brand.discountPercent ? String(brand.discountPercent) : "",
+    });
+    setShowAddModal(true);
   };
 
   return (
@@ -168,6 +209,9 @@ export default function BrandsPage() {
                 <TableHead scope="col" className="font-semibold">
                   Name
                 </TableHead>
+                <TableHead scope="col" className="font-semibold text-center">
+                  Discount %
+                </TableHead>
                 <TableHead scope="col" className="font-semibold">
                   Created Date
                 </TableHead>
@@ -180,7 +224,7 @@ export default function BrandsPage() {
               {isLoading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={3}
+                    colSpan={4}
                     className="text-center text-gray-500 py-12"
                   >
                     <div className="flex items-center justify-center gap-2">
@@ -192,7 +236,7 @@ export default function BrandsPage() {
               ) : error ? (
                 <TableRow>
                   <TableCell
-                    colSpan={3}
+                    colSpan={4}
                     className="text-center text-red-600 py-8"
                   >
                     <div className="space-y-2">
@@ -206,7 +250,7 @@ export default function BrandsPage() {
               ) : paginatedBrands.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={3}
+                    colSpan={4}
                     className="text-center text-gray-500 py-8"
                   >
                     {searchQuery
@@ -218,6 +262,13 @@ export default function BrandsPage() {
                 paginatedBrands.map((brand) => (
                   <TableRow key={brand.id}>
                     <TableCell className="font-medium">{brand.name}</TableCell>
+                    <TableCell className="text-center">
+                      {brand.discountPercent !== null ? (
+                        <span className="text-green-600 font-medium">{Number(brand.discountPercent)}%</span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {new Date(brand.createdAt).toLocaleDateString()}
                     </TableCell>
@@ -235,7 +286,7 @@ export default function BrandsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => handleEditBrand(brand.id)}
+                            onClick={() => handleEditBrand(brand)}
                           >
                             <Edit className="h-4 w-4 mr-2" />
                             Edit Brand
@@ -284,42 +335,71 @@ export default function BrandsPage() {
           </div>
         )}
 
-        {/* Add Brand Modal */}
+        {/* Add/Edit Brand Modal */}
         {showAddModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">Add New Brand</h2>
+                <h2 className="text-xl font-bold">{editingBrand ? "Edit Brand" : "Add New Brand"}</h2>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditingBrand(null);
+                    setNewBrand({ name: "", discountPercent: "" });
+                  }}
                 >
                   <X className="h-4 w-4" />
                 </Button>
               </div>
               <p className="text-gray-600 mb-4">
-                Enter the name of the new brand below. Click save when you&apos;re done.
+                {editingBrand ? "Update the brand details below." : "Enter the name of the new brand below. Click save when you're done."}
               </p>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Name</label>
+                  <label className="block text-sm font-medium mb-1">Name <span className="text-red-500">*</span></label>
                   <Input
                     value={newBrand.name}
-                    onChange={(e) => setNewBrand({ name: e.target.value })}
+                    onChange={(e) => setNewBrand({ ...newBrand, name: e.target.value })}
                     placeholder="Enter brand name"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Discount Percentage (%)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={newBrand.discountPercent}
+                    onChange={(e) => setNewBrand({ ...newBrand, discountPercent: e.target.value })}
+                    placeholder="e.g., 10"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    This discount will apply to all items under this brand (unless overridden at sub-brand or item level)
+                  </p>
+                </div>
               </div>
 
-              <div className="flex justify-end mt-6">
+              <div className="flex justify-end gap-2 mt-6">
                 <Button
-                  onClick={handleAddBrand}
+                  variant="outline"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditingBrand(null);
+                    setNewBrand({ name: "", discountPercent: "" });
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={editingBrand ? handleUpdateBrand : handleAddBrand}
                   className="bg-teal-500 hover:bg-teal-600"
                   disabled={!newBrand.name.trim()}
                 >
-                  Save Brand
+                  {editingBrand ? "Update Brand" : "Save Brand"}
                 </Button>
               </div>
             </div>
