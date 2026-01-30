@@ -273,6 +273,7 @@ export async function POST(request: Request) {
         data: {
           invoiceNumber,
           invoiceDate,
+          salesOrderId: salesOrder.id, // Link to sales order for duplicate detection
           orderNumber: salesOrder.orderNumber, // Store for reference
           customerId: salesOrder.customerId,
           subtotal,
@@ -388,7 +389,9 @@ export async function POST(request: Request) {
       });
 
       // Delete the sales order (cascade will delete items and status history)
-      await tx.salesOrder.delete({
+      // Use deleteMany instead of delete to handle race conditions gracefully
+      // (if another request already deleted this order, deleteMany won't throw)
+      await tx.salesOrder.deleteMany({
         where: { id: salesOrder.id },
       });
 
