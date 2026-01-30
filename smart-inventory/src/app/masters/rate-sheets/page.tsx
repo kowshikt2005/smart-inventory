@@ -46,6 +46,17 @@ interface Customer {
   state: string;
 }
 
+interface InclusionDiscount {
+  id: string;
+  discountPercent: number;
+}
+
+interface InclusionDiscounts {
+  brands: InclusionDiscount[];
+  subBrands: InclusionDiscount[];
+  items: InclusionDiscount[];
+}
+
 interface RateSheet {
   id: string;
   name: string;
@@ -56,6 +67,8 @@ interface RateSheet {
   isActive: boolean;
   createdAt: string;
   customer: Customer;
+  useInclusionModel?: boolean;
+  inclusionDiscounts?: InclusionDiscounts;
   excludedItemIds?: string[];
   excludedBrandIds?: string[];
   excludedSubBrandIds?: string[];
@@ -169,6 +182,16 @@ export default function RateSheetsPage() {
     return itemExclusions + brandExclusions + subBrandExclusions;
   };
 
+  // Count total inclusions
+  const getTotalInclusions = (rs: RateSheet) => {
+    if (!rs.inclusionDiscounts) return 0;
+    return (
+      (rs.inclusionDiscounts.brands?.length || 0) +
+      (rs.inclusionDiscounts.subBrands?.length || 0) +
+      (rs.inclusionDiscounts.items?.length || 0)
+    );
+  };
+
   const rateSheets = data?.rateSheets || [];
   const validCount = rateSheets.filter((rs: RateSheet) => isRateSheetValid(rs)).length;
 
@@ -217,7 +240,11 @@ export default function RateSheetsPage() {
               <div>
                 <p className="text-sm text-gray-600">Customers with Discounts</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {rateSheets.filter((rs: RateSheet) => Number(rs.discountPercent) > 0).length}
+                  {rateSheets.filter((rs: RateSheet) =>
+                    rs.useInclusionModel
+                      ? getTotalInclusions(rs) > 0
+                      : Number(rs.discountPercent) > 0
+                  ).length}
                 </p>
               </div>
             </div>
@@ -369,7 +396,16 @@ export default function RateSheetsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        {Number(rateSheet.discountPercent) > 0 ? (
+                        {rateSheet.useInclusionModel ? (
+                          getTotalInclusions(rateSheet) > 0 ? (
+                            <Badge className="bg-teal-100 text-teal-700">
+                              <Percent className="h-3 w-3 mr-1" />
+                              {getTotalInclusions(rateSheet)} items configured
+                            </Badge>
+                          ) : (
+                            <span className="text-gray-400">No items configured</span>
+                          )
+                        ) : Number(rateSheet.discountPercent) > 0 ? (
                           <Badge className="bg-green-100 text-green-700">
                             <Percent className="h-3 w-3 mr-1" />
                             {rateSheet.discountPercent}% off

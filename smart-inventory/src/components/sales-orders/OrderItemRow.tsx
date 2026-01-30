@@ -70,15 +70,14 @@ export function OrderItemRow({
 
   const hasStockWarning = selectedItem && item.quantity > availableStock;
 
-  // Calculate discount percentage from MRP and actual Rate
-  // MRP is the base price for rate sheet customers, so discount is shown relative to MRP
-  const calculatedDiscountPercent = useMemo(() => {
-    if (!selectedItem || !item.rate) return null;
-    const mrp = Number(selectedItem.mrp);
-    const rate = Number(item.rate);
-    if (mrp <= 0 || rate >= mrp) return null;
-    return ((mrp - rate) / mrp) * 100;
-  }, [selectedItem, item.rate]);
+  // Use the discount from rate sheet - only show if explicitly set
+  const displayDiscountPercent = useMemo(() => {
+    // Only show discount if it's explicitly set from rate sheet
+    if (item.discountPercent && item.discountPercent > 0) {
+      return item.discountPercent;
+    }
+    return null; // No discount
+  }, [item.discountPercent]);
 
   // Handle item selection
   const handleItemSelect = (selectedItemData: Item) => {
@@ -197,10 +196,10 @@ export function OrderItemRow({
           : "-"}
       </td>
 
-      {/* Discount Percent - Calculated from MRP and Rate */}
+      {/* Discount Percent - From rate sheet or calculated */}
       <td className="px-3 py-2 text-sm text-green-600 font-medium text-right">
-        {calculatedDiscountPercent !== null
-          ? `${calculatedDiscountPercent.toFixed(2)}%`
+        {displayDiscountPercent !== null && displayDiscountPercent > 0
+          ? `${displayDiscountPercent.toFixed(2)}%`
           : "-"}
       </td>
 

@@ -788,7 +788,15 @@ function NewSalesOrderPageContent() {
                             </p>
                             {selectedCustomer.rateSheet?.isActive && (
                               <p className="text-xs text-teal-600 mt-1">
-                                Rate Sheet Applied: {selectedCustomer.rateSheet.discountPercent}% discount
+                                {selectedCustomer.rateSheet.useInclusionModel ? (
+                                  <>
+                                    Rate Sheet Applied: Custom discounts configured
+                                  </>
+                                ) : (
+                                  <>
+                                    Rate Sheet Applied: {selectedCustomer.rateSheet.discountPercent}% discount
+                                  </>
+                                )}
                               </p>
                             )}
                           </div>

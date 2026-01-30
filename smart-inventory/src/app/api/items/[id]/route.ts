@@ -69,44 +69,43 @@ export async function PUT(
       }
     }
 
-    // Update item and inventory
-    const updatedItem = await db.$transaction(async (tx) => {
-      // Update the item with all three price fields
-      const item = await tx.item.update({
-        where: { id },
-        data: {
-          itemCode: body.itemCode || existingItem.itemCode,
-          name: body.name || existingItem.name,
-          description: body.description !== undefined ? body.description : existingItem.description,
-          brandId: body.brandId !== undefined ? body.brandId : existingItem.brandId,
-          subBrandId: body.subBrandId !== undefined ? body.subBrandId : existingItem.subBrandId,
-          hsnCode: body.hsnCode !== undefined ? body.hsnCode : existingItem.hsnCode,
-          gstRate: body.gstRate !== undefined ? body.gstRate : existingItem.gstRate,
-          purchasePrice: body.purchasePrice !== undefined ? body.purchasePrice : existingItem.purchasePrice,
-          mrp: body.mrp !== undefined ? body.mrp : existingItem.mrp,
-          sellingPrice: body.sellingPrice !== undefined ? body.sellingPrice : existingItem.sellingPrice,
-          minStock: body.minStock !== undefined ? body.minStock : existingItem.minStock,
-          unit: body.unit || existingItem.unit,
-          isActive: body.isActive !== undefined ? body.isActive : existingItem.isActive,
-        },
-        include: {
-          brand: true,
-          subBrand: true,
-        },
-      });
+    // Update item
+    const updatedItem = await db.item.update({
+      where: { id },
+      data: {
+        itemCode: body.itemCode || existingItem.itemCode,
+        name: body.name || existingItem.name,
+        description: body.description !== undefined ? body.description : existingItem.description,
+        brandId: body.brandId !== undefined ? body.brandId : existingItem.brandId,
+        subBrandId: body.subBrandId !== undefined ? body.subBrandId : existingItem.subBrandId,
+        hsnCode: body.hsnCode !== undefined ? body.hsnCode : existingItem.hsnCode,
+        gstRate: body.gstRate !== undefined ? body.gstRate : existingItem.gstRate,
+        purchasePrice: body.purchasePrice !== undefined ? body.purchasePrice : existingItem.purchasePrice,
+        mrp: body.mrp !== undefined ? body.mrp : existingItem.mrp,
+        sellingPrice: body.sellingPrice !== undefined ? body.sellingPrice : existingItem.sellingPrice,
+        minStock: body.minStock !== undefined ? body.minStock : existingItem.minStock,
+        unit: body.unit || existingItem.unit,
+        isActive: body.isActive !== undefined ? body.isActive : existingItem.isActive,
+      },
+      include: {
+        brand: true,
+        subBrand: true,
+      },
+    });
 
-      // Update inventory min stock level if changed
-      if (body.minStock !== undefined) {
-        await tx.inventory.update({
+    // Update inventory min stock level if changed (separate query to avoid transaction issues)
+    if (body.minStock !== undefined) {
+      try {
+        await db.inventory.update({
           where: { itemId: id },
           data: {
             minStockLevel: body.minStock,
           },
         });
+      } catch (invError) {
+        console.warn('Failed to update inventory minStockLevel, but item was updated:', invError);
       }
-
-      return item;
-    });
+    }
 
     return NextResponse.json(updatedItem);
   } catch (error: any) {

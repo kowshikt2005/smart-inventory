@@ -9,7 +9,6 @@ import {
   Loader2,
   Search,
   Calendar,
-  Percent,
   Settings2,
   Check,
 } from "lucide-react";
@@ -107,8 +106,6 @@ export function AddRateSheetModal({
     items: [],
   });
 
-  // Discount input for adding items (not a "default" - just for convenience)
-  const [discountInput, setDiscountInput] = useState("30");
 
   // Inclusion popup
   const [showInclusionPopup, setShowInclusionPopup] = useState(false);
@@ -212,7 +209,6 @@ export function AddRateSheetModal({
     setValidTo("");
     setIsActive(true);
     setInclusionDiscounts({ brands: [], subBrands: [], items: [] });
-    setDefaultDiscount("30");
     setError(null);
     setShowInclusionPopup(false);
     setInclusionSearch("");
@@ -277,9 +273,9 @@ export function AddRateSheetModal({
     return getDiscount(id) !== null;
   };
 
-  // Toggle inclusion with default discount
+  // Toggle inclusion with 0% default discount
   const toggleInclusion = (id: string) => {
-    const discount = parseFloat(discountInput) || 0;
+    const discount = 0;
 
     if (inclusionTab === "brands") {
       setInclusionDiscounts(prev => {
@@ -686,7 +682,7 @@ export function AddRateSheetModal({
             className="absolute inset-0 bg-black/30"
             onClick={() => setShowInclusionPopup(false)}
           />
-          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md max-h-[80vh] overflow-hidden">
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
             {/* Popup Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
               <h3 className="text-lg font-semibold">Configure Discounts</h3>
@@ -696,25 +692,6 @@ export function AddRateSheetModal({
               >
                 <X className="h-5 w-5" />
               </button>
-            </div>
-
-            {/* Quick discount input */}
-            <div className="px-4 py-3 border-b bg-teal-50">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-teal-800">Discount % for new selections:</span>
-                <div className="relative w-20">
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={discountInput}
-                    onChange={(e) => setDefaultDiscount(e.target.value)}
-                    className="pr-6 h-8 text-sm"
-                  />
-                  <Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
-                </div>
-              </div>
             </div>
 
             {/* Tabs */}
@@ -784,7 +761,7 @@ export function AddRateSheetModal({
             </div>
 
             {/* List */}
-            <div className="overflow-y-auto max-h-[400px]">
+            <div className="overflow-y-auto max-h-[calc(90vh-200px)]">
               {isLoadingData ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
@@ -800,23 +777,24 @@ export function AddRateSheetModal({
                     return (
                       <div
                         key={id}
-                        className={`px-4 py-3 ${included ? "bg-teal-50" : ""}`}
+                        className={`px-4 py-3 border-b last:border-b-0 ${included ? "bg-teal-50" : "hover:bg-gray-50"}`}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-start gap-4">
+                          {/* Checkbox and Name */}
                           <button
                             type="button"
                             onClick={() => toggleInclusion(id)}
-                            className="flex items-center gap-3 text-left flex-1"
+                            className="flex items-start gap-3 text-left flex-1 min-w-0"
                           >
-                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                            <div className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
                               included
                                 ? "bg-teal-500 border-teal-500"
                                 : "border-gray-300"
                             }`}>
                               {included && <Check className="h-3 w-3 text-white" />}
                             </div>
-                            <div>
-                              <p className="font-medium text-sm">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-sm truncate">
                                 {itemData.name}
                               </p>
                               {"itemCode" in itemData && (
@@ -832,8 +810,10 @@ export function AddRateSheetModal({
                               )}
                             </div>
                           </button>
+
+                          {/* Discount Controls */}
                           {included && (
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 flex-shrink-0">
                               <Input
                                 type="number"
                                 min="0"
@@ -843,8 +823,10 @@ export function AddRateSheetModal({
                                 onChange={(e) => updateDiscount(id, parseFloat(e.target.value) || 0)}
                                 className="w-20 h-8 text-sm text-right"
                                 onClick={(e) => e.stopPropagation()}
+                                onFocus={(e) => e.target.select()}
+                                placeholder="0.00"
                               />
-                              <span className="text-sm text-gray-500">%</span>
+                              <span className="text-sm text-gray-500 font-medium">%</span>
                             </div>
                           )}
                         </div>
