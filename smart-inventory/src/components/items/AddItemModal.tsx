@@ -89,11 +89,12 @@ export function AddItemModal({
         brandId: editItem.brand?.id || "",
         subBrandId: editItem.subBrand?.id || "",
         hsnCode: editItem.hsnCode || "",
-        gstRate: String(editItem.gstRate) || "18",
-        purchasePrice: String(editItem.purchasePrice) || "0",
-        mrp: String(editItem.mrp) || "0",
-        sellingPrice: String(editItem.sellingPrice) || "0",
-        minStock: String(editItem.inventory?.minStockLevel || 0),
+        // Use nullish coalescing to handle 0 values correctly
+        gstRate: editItem.gstRate !== undefined && editItem.gstRate !== null ? String(editItem.gstRate) : "18",
+        purchasePrice: editItem.purchasePrice !== undefined && editItem.purchasePrice !== null ? String(editItem.purchasePrice) : "0",
+        mrp: editItem.mrp !== undefined && editItem.mrp !== null ? String(editItem.mrp) : "0",
+        sellingPrice: editItem.sellingPrice !== undefined && editItem.sellingPrice !== null ? String(editItem.sellingPrice) : "0",
+        minStock: String(editItem.inventory?.minStockLevel ?? 0),
         unit: editItem.unit || "PCS",
       });
     } else if (!editItem && isOpen) {
@@ -121,15 +122,17 @@ export function AddItemModal({
     return subBrands.filter((sb: SubBrand) => sb.brandId === formData.brandId);
   }, [formData.brandId, subBrandsData]);
 
-  // Reset sub-brand when brand changes
+  // Reset sub-brand when brand changes (but only if sub-brands data is loaded)
+  // This prevents resetting subBrandId during initial form population when editing
   useEffect(() => {
-    if (formData.brandId && formData.subBrandId) {
+    // Only run this check if subBrandsData is loaded and there's an actual brand change
+    if (subBrandsData && formData.brandId && formData.subBrandId) {
       const isValid = filteredSubBrands.find((sb: SubBrand) => sb.id === formData.subBrandId);
       if (!isValid) {
         setFormData(prev => ({ ...prev, subBrandId: "" }));
       }
     }
-  }, [formData.brandId, formData.subBrandId, filteredSubBrands]);
+  }, [formData.brandId, formData.subBrandId, filteredSubBrands, subBrandsData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -534,7 +537,7 @@ export function AddItemModal({
               disabled={isSubmitting}
               className="bg-teal-500 hover:bg-teal-600 text-white"
             >
-              {isSubmitting ? "Creating..." : "Create Item"}
+              {isSubmitting ? (isEditing ? "Updating..." : "Creating...") : (isEditing ? "Update Item" : "Create Item")}
             </Button>
           </div>
         </form>

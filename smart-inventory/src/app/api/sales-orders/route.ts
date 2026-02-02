@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { generateOrderNumber, calculateLineItem, calculateOrderTotals, SYSTEM_USER_ID } from '@/lib/order-utils';
+import { generateOrderNumber, calculateLineItemV2, calculateOrderTotals, SYSTEM_USER_ID } from '@/lib/order-utils';
 import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
 
 // GET /api/sales-orders - Get all sales orders with filtering
@@ -330,12 +330,12 @@ export async function POST(request: Request) {
       // Generate order number
       const orderNumber = await generateOrderNumber(tx as any);
 
-      // Calculate item totals
+      // Calculate item totals using V2 which handles both inclusive and exclusive GST
       const orderItems = body.items.map((orderItem: any) => {
         const item = items.find((i) => i.id === orderItem.itemId)!;
         const taxRate = Number(item.gstRate);
         const discountPercent = orderItem.discountPercent || 0;
-        const { amount, taxAmount } = calculateLineItem(
+        const { amount, taxAmount } = calculateLineItemV2(
           orderItem.quantity,
           orderItem.rate,
           taxRate,

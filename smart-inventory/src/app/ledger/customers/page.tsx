@@ -258,26 +258,26 @@ export default function CustomerLedgerPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <p className="text-sm text-gray-600">Opening Balance</p>
-              <p className="text-xl font-bold text-gray-900">
-                {formatCurrency(summary.openingBalance)}
+              <p className={`text-xl font-bold ${summary.openingBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {formatCurrency(summary.openingBalance)} {summary.openingBalance >= 0 ? 'Dr' : 'Cr'}
               </p>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <p className="text-sm text-gray-600">Total Debit</p>
-              <p className="text-xl font-bold text-blue-600">
+              <p className="text-sm text-gray-600">Total Debit (Dr)</p>
+              <p className="text-xl font-bold text-red-600">
                 {formatCurrency(summary.totalDebit)}
               </p>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <p className="text-sm text-gray-600">Total Credit</p>
+              <p className="text-sm text-gray-600">Total Credit (Cr)</p>
               <p className="text-xl font-bold text-green-600">
                 {formatCurrency(summary.totalCredit)}
               </p>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <p className="text-sm text-gray-600">Closing Balance</p>
-              <p className="text-xl font-bold text-gray-900">
-                {formatCurrency(summary.closingBalance)}
+              <p className={`text-xl font-bold ${summary.closingBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {formatCurrency(summary.closingBalance)} {summary.closingBalance >= 0 ? 'Dr' : 'Cr'}
               </p>
             </div>
           </div>
@@ -306,14 +306,13 @@ export default function CustomerLedgerPage() {
                 <TableHeader>
                   <TableRow className="bg-gray-50">
                     <TableHead className="font-semibold">Date</TableHead>
-                    <TableHead className="font-semibold">Time</TableHead>
                     <TableHead className="font-semibold">Particulars</TableHead>
                     <TableHead className="font-semibold">Type</TableHead>
                     <TableHead className="font-semibold text-right">
-                      Debit
+                      Debit (Dr)
                     </TableHead>
                     <TableHead className="font-semibold text-right">
-                      Credit
+                      Credit (Cr)
                     </TableHead>
                     <TableHead className="font-semibold text-right">
                       Balance
@@ -327,15 +326,14 @@ export default function CustomerLedgerPage() {
                       <TableCell className="font-medium">
                         {fromDate ? formatDate(fromDate) : "Opening"}
                       </TableCell>
-                      <TableCell className="text-sm text-gray-500">-</TableCell>
                       <TableCell className="font-medium">
                         Opening Balance
                       </TableCell>
                       <TableCell>-</TableCell>
                       <TableCell className="text-right">-</TableCell>
                       <TableCell className="text-right">-</TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(summary.openingBalance)}
+                      <TableCell className={`text-right font-medium ${summary.openingBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {formatCurrency(summary.openingBalance)} {summary.openingBalance >= 0 ? 'Dr' : 'Cr'}
                       </TableCell>
                     </TableRow>
                   )}
@@ -346,16 +344,13 @@ export default function CustomerLedgerPage() {
                       <TableCell className="text-sm whitespace-nowrap">
                         {formatDateOnly(entry.date)}
                       </TableCell>
-                      <TableCell className="text-sm text-gray-600 whitespace-nowrap">
-                        {formatTimeOnly(entry.createdAt)}
-                      </TableCell>
                       <TableCell>{entry.description}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">
                           {TYPE_LABELS[entry.type] || entry.type}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right text-blue-600">
+                      <TableCell className="text-right text-red-600">
                         {Number(entry.debit) > 0
                           ? formatCurrency(Number(entry.debit))
                           : "-"}
@@ -365,8 +360,8 @@ export default function CustomerLedgerPage() {
                           ? formatCurrency(Number(entry.credit))
                           : "-"}
                       </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(entry.runningBalance)}
+                      <TableCell className={`text-right font-medium ${entry.runningBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {formatCurrency(entry.runningBalance)} {entry.runningBalance >= 0 ? 'Dr' : 'Cr'}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -375,19 +370,18 @@ export default function CustomerLedgerPage() {
                   {summary && (
                     <TableRow className="bg-gray-100 font-semibold">
                       <TableCell>
-                        {toDate ? formatDate(toDate) : "Closing"}
+                        {toDate ? formatDate(toDate) : "Total"}
                       </TableCell>
-                      <TableCell className="text-gray-500">-</TableCell>
                       <TableCell>Closing Balance</TableCell>
                       <TableCell>-</TableCell>
-                      <TableCell className="text-right text-blue-600">
+                      <TableCell className="text-right text-red-600">
                         {formatCurrency(summary.totalDebit)}
                       </TableCell>
                       <TableCell className="text-right text-green-600">
                         {formatCurrency(summary.totalCredit)}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(summary.closingBalance)}
+                      <TableCell className={`text-right ${summary.closingBalance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {formatCurrency(summary.closingBalance)} {summary.closingBalance >= 0 ? 'Dr' : 'Cr'}
                       </TableCell>
                     </TableRow>
                   )}

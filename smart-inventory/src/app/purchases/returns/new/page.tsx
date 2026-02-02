@@ -474,7 +474,7 @@ function NewPurchaseReturnPageContent() {
                           <Input
                             type="number"
                             min="0"
-                            step="0.001"
+                            step="1"
                             value={returnItem.quantity || ""}
                             onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
                             className="w-full text-right"

@@ -113,6 +113,55 @@ export function calculateLineItem(
 }
 
 /**
+ * Calculate line item totals with automatic GST model detection
+ * - If discountPercent > 0: Rate is MRP (tax-inclusive), use inclusive calculation
+ * - If discountPercent == 0: Rate is selling price (tax-exclusive), use exclusive calculation
+ *
+ * This matches the pricing logic:
+ * - No rate sheet → selling price + EXCLUSIVE GST
+ * - Rate sheet with 0% discount → selling price + EXCLUSIVE GST
+ * - Rate sheet with discount > 0 → MRP + INCLUSIVE GST
+ */
+export function calculateLineItemV2(
+  quantity: number,
+  rate: number,
+  taxRate: number,
+  discountPercent: number = 0
+): {
+  amount: number;      // Base amount (excluding tax)
+  taxAmount: number;   // Tax amount
+  totalAmount: number; // Total (amount + tax)
+  isGstInclusive: boolean;
+} {
+  const isGstInclusive = discountPercent > 0;
+
+  if (isGstInclusive) {
+    // MRP-based pricing with discount: Rate includes GST, back-calculate
+    const grossTotal = quantity * rate;
+    const { baseAmount, taxAmount } = calculateTaxInclusive(grossTotal, taxRate);
+
+    return {
+      amount: baseAmount,
+      taxAmount: taxAmount,
+      totalAmount: Math.round(grossTotal * 100) / 100,
+      isGstInclusive: true,
+    };
+  } else {
+    // Selling price: Rate is exclusive, add GST on top
+    const baseAmount = quantity * rate;
+    const { taxAmount } = calculateTax(baseAmount, taxRate);
+    const totalAmount = baseAmount + taxAmount;
+
+    return {
+      amount: Math.round(baseAmount * 100) / 100,
+      taxAmount: taxAmount,
+      totalAmount: Math.round(totalAmount * 100) / 100,
+      isGstInclusive: false,
+    };
+  }
+}
+
+/**
  * Calculate order totals from line items
  */
 export function calculateOrderTotals(

@@ -239,14 +239,25 @@ export function AddRateSheetModal({
   const totalInclusions = inclusionDiscounts.brands.length + inclusionDiscounts.subBrands.length + inclusionDiscounts.items.length;
 
   // Get filtered inclusion items based on tab and search
+  // Smart filtering: sub-brands are filtered to only show those belonging to brands with configured discounts
   const getFilteredInclusionItems = () => {
     const query = inclusionSearch.toLowerCase();
 
     if (inclusionTab === "brands") {
       return brands.filter(b => b.name.toLowerCase().includes(query));
     } else if (inclusionTab === "subbrands") {
-      return subBrands.filter(sb => sb.name.toLowerCase().includes(query));
+      // Get brand IDs that have discounts configured
+      const brandIdsWithDiscount = new Set(inclusionDiscounts.brands.map(b => b.id));
+
+      // Filter sub-brands: only show those belonging to brands with configured discounts
+      // If no brands have discounts yet, show all sub-brands
+      const filteredSubBrands = brandIdsWithDiscount.size > 0
+        ? subBrands.filter(sb => brandIdsWithDiscount.has(sb.brandId))
+        : subBrands;
+
+      return filteredSubBrands.filter(sb => sb.name.toLowerCase().includes(query));
     } else {
+      // Items tab shows all items regardless of brand/sub-brand filtering
       return items.filter(i =>
         i.name.toLowerCase().includes(query) ||
         i.itemCode.toLowerCase().includes(query)

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { calculateLineItem, calculateOrderTotals } from '@/lib/order-utils';
+import { calculateLineItemV2, calculateOrderTotals } from '@/lib/order-utils';
 import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
 
 // GET /api/sales-orders/[id] - Get a single sales order
@@ -254,12 +254,12 @@ export async function PUT(
           }),
         ]);
 
-        // Calculate new item totals
+        // Calculate new item totals using V2 which handles both inclusive and exclusive GST
         const orderItems = body.items.map((orderItem: any) => {
           const item = items.find((i) => i.id === orderItem.itemId)!;
           const taxRate = Number(item.gstRate);
           const discountPercent = orderItem.discountPercent || 0;
-          const { amount, taxAmount } = calculateLineItem(
+          const { amount, taxAmount } = calculateLineItemV2(
             orderItem.quantity,
             orderItem.rate,
             taxRate,

@@ -86,6 +86,7 @@ interface OrderItemData {
   taxRate: number;
   taxAmount: number;
   amount: number;
+  isGstInclusive: boolean; // true = MRP with discount (inclusive), false = selling price (exclusive)
 }
 
 // Generate unique ID for new items
@@ -125,6 +126,7 @@ function NewSalesOrderPageContent() {
       taxRate: 0,
       taxAmount: 0,
       amount: 0,
+      isGstInclusive: false,
     },
   ]);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
@@ -212,6 +214,7 @@ function NewSalesOrderPageContent() {
               taxRate: Number(item.taxRate),
               taxAmount: Number(item.taxAmount),
               amount: Number(item.amount),
+              isGstInclusive: Number(item.discountPercent) > 0, // If discount applied, it was MRP-based (inclusive)
             }))
           );
         }
@@ -412,6 +415,7 @@ function NewSalesOrderPageContent() {
             discountPercent: pricing.discountApplied,
             amount: Math.round(baseAmount * 100) / 100,
             taxAmount: Math.round(taxAmount * 100) / 100,
+            isGstInclusive: pricing.isGstInclusive,
           };
         })
       );
@@ -431,6 +435,7 @@ function NewSalesOrderPageContent() {
         taxRate: 0,
         taxAmount: 0,
         amount: 0,
+        isGstInclusive: false,
       },
     ]);
   };
@@ -469,6 +474,7 @@ function NewSalesOrderPageContent() {
           taxRate,
           amount: Math.round(baseAmount * 100) / 100,
           taxAmount: Math.round(taxAmount * 100) / 100,
+          isGstInclusive: pricing.isGstInclusive,
         };
       }
     }
@@ -494,6 +500,7 @@ function NewSalesOrderPageContent() {
           taxRate: 0,
           taxAmount: 0,
           amount: 0,
+          isGstInclusive: false,
         },
       ]);
     } else {

@@ -32,6 +32,7 @@ interface OrderItemData {
   taxRate: number;
   taxAmount: number;
   amount: number;
+  isGstInclusive: boolean; // true = MRP with discount (inclusive), false = selling price (exclusive)
 }
 
 interface OrderItemRowProps {
@@ -89,7 +90,7 @@ export function OrderItemRow({
     });
   };
 
-  // Calculate tax-inclusive amounts
+  // Calculate tax-inclusive amounts (for MRP-based pricing with discount)
   // Rate is tax-inclusive (MRP). We back-calculate base amount and tax.
   const calculateTaxInclusive = (inclusiveAmount: number, taxRate: number) => {
     const baseAmount = inclusiveAmount / (1 + taxRate / 100);
@@ -100,31 +101,67 @@ export function OrderItemRow({
     };
   };
 
-  // Handle quantity change
+  // Calculate tax-exclusive amounts (for selling price without discount)
+  // Rate is tax-exclusive. We add tax on top.
+  const calculateTaxExclusive = (exclusiveAmount: number, taxRate: number) => {
+    const taxAmount = exclusiveAmount * (taxRate / 100);
+    return {
+      baseAmount: Math.round(exclusiveAmount * 100) / 100,
+      taxAmount: Math.round(taxAmount * 100) / 100,
+    };
+  };
+
+  // Handle quantity change - use correct GST model
   const handleQuantityChange = (value: string) => {
     const quantity = parseFloat(value) || 0;
-    const totalInclusive = quantity * item.rate; // Rate is tax-inclusive
-    const { baseAmount, taxAmount } = calculateTaxInclusive(totalInclusive, item.taxRate);
+    let baseAmount: number;
+    let taxAmount: number;
+
+    if (item.isGstInclusive) {
+      // MRP-based: Rate includes GST, extract tax
+      const totalInclusive = quantity * item.rate;
+      const result = calculateTaxInclusive(totalInclusive, item.taxRate);
+      baseAmount = result.baseAmount;
+      taxAmount = result.taxAmount;
+    } else {
+      // Selling price: Rate is exclusive, add tax on top
+      const result = calculateTaxExclusive(quantity * item.rate, item.taxRate);
+      baseAmount = result.baseAmount;
+      taxAmount = result.taxAmount;
+    }
 
     onUpdate({
       ...item,
       quantity,
       taxAmount,
-      amount: baseAmount, // Base amount (excluding tax)
+      amount: baseAmount,
     });
   };
 
-  // Handle rate change
+  // Handle rate change - use correct GST model
   const handleRateChange = (value: string) => {
     const rate = parseFloat(value) || 0;
-    const totalInclusive = item.quantity * rate; // Rate is tax-inclusive
-    const { baseAmount, taxAmount } = calculateTaxInclusive(totalInclusive, item.taxRate);
+    let baseAmount: number;
+    let taxAmount: number;
+
+    if (item.isGstInclusive) {
+      // MRP-based: Rate includes GST, extract tax
+      const totalInclusive = item.quantity * rate;
+      const result = calculateTaxInclusive(totalInclusive, item.taxRate);
+      baseAmount = result.baseAmount;
+      taxAmount = result.taxAmount;
+    } else {
+      // Selling price: Rate is exclusive, add tax on top
+      const result = calculateTaxExclusive(item.quantity * rate, item.taxRate);
+      baseAmount = result.baseAmount;
+      taxAmount = result.taxAmount;
+    }
 
     onUpdate({
       ...item,
       rate,
       taxAmount,
-      amount: baseAmount, // Base amount (excluding tax)
+      amount: baseAmount,
     });
   };
 
@@ -237,7 +274,7 @@ export function OrderItemRow({
       {/* Net Rate (Rate excluding tax) */}
       <td className="px-3 py-2 text-sm text-gray-600 text-right">
         {item.rate > 0 && item.taxRate >= 0
-          ? formatCurrency(item.rate / (1 + item.taxRate / 100))
+          ? formatCurrency(item.isGstInclusive ? item.rate / (1 + item.taxRate / 100) : item.rate)
           : "-"}
       </td>
 
@@ -251,9 +288,9 @@ export function OrderItemRow({
         {formatCurrency(item.taxAmount)}
       </td>
 
-      {/* Total (Rate is tax-inclusive, so total = quantity × rate) */}
+      {/* Total (base amount + tax amount) */}
       <td className="px-3 py-2 text-sm font-medium text-right">
-        {formatCurrency(item.quantity * item.rate)}
+        {formatCurrency(item.amount + item.taxAmount)}
       </td>
 
       {/* Actions */}
