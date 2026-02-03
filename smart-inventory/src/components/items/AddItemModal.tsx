@@ -87,7 +87,27 @@ export function AddItemModal({
     return list;
   }, [brandsData, editItem]);
 
-  // Populate form when editing (wait for brands data to load first to avoid race condition)
+  // Reset form when opening for a new item — must NOT depend on brandsData/subBrandsData
+  // or it will re-run (and wipe user input) every time SWR revalidates those queries.
+  useEffect(() => {
+    if (!editItem && isOpen) {
+      setFormData({
+        name: "",
+        description: "",
+        brandId: "",
+        subBrandId: "",
+        hsnCode: "",
+        gstRate: "18",
+        purchasePrice: "0",
+        mrp: "0",
+        sellingPrice: "0",
+        minStock: "0",
+        unit: "PCS",
+      });
+    }
+  }, [editItem, isOpen]);
+
+  // Populate form when editing (wait for brands/sub-brands data to load first to avoid race condition)
   useEffect(() => {
     if (editItem && isOpen && brandsData && subBrandsData) {
       setFormData({
@@ -102,20 +122,6 @@ export function AddItemModal({
         sellingPrice: editItem.sellingPrice !== undefined && editItem.sellingPrice !== null ? String(editItem.sellingPrice) : "0",
         minStock: String(editItem.inventory?.minStockLevel ?? 0),
         unit: editItem.unit || "PCS",
-      });
-    } else if (!editItem && isOpen) {
-      setFormData({
-        name: "",
-        description: "",
-        brandId: "",
-        subBrandId: "",
-        hsnCode: "",
-        gstRate: "18",
-        purchasePrice: "0",
-        mrp: "0",
-        sellingPrice: "0",
-        minStock: "0",
-        unit: "PCS",
       });
     }
   }, [editItem, isOpen, brandsData, subBrandsData]);

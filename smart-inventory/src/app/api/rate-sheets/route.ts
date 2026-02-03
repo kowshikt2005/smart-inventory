@@ -21,24 +21,28 @@ export async function GET(request: Request) {
     if (search) {
       where.OR = [
         { name: { contains: search } },
-        { customer: { name: { contains: search } } },
-        { customer: { customerNumber: { contains: search } } },
+        { customers: { some: { customer: { name: { contains: search } } } } },
+        { customers: { some: { customer: { customerNumber: { contains: search } } } } },
       ];
     }
 
-    // Get rate sheets with customer relation
+    // Get rate sheets with customers via join table
     const [rateSheets, total] = await Promise.all([
       db.rateSheet.findMany({
         where,
         include: {
-          customer: {
-            select: {
-              id: true,
-              customerNumber: true,
-              name: true,
-              gstin: true,
-              city: true,
-              state: true,
+          customers: {
+            include: {
+              customer: {
+                select: {
+                  id: true,
+                  customerNumber: true,
+                  name: true,
+                  gstin: true,
+                  city: true,
+                  state: true,
+                },
+              },
             },
           },
         },
@@ -73,36 +77,34 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     // Validate required fields
-    const requiredFields = ['name', 'customerId', 'validFrom'];
-    for (const field of requiredFields) {
-      if (!body[field]) {
-        return NextResponse.json(
-          { error: `Missing required field: ${field}` },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Validate customer exists
-    const customer = await db.customer.findUnique({
-      where: { id: body.customerId },
-    });
-    if (!customer) {
+    if (!body.name) {
       return NextResponse.json(
-        { error: 'Customer not found' },
-        { status: 404 }
+        { error: 'Missing required field: name' },
+        { status: 400 }
+      );
+    }
+    if (!body.validFrom) {
+      return NextResponse.json(
+        { error: 'Missing required field: validFrom' },
+        { status: 400 }
+      );
+    }
+    if (!Array.isArray(body.customerIds) || body.customerIds.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one customer must be selected' },
+        { status: 400 }
       );
     }
 
-    // Check if customer already has a rate sheet
-    const existingRateSheet = await db.rateSheet.findUnique({
-      where: { customerId: body.customerId },
+    // Validate all customers exist
+    const customers = await db.customer.findMany({
+      where: { id: { in: body.customerIds } },
+      select: { id: true },
     });
-
-    if (existingRateSheet) {
+    if (customers.length !== body.customerIds.length) {
       return NextResponse.json(
-        { error: 'This customer already has a rate sheet. Please edit the existing one.' },
-        { status: 409 }
+        { error: 'One or more customers not found' },
+        { status: 404 }
       );
     }
 
@@ -115,30 +117,44 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create rate sheet
-    const rateSheet = await db.rateSheet.create({
-      data: {
-        name: body.name,
-        customerId: body.customerId,
-        validFrom: new Date(body.validFrom),
-        validTo: body.validTo ? new Date(body.validTo) : null,
-        discountPercent,
-        excludedItemIds: body.excludedItemIds || [],
-        excludedBrandIds: body.excludedBrandIds || [],
-        excludedSubBrandIds: body.excludedSubBrandIds || [],
-        useInclusionModel: body.useInclusionModel !== false, // Default to true (inclusion model)
-        inclusionDiscounts: body.inclusionDiscounts || {},
-        isActive: body.isActive !== false, // Default to true
-      },
-      include: {
-        customer: {
-          select: {
-            id: true,
-            customerNumber: true,
-            name: true,
+    // Create rate sheet and join table entries in a transaction
+    const rateSheet = await db.$transaction(async (tx) => {
+      const created = await tx.rateSheet.create({
+        data: {
+          name: body.name,
+          validFrom: new Date(body.validFrom),
+          validTo: body.validTo ? new Date(body.validTo) : null,
+          discountPercent,
+          excludedItemIds: body.excludedItemIds || [],
+          excludedBrandIds: body.excludedBrandIds || [],
+          excludedSubBrandIds: body.excludedSubBrandIds || [],
+          useInclusionModel: body.useInclusionModel !== false,
+          inclusionDiscounts: body.inclusionDiscounts || {},
+          isActive: body.isActive !== false,
+        },
+      });
+
+      // Create join table entries for all selected customers
+      await tx.rateSheetCustomer.createMany({
+        data: body.customerIds.map((customerId: string) => ({
+          rateSheetId: created.id,
+          customerId,
+        })),
+      });
+
+      // Return with customers included
+      return tx.rateSheet.findUnique({
+        where: { id: created.id },
+        include: {
+          customers: {
+            include: {
+              customer: {
+                select: { id: true, customerNumber: true, name: true },
+              },
+            },
           },
         },
-      },
+      });
     });
 
     return NextResponse.json(rateSheet, { status: 201 });
@@ -147,7 +163,7 @@ export async function POST(request: Request) {
 
     if (error.code === 'P2002') {
       return NextResponse.json(
-        { error: 'A rate sheet for this customer already exists' },
+        { error: 'Duplicate customer assignment detected' },
         { status: 409 }
       );
     }

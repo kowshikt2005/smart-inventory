@@ -52,6 +52,8 @@ export default function SubBrandsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSubBrand, setEditingSubBrand] = useState<SubBrand | null>(null);
   const [newSubBrand, setNewSubBrand] = useState({ name: "", brandId: "", discountPercent: "" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
   const itemsPerPage = 10;
 
   const fetchBrands = useCallback(async () => {
@@ -109,6 +111,9 @@ export default function SubBrandsPage() {
   }, [fetchAllData]);
 
   const handleAddSubBrand = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setModalError(null);
     try {
       const payload = {
         name: newSubBrand.name,
@@ -124,19 +129,24 @@ export default function SubBrandsPage() {
       if (response.ok) {
         setShowAddModal(false);
         setNewSubBrand({ name: "", brandId: "", discountPercent: "" });
+        setModalError(null);
         fetchSubBrands();
       } else {
         const data = await response.json();
-        alert(data.error || "Failed to create sub-brand");
+        setModalError(data.error || "Failed to create sub-brand");
       }
     } catch (error) {
       console.error("Error creating sub-brand:", error);
-      alert("Failed to create sub-brand");
+      setModalError("Failed to create sub-brand");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleUpdateSubBrand = async () => {
-    if (!editingSubBrand) return;
+    if (!editingSubBrand || isSubmitting) return;
+    setIsSubmitting(true);
+    setModalError(null);
 
     try {
       const payload = {
@@ -154,14 +164,17 @@ export default function SubBrandsPage() {
         setShowAddModal(false);
         setEditingSubBrand(null);
         setNewSubBrand({ name: "", brandId: "", discountPercent: "" });
+        setModalError(null);
         fetchSubBrands();
       } else {
         const data = await response.json();
-        alert(data.error || "Failed to update sub-brand");
+        setModalError(data.error || "Failed to update sub-brand");
       }
     } catch (error) {
       console.error("Error updating sub-brand:", error);
-      alert("Failed to update sub-brand");
+      setModalError("Failed to update sub-brand");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -238,7 +251,7 @@ export default function SubBrandsPage() {
               )}
             </div>
             <Button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => { setShowAddModal(true); setModalError(null); }}
               className="bg-teal-500 hover:bg-teal-600 text-white"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -398,6 +411,7 @@ export default function SubBrandsPage() {
                     setShowAddModal(false);
                     setEditingSubBrand(null);
                     setNewSubBrand({ name: "", brandId: "", discountPercent: "" });
+                    setModalError(null);
                   }}
                 >
                   <X className="h-4 w-4" />
@@ -406,6 +420,12 @@ export default function SubBrandsPage() {
               <p className="text-gray-600 mb-4">
                 {editingSubBrand ? "Update the sub-brand details below." : "Enter the details of the new sub-brand below."}
               </p>
+
+              {modalError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
+                  {modalError}
+                </div>
+              )}
 
               <div className="space-y-4">
                 <div>
@@ -476,6 +496,7 @@ export default function SubBrandsPage() {
                     setShowAddModal(false);
                     setEditingSubBrand(null);
                     setNewSubBrand({ name: "", brandId: "", discountPercent: "" });
+                    setModalError(null);
                   }}
                 >
                   Cancel
@@ -483,9 +504,9 @@ export default function SubBrandsPage() {
                 <Button
                   onClick={editingSubBrand ? handleUpdateSubBrand : handleAddSubBrand}
                   className="bg-teal-500 hover:bg-teal-600"
-                  disabled={!newSubBrand.name.trim() || (!editingSubBrand && !newSubBrand.brandId)}
+                  disabled={!newSubBrand.name.trim() || (!editingSubBrand && !newSubBrand.brandId) || isSubmitting}
                 >
-                  {editingSubBrand ? "Update Sub-brand" : "Save Sub-brand"}
+                  {isSubmitting ? (editingSubBrand ? "Updating..." : "Saving...") : (editingSubBrand ? "Update Sub-brand" : "Save Sub-brand")}
                 </Button>
               </div>
             </div>

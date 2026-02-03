@@ -83,6 +83,7 @@ export const Sidebar = memo(function Sidebar() {
   const salesItems = useMemo(() => [
     { icon: FileText, label: "Orders", href: "/sales/orders" },
     { icon: Receipt, label: "Invoices", href: "/sales/invoices" },
+    { icon: Receipt, label: "Dummy Invoices", href: "/sales/dummy-invoices" },
     { icon: CreditCard, label: "Receipts", href: "/sales/receipts" },
     { icon: RotateCcw, label: "Returns", href: "/sales/returns" },
   ], []);
@@ -115,6 +116,9 @@ export const Sidebar = memo(function Sidebar() {
 
   const reportItems = useMemo(() => [
     { icon: FileText, label: "Claim Report", href: "/reports/claim-report" },
+    { icon: BarChart3, label: "Sales Register", href: "/reports/sales-register" },
+    { icon: BarChart3, label: "Purchase Register", href: "/reports/purchase-register" },
+    { icon: ClipboardList, label: "Outstanding", href: "/reports/outstanding" },
   ], []);
 
   return (

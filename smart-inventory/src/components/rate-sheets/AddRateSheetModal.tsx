@@ -53,15 +53,18 @@ interface InclusionDiscounts {
   items: InclusionDiscount[];
 }
 
+interface RateSheetCustomerEntry {
+  customer: Customer;
+}
+
 interface RateSheet {
   id: string;
   name: string;
-  customerId: string;
+  customers: RateSheetCustomerEntry[];
   validFrom: string;
   validTo: string | null;
   discountPercent: number;
   isActive: boolean;
-  customer: Customer;
   useInclusionModel?: boolean;
   inclusionDiscounts?: InclusionDiscounts;
   excludedItemIds?: string[];
@@ -91,7 +94,8 @@ export function AddRateSheetModal({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedCustomers, setSelectedCustomers] = useState<Customer[]>([]);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
   // Data for inclusions
   const [items, setItems] = useState<Item[]>([]);
@@ -105,7 +109,6 @@ export function AddRateSheetModal({
     subBrands: [],
     items: [],
   });
-
 
   // Inclusion popup
   const [showInclusionPopup, setShowInclusionPopup] = useState(false);
@@ -125,18 +128,19 @@ export function AddRateSheetModal({
   // Fetch data
   useEffect(() => {
     if (isOpen) {
-      if (!isEditing) {
-        fetchCustomers();
-      }
+      fetchCustomers();
       fetchData();
     }
-  }, [isOpen, isEditing]);
+  }, [isOpen]);
 
   // Pre-fill form when editing
   useEffect(() => {
     if (editingRateSheet) {
       setName(editingRateSheet.name);
-      setSelectedCustomer(editingRateSheet.customer);
+      // Populate selected customers from the rate sheet's customers array
+      setSelectedCustomers(
+        (editingRateSheet.customers || []).map((entry) => entry.customer)
+      );
       setValidFrom(editingRateSheet.validFrom.split("T")[0]);
       setValidTo(
         editingRateSheet.validTo
@@ -145,7 +149,6 @@ export function AddRateSheetModal({
       );
       setIsActive(editingRateSheet.isActive);
 
-      // Load inclusion discounts
       if (editingRateSheet.inclusionDiscounts) {
         setInclusionDiscounts({
           brands: editingRateSheet.inclusionDiscounts.brands || [],
@@ -203,8 +206,9 @@ export function AddRateSheetModal({
 
   const resetForm = () => {
     setName("");
-    setSelectedCustomer(null);
+    setSelectedCustomers([]);
     setCustomerSearch("");
+    setShowCustomerDropdown(false);
     setValidFrom(new Date().toISOString().split("T")[0]);
     setValidTo("");
     setIsActive(true);
@@ -219,45 +223,46 @@ export function AddRateSheetModal({
     onClose();
   };
 
-  // Filter customers based on search
+  // Customers not yet selected, filtered by search
+  const selectedIds = new Set(selectedCustomers.map((c) => c.id));
   const filteredCustomers = customers.filter(
     (c) =>
-      c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-      c.customerNumber.toLowerCase().includes(customerSearch.toLowerCase())
+      !selectedIds.has(c.id) &&
+      (c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+        c.customerNumber.toLowerCase().includes(customerSearch.toLowerCase()))
   );
 
-  // Auto-generate name when customer is selected
-  const handleCustomerSelect = (customer: Customer) => {
-    setSelectedCustomer(customer);
+  // Add a customer to the selection
+  const handleCustomerAdd = (customer: Customer) => {
+    setSelectedCustomers((prev) => [...prev, customer]);
     setCustomerSearch("");
+    setShowCustomerDropdown(false);
     if (!name || name === "") {
       setName(`${customer.name} - Rate Sheet`);
     }
+  };
+
+  // Remove a customer from the selection
+  const handleCustomerRemove = (customerId: string) => {
+    setSelectedCustomers((prev) => prev.filter((c) => c.id !== customerId));
   };
 
   // Get total inclusion count
   const totalInclusions = inclusionDiscounts.brands.length + inclusionDiscounts.subBrands.length + inclusionDiscounts.items.length;
 
   // Get filtered inclusion items based on tab and search
-  // Smart filtering: sub-brands are filtered to only show those belonging to brands with configured discounts
   const getFilteredInclusionItems = () => {
     const query = inclusionSearch.toLowerCase();
 
     if (inclusionTab === "brands") {
       return brands.filter(b => b.name.toLowerCase().includes(query));
     } else if (inclusionTab === "subbrands") {
-      // Get brand IDs that have discounts configured
       const brandIdsWithDiscount = new Set(inclusionDiscounts.brands.map(b => b.id));
-
-      // Filter sub-brands: only show those belonging to brands with configured discounts
-      // If no brands have discounts yet, show all sub-brands
       const filteredSubBrands = brandIdsWithDiscount.size > 0
         ? subBrands.filter(sb => brandIdsWithDiscount.has(sb.brandId))
         : subBrands;
-
       return filteredSubBrands.filter(sb => sb.name.toLowerCase().includes(query));
     } else {
-      // Items tab shows all items regardless of brand/sub-brand filtering
       return items.filter(i =>
         i.name.toLowerCase().includes(query) ||
         i.itemCode.toLowerCase().includes(query)
@@ -265,7 +270,6 @@ export function AddRateSheetModal({
     }
   };
 
-  // Get discount for an item
   const getDiscount = (id: string): number | null => {
     if (inclusionTab === "brands") {
       const found = inclusionDiscounts.brands.find(b => b.id === id);
@@ -279,22 +283,18 @@ export function AddRateSheetModal({
     }
   };
 
-  // Check if included
   const isIncluded = (id: string): boolean => {
     return getDiscount(id) !== null;
   };
 
-  // Toggle inclusion with 0% default discount
   const toggleInclusion = (id: string) => {
-    const discount = 0;
-
     if (inclusionTab === "brands") {
       setInclusionDiscounts(prev => {
         const existing = prev.brands.find(b => b.id === id);
         if (existing) {
           return { ...prev, brands: prev.brands.filter(b => b.id !== id) };
         } else {
-          return { ...prev, brands: [...prev.brands, { id, discountPercent: discount }] };
+          return { ...prev, brands: [...prev.brands, { id, discountPercent: 0 }] };
         }
       });
     } else if (inclusionTab === "subbrands") {
@@ -303,7 +303,7 @@ export function AddRateSheetModal({
         if (existing) {
           return { ...prev, subBrands: prev.subBrands.filter(sb => sb.id !== id) };
         } else {
-          return { ...prev, subBrands: [...prev.subBrands, { id, discountPercent: discount }] };
+          return { ...prev, subBrands: [...prev.subBrands, { id, discountPercent: 0 }] };
         }
       });
     } else {
@@ -312,13 +312,12 @@ export function AddRateSheetModal({
         if (existing) {
           return { ...prev, items: prev.items.filter(i => i.id !== id) };
         } else {
-          return { ...prev, items: [...prev.items, { id, discountPercent: discount }] };
+          return { ...prev, items: [...prev.items, { id, discountPercent: 0 }] };
         }
       });
     }
   };
 
-  // Update discount for an item
   const updateDiscount = (id: string, discountPercent: number) => {
     if (inclusionTab === "brands") {
       setInclusionDiscounts(prev => ({
@@ -338,11 +337,9 @@ export function AddRateSheetModal({
     }
   };
 
-  // Get inherited discount info for display
   const getInheritedDiscount = (itemData: Item | SubBrand): string | null => {
     if (inclusionTab === "items") {
       const item = itemData as Item;
-      // Check sub-brand first
       if (item.subBrandId) {
         const subBrand = inclusionDiscounts.subBrands.find(sb => sb.id === item.subBrandId);
         if (subBrand) {
@@ -350,7 +347,6 @@ export function AddRateSheetModal({
           return `Inherits ${subBrand.discountPercent}% from ${sbName}`;
         }
       }
-      // Check brand
       if (item.brandId) {
         const brand = inclusionDiscounts.brands.find(b => b.id === item.brandId);
         if (brand) {
@@ -360,7 +356,6 @@ export function AddRateSheetModal({
       }
     } else if (inclusionTab === "subbrands") {
       const subBrand = itemData as SubBrand;
-      // Check brand
       const brand = inclusionDiscounts.brands.find(b => b.id === subBrand.brandId);
       if (brand) {
         const brandName = brands.find(b => b.id === subBrand.brandId)?.name || "Brand";
@@ -374,14 +369,13 @@ export function AddRateSheetModal({
     e.preventDefault();
     setError(null);
 
-    // Validation
     if (!name.trim()) {
       setError("Please enter a name for the rate sheet");
       return;
     }
 
-    if (!selectedCustomer) {
-      setError("Please select a customer");
+    if (selectedCustomers.length === 0) {
+      setError("Please select at least one customer");
       return;
     }
 
@@ -400,14 +394,13 @@ export function AddRateSheetModal({
     try {
       const payload = {
         name: name.trim(),
-        customerId: selectedCustomer.id,
+        customerIds: selectedCustomers.map((c) => c.id),
         validFrom,
         validTo: validTo || null,
-        discountPercent: 0, // Legacy field - not used in inclusion model
+        discountPercent: 0,
         isActive,
         useInclusionModel: true,
         inclusionDiscounts,
-        // Clear exclusion fields when using inclusion model
         excludedItemIds: [],
         excludedBrandIds: [],
         excludedSubBrandIds: [],
@@ -489,38 +482,65 @@ export function AddRateSheetModal({
               />
             </div>
 
-            {/* Customer Selection */}
+            {/* Multi-Customer Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Customer <span className="text-red-500">*</span>
+                Customers <span className="text-red-500">*</span>
               </label>
-              {isEditing ? (
-                <div className="p-3 bg-gray-50 border rounded-lg">
-                  <p className="font-medium">{selectedCustomer?.name}</p>
-                  <p className="text-xs text-gray-500">
-                    {selectedCustomer?.customerNumber}
-                  </p>
-                </div>
-              ) : isLoadingCustomers ? (
+
+              {isLoadingCustomers ? (
                 <div className="flex items-center gap-2 text-gray-500 p-3">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading customers...
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {!selectedCustomer && (
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <Input
-                        type="text"
-                        placeholder="Search customers..."
-                        value={customerSearch}
-                        onChange={(e) => setCustomerSearch(e.target.value)}
-                        className="pl-10"
-                      />
+                  {/* Selected customers as chips */}
+                  {selectedCustomers.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedCustomers.map((customer) => (
+                        <div
+                          key={customer.id}
+                          className="flex items-center gap-1.5 bg-teal-50 border border-teal-200 rounded-lg px-2.5 py-1"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-teal-900 leading-tight">
+                              {customer.name}
+                            </p>
+                            <p className="text-xs text-teal-600 leading-tight">
+                              {customer.customerNumber}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCustomerRemove(customer.id)}
+                            className="text-teal-500 hover:text-teal-700 ml-1"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
-                  {customerSearch && !selectedCustomer && (
+
+                  {/* Search input — always visible to allow adding more */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      type="text"
+                      placeholder="Search and add customers..."
+                      value={customerSearch}
+                      onChange={(e) => {
+                        setCustomerSearch(e.target.value);
+                        setShowCustomerDropdown(true);
+                      }}
+                      onFocus={() => setShowCustomerDropdown(true)}
+                      className="pl-10"
+                    />
+                  </div>
+
+                  {/* Dropdown results */}
+                  {showCustomerDropdown && customerSearch && (
                     <div className="border rounded-lg max-h-40 overflow-y-auto">
                       {filteredCustomers.length === 0 ? (
                         <p className="p-3 text-gray-500 text-sm">No customers found</p>
@@ -529,10 +549,10 @@ export function AddRateSheetModal({
                           <button
                             key={customer.id}
                             type="button"
-                            onClick={() => handleCustomerSelect(customer)}
+                            onClick={() => handleCustomerAdd(customer)}
                             className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b last:border-b-0"
                           >
-                            <p className="font-medium">{customer.name}</p>
+                            <p className="font-medium text-sm">{customer.name}</p>
                             <p className="text-xs text-gray-500">
                               {customer.customerNumber}
                               {customer.gstin && ` | ${customer.gstin}`}
@@ -540,25 +560,6 @@ export function AddRateSheetModal({
                           </button>
                         ))
                       )}
-                    </div>
-                  )}
-                  {selectedCustomer && (
-                    <div className="flex items-center justify-between p-3 bg-teal-50 border border-teal-200 rounded-lg">
-                      <div>
-                        <p className="font-medium text-teal-900">
-                          {selectedCustomer.name}
-                        </p>
-                        <p className="text-xs text-teal-700">
-                          {selectedCustomer.customerNumber}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedCustomer(null)}
-                        className="text-teal-600 hover:text-teal-800"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
                     </div>
                   )}
                 </div>

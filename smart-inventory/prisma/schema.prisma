@@ -149,7 +149,7 @@ model Customer {
   salesOrders   SalesOrder[]
   invoices      Invoice[]
   payments      Payment[]
-  rateSheet     RateSheet?        // One rate sheet per customer
+  rateSheets    RateSheetCustomer[]
   salesReturns  SalesReturn[]
   ledgerEntries CustomerLedger[]
 
@@ -500,7 +500,6 @@ enum CurrencyType {
 model RateSheet {
   id                  String       @id @default(uuid())
   name                String       // Rate sheet name for reference
-  customerId          String       @unique // One rate sheet per customer
   validFrom           DateTime
   validTo             DateTime?
   itemRatePercent     Decimal      @default(100) @db.Decimal(5, 2) // DEPRECATED: Keep for backward compatibility
@@ -509,7 +508,7 @@ model RateSheet {
   excludedBrandIds    Json?        // Array of brand IDs to exclude from this rate sheet
   excludedSubBrandIds Json?        // Array of sub-brand IDs to exclude from this rate sheet
 
-  // NEW: Inclusion model fields
+  // Inclusion model fields
   useInclusionModel   Boolean      @default(true) // true = inclusion model, false = exclusion model
   inclusionDiscounts  Json?        @default("{}") // Structure: { brands: [{id, discountPercent}], subBrands: [{id, discountPercent}], items: [{id, discountPercent}] }
 
@@ -519,13 +518,25 @@ model RateSheet {
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
-  // Relations
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  // Relations — many-to-many with Customer via join table
+  customers RateSheetCustomer[]
 
-  @@index([customerId])
   @@index([validFrom, validTo])
   @@index([isActive])
   @@map("rate_sheets")
+}
+
+// Join table: one rate sheet can have many customers, one customer can have many rate sheets
+model RateSheetCustomer {
+  rateSheetId String
+  customerId  String
+
+  rateSheet RateSheet @relation(fields: [rateSheetId], references: [id], onDelete: Cascade)
+  customer  Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@id([rateSheetId, customerId])
+  @@index([customerId])
+  @@map("rate_sheet_customers")
 }
 
 // ============================================

@@ -37,6 +37,8 @@ export default function BrandsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
   const [newBrand, setNewBrand] = useState({ name: "", discountPercent: "" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
   const itemsPerPage = 10;
 
   // Fetch brands from API
@@ -66,6 +68,9 @@ export default function BrandsPage() {
   };
 
   const handleAddBrand = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setModalError(null);
     try {
       const payload = {
         name: newBrand.name,
@@ -81,19 +86,24 @@ export default function BrandsPage() {
       if (response.ok) {
         setShowAddModal(false);
         setNewBrand({ name: "", discountPercent: "" });
+        setModalError(null);
         fetchBrands();
       } else {
         const data = await response.json();
-        alert(data.error || "Failed to create brand");
+        setModalError(data.error || "Failed to create brand");
       }
     } catch (error) {
       console.error("Error creating brand:", error);
-      alert("Failed to create brand");
+      setModalError("Failed to create brand");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleUpdateBrand = async () => {
-    if (!editingBrand) return;
+    if (!editingBrand || isSubmitting) return;
+    setIsSubmitting(true);
+    setModalError(null);
 
     try {
       const payload = {
@@ -111,14 +121,17 @@ export default function BrandsPage() {
         setShowAddModal(false);
         setEditingBrand(null);
         setNewBrand({ name: "", discountPercent: "" });
+        setModalError(null);
         fetchBrands();
       } else {
         const data = await response.json();
-        alert(data.error || "Failed to update brand");
+        setModalError(data.error || "Failed to update brand");
       }
     } catch (error) {
       console.error("Error updating brand:", error);
-      alert("Failed to update brand");
+      setModalError("Failed to update brand");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -192,7 +205,7 @@ export default function BrandsPage() {
               )}
             </div>
             <Button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => { setShowAddModal(true); setModalError(null); }}
               className="bg-teal-500 hover:bg-teal-600 text-white"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -348,6 +361,7 @@ export default function BrandsPage() {
                     setShowAddModal(false);
                     setEditingBrand(null);
                     setNewBrand({ name: "", discountPercent: "" });
+                    setModalError(null);
                   }}
                 >
                   <X className="h-4 w-4" />
@@ -356,6 +370,12 @@ export default function BrandsPage() {
               <p className="text-gray-600 mb-4">
                 {editingBrand ? "Update the brand details below." : "Enter the name of the new brand below. Click save when you're done."}
               </p>
+
+              {modalError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
+                  {modalError}
+                </div>
+              )}
 
               <div className="space-y-4">
                 <div>
@@ -394,6 +414,7 @@ export default function BrandsPage() {
                     setShowAddModal(false);
                     setEditingBrand(null);
                     setNewBrand({ name: "", discountPercent: "" });
+                    setModalError(null);
                   }}
                 >
                   Cancel
@@ -401,9 +422,9 @@ export default function BrandsPage() {
                 <Button
                   onClick={editingBrand ? handleUpdateBrand : handleAddBrand}
                   className="bg-teal-500 hover:bg-teal-600"
-                  disabled={!newBrand.name.trim()}
+                  disabled={!newBrand.name.trim() || isSubmitting}
                 >
-                  {editingBrand ? "Update Brand" : "Save Brand"}
+                  {isSubmitting ? (editingBrand ? "Updating..." : "Saving...") : (editingBrand ? "Update Brand" : "Save Brand")}
                 </Button>
               </div>
             </div>

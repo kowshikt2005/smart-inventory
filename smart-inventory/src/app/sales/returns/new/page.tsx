@@ -159,7 +159,7 @@ export default function NewSalesReturnPage() {
       // Check if invoice already has a completed return
       if (invoice.salesReturns && invoice.salesReturns.length > 0) {
         const hasCompletedReturn = invoice.salesReturns.some(
-          (ret: any) => ret.status === 'COMPLETED'
+          (ret: { status: string }) => ret.status === 'COMPLETED'
         );
         if (hasCompletedReturn) {
           throw new Error("This invoice already has a completed return and cannot be returned again.");

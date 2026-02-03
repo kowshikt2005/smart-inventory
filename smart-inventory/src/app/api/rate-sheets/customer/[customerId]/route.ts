@@ -3,7 +3,8 @@ import { db } from '@/lib/db';
 import { cache, cacheKeys, cacheTTL } from '@/lib/cache';
 
 // GET /api/rate-sheets/customer/[customerId] - Get the active rate sheet for a customer
-// This is used during sales order creation to calculate discounted prices
+// This is used during sales order creation to calculate discounted prices.
+// If a customer belongs to multiple rate sheets, the most recently created active one wins.
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ customerId: string }> }
@@ -11,24 +12,26 @@ export async function GET(
   try {
     const { customerId } = await params;
 
-    // Use cache for frequently accessed rate sheets
     const cachedData = await cache.getOrSet(
       cacheKeys.rateSheet(customerId),
       async () => {
-        // Fetch customer and rate sheet in parallel
-        const [customer, rateSheet] = await Promise.all([
+        // Fetch customer and all rate sheets for this customer via join table
+        const [customer, joinEntries] = await Promise.all([
           db.customer.findUnique({
             where: { id: customerId },
-            select: {
-              id: true,
-              customerNumber: true,
-              name: true,
-            },
+            select: { id: true, customerNumber: true, name: true },
           }),
-          db.rateSheet.findUnique({
+          db.rateSheetCustomer.findMany({
             where: { customerId },
+            include: {
+              rateSheet: true,
+            },
+            orderBy: { rateSheet: { createdAt: 'desc' } },
           }),
         ]);
+
+        // Pick the most recent rate sheet (first after desc sort)
+        const rateSheet = joinEntries.length > 0 ? joinEntries[0].rateSheet : null;
 
         return { customer, rateSheet };
       },
@@ -46,7 +49,6 @@ export async function GET(
 
     const now = new Date();
 
-    // Check if rate sheet is valid and active
     if (!rateSheet) {
       return NextResponse.json({
         customer,
@@ -64,7 +66,6 @@ export async function GET(
     const isValidTo = !rateSheet.validTo || rateSheet.validTo >= now;
     const isEffective = isActive && isValidFrom && isValidTo;
 
-    // Simple discount calculation
     const discountPercent = Number(rateSheet.discountPercent);
 
     return NextResponse.json({
@@ -77,6 +78,8 @@ export async function GET(
         validFrom: rateSheet.validFrom,
         validTo: rateSheet.validTo,
         isActive: rateSheet.isActive,
+        useInclusionModel: rateSheet.useInclusionModel,
+        inclusionDiscounts: rateSheet.inclusionDiscounts,
         excludedItemIds: rateSheet.excludedItemIds || [],
         excludedBrandIds: rateSheet.excludedBrandIds || [],
         excludedSubBrandIds: rateSheet.excludedSubBrandIds || [],

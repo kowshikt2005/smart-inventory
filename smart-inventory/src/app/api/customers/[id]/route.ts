@@ -12,7 +12,11 @@ export async function GET(
     const customer = await db.customer.findUnique({
       where: { id },
       include: {
-        rateSheet: true,
+        rateSheets: {
+          include: {
+            rateSheet: true,
+          },
+        },
       },
     });
 

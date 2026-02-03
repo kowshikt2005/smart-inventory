@@ -102,7 +102,7 @@ export default function ClaimReportPage() {
   }, [claims, currentPage, itemsPerPage]);
 
   // Handle filter changes
-  const handleFilterChange = (key: string, value: any) => {
+  const handleFilterChange = (key: string, value: string | boolean) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
     setCurrentPage(1); // Reset to first page when filters change
   };
@@ -177,7 +177,7 @@ export default function ClaimReportPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Brands</SelectItem>
-                  {brandsData?.brands?.map((brand: any) => (
+                  {brandsData?.brands?.map((brand: { id: string; name: string }) => (
                     <SelectItem key={brand.id} value={brand.id}>
                       {brand.name}
                     </SelectItem>
@@ -200,7 +200,7 @@ export default function ClaimReportPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Customers</SelectItem>
-                  {customersData?.customers?.map((customer: any) => (
+                  {customersData?.customers?.map((customer: { id: string; name: string }) => (
                     <SelectItem key={customer.id} value={customer.id}>
                       {customer.name}
                     </SelectItem>
@@ -223,7 +223,7 @@ export default function ClaimReportPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Products</SelectItem>
-                  {itemsData?.items?.map((item: any) => (
+                  {itemsData?.items?.map((item: { id: string; name: string }) => (
                     <SelectItem key={item.id} value={item.id}>
                       {item.name}
                     </SelectItem>

@@ -211,9 +211,6 @@ export async function POST(request: Request) {
     // Validate customer exists and is active
     const customer = await db.customer.findUnique({
       where: { id: body.customerId },
-      include: {
-        rateSheet: true,
-      },
     });
 
     if (!customer) {

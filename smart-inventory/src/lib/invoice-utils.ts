@@ -21,6 +21,27 @@ export async function generateInvoiceNumber(db: PrismaClient): Promise<string> {
 }
 
 /**
+ * Generate the next dummy invoice number in sequence (DI-0001, DI-0002, etc.)
+ */
+export async function generateDummyInvoiceNumber(db: PrismaClient): Promise<string> {
+  const lastInvoice = await db.invoice.findFirst({
+    where: { invoiceNumber: { startsWith: 'DI-' } },
+    orderBy: { invoiceNumber: 'desc' },
+    select: { invoiceNumber: true },
+  });
+
+  let nextNum = 1;
+  if (lastInvoice) {
+    const match = lastInvoice.invoiceNumber.match(/DI-(\d+)/);
+    if (match) {
+      nextNum = parseInt(match[1], 10) + 1;
+    }
+  }
+
+  return `DI-${String(nextNum).padStart(4, '0')}`;
+}
+
+/**
  * Generate the next payment number in sequence (PAY-0001, PAY-0002, etc.)
  */
 export async function generatePaymentNumber(db: PrismaClient): Promise<string> {

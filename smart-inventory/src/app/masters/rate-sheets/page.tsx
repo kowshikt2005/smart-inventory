@@ -57,16 +57,19 @@ interface InclusionDiscounts {
   items: InclusionDiscount[];
 }
 
+interface RateSheetCustomerEntry {
+  customer: Customer;
+}
+
 interface RateSheet {
   id: string;
   name: string;
-  customerId: string;
   validFrom: string;
   validTo: string | null;
   discountPercent: number;
   isActive: boolean;
   createdAt: string;
-  customer: Customer;
+  customers: RateSheetCustomerEntry[];
   useInclusionModel?: boolean;
   inclusionDiscounts?: InclusionDiscounts;
   excludedItemIds?: string[];
@@ -106,8 +109,11 @@ export default function RateSheetsPage() {
     return rateSheets.filter(
       (rs: RateSheet) =>
         rs.name.toLowerCase().includes(query) ||
-        rs.customer.name.toLowerCase().includes(query) ||
-        rs.customer.customerNumber.toLowerCase().includes(query)
+        (rs.customers || []).some(
+          (entry) =>
+            entry.customer.name.toLowerCase().includes(query) ||
+            entry.customer.customerNumber.toLowerCase().includes(query)
+        )
     );
   }, [debouncedSearch, data]);
 
@@ -389,10 +395,21 @@ export default function RateSheetsPage() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{rateSheet.customer.name}</p>
-                          <p className="text-xs text-gray-500">
-                            {rateSheet.customer.customerNumber}
-                          </p>
+                          {(rateSheet.customers || []).length > 0 ? (
+                            <>
+                              <p className="font-medium">{rateSheet.customers[0].customer.name}</p>
+                              <p className="text-xs text-gray-500">
+                                {rateSheet.customers[0].customer.customerNumber}
+                                {rateSheet.customers.length > 1 && (
+                                  <span className="ml-1.5 text-teal-600 font-medium">
+                                    +{rateSheet.customers.length - 1} more
+                                  </span>
+                                )}
+                              </p>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">No customers</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
