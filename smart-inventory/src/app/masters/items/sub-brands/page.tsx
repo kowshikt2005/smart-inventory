@@ -448,21 +448,25 @@ export default function SubBrandsPage() {
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">Discount Percentage (%)</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={newSubBrand.discountPercent}
-                    onChange={(e) => setNewSubBrand({ ...newSubBrand, discountPercent: e.target.value })}
-                    placeholder="e.g., 10"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    This discount will apply to all items under this sub-brand (unless overridden at item level)
-                  </p>
-                </div>
+                {editingSubBrand && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Discount Percentage (%)</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={newSubBrand.discountPercent}
+                      onChange={(e) => setNewSubBrand({ ...newSubBrand, discountPercent: e.target.value })}
+                      placeholder="e.g., 10"
+                      disabled
+                      className="bg-gray-50"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Current discount (read-only for reference)
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 mt-6">

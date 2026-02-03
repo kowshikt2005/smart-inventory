@@ -55,6 +55,14 @@ export async function GET(
             },
           },
         },
+        salesReturns: {
+          select: {
+            id: true,
+            returnNumber: true,
+            status: true,
+            returnDate: true,
+          },
+        },
       },
     });
 

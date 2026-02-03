@@ -151,6 +151,7 @@ export default function InvoiceDetailPage() {
       }
 
       alert("Invoice saved successfully!");
+      router.push("/sales/invoices");
     } catch (err) {
       console.error("Error saving invoice:", err);
       alert(err instanceof Error ? err.message : "Failed to save invoice");

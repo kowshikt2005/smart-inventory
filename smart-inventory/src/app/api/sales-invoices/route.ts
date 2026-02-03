@@ -51,6 +51,12 @@ export async function GET(request: Request) {
               creditDays: true,
             },
           },
+          salesReturns: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
         },
         skip,
         take: limit,
@@ -59,9 +65,20 @@ export async function GET(request: Request) {
       db.invoice.count({ where }),
     ]);
 
+    // Filter out invoices with completed returns when fetching by customer
+    // (typically used for creating new returns)
+    const filteredInvoices = customerId
+      ? invoices.filter((invoice: any) => {
+          const hasCompletedReturn = invoice.salesReturns?.some(
+            (ret: any) => ret.status === 'COMPLETED'
+          );
+          return !hasCompletedReturn;
+        })
+      : invoices;
+
     // Check for overdue invoices and update status
     const now = new Date();
-    const invoicesWithStatus = invoices.map((invoice) => {
+    const invoicesWithStatus = filteredInvoices.map((invoice) => {
       let effectiveStatus = invoice.paymentStatus;
 
       // If pending and past due date, mark as overdue
@@ -122,13 +139,16 @@ export async function GET(request: Request) {
       Number(overdueStats._sum.balanceAmount || 0) +
       Number(pendingStats._sum.balanceAmount || 0);
 
+    // Adjust total count if we filtered invoices
+    const adjustedTotal = customerId ? invoicesWithStatus.length : total;
+
     return NextResponse.json({
       invoices: invoicesWithStatus,
       pagination: {
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+        total: adjustedTotal,
+        totalPages: Math.ceil(adjustedTotal / limit),
       },
       stats: {
         total: totalCount,

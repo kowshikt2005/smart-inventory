@@ -366,21 +366,25 @@ export default function BrandsPage() {
                     placeholder="Enter brand name"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Discount Percentage (%)</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={newBrand.discountPercent}
-                    onChange={(e) => setNewBrand({ ...newBrand, discountPercent: e.target.value })}
-                    placeholder="e.g., 10"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    This discount will apply to all items under this brand (unless overridden at sub-brand or item level)
-                  </p>
-                </div>
+                {editingBrand && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Discount Percentage (%)</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={newBrand.discountPercent}
+                      onChange={(e) => setNewBrand({ ...newBrand, discountPercent: e.target.value })}
+                      placeholder="e.g., 10"
+                      disabled
+                      className="bg-gray-50"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Current discount (read-only for reference)
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 mt-6">

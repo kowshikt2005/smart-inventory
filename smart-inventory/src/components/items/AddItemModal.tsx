@@ -75,21 +75,27 @@ export function AddItemModal({
   });
 
   // Use SWR to cache brands and sub-brands - NO N+1 queries!
-  const { data: brandsData } = useSWR(isOpen ? "/api/brands" : null);
-  const { data: subBrandsData } = useSWR(isOpen ? "/api/sub-brands" : null);
+  const { data: brandsData, isLoading: brandsLoading } = useSWR(isOpen ? "/api/brands" : null);
+  const { data: subBrandsData, isLoading: subBrandsLoading } = useSWR(isOpen ? "/api/sub-brands" : null);
 
-  const brands = brandsData?.brands || [];
+  // Ensure current brand is in the list (just like GST options are always there)
+  const brands = useMemo(() => {
+    const list = brandsData?.brands || [];
+    if (editItem?.brand && !list.find((b: Brand) => b.id === editItem.brand?.id)) {
+      return [{ id: editItem.brand.id, name: editItem.brand.name }, ...list];
+    }
+    return list;
+  }, [brandsData, editItem]);
 
-  // Populate form when editing
+  // Populate form when editing (wait for brands data to load first to avoid race condition)
   useEffect(() => {
-    if (editItem && isOpen) {
+    if (editItem && isOpen && brandsData && subBrandsData) {
       setFormData({
         name: editItem.name || "",
         description: editItem.description || "",
         brandId: editItem.brand?.id || "",
         subBrandId: editItem.subBrand?.id || "",
         hsnCode: editItem.hsnCode || "",
-        // Use nullish coalescing to handle 0 values correctly
         gstRate: editItem.gstRate !== undefined && editItem.gstRate !== null ? String(editItem.gstRate) : "18",
         purchasePrice: editItem.purchasePrice !== undefined && editItem.purchasePrice !== null ? String(editItem.purchasePrice) : "0",
         mrp: editItem.mrp !== undefined && editItem.mrp !== null ? String(editItem.mrp) : "0",
@@ -98,7 +104,6 @@ export function AddItemModal({
         unit: editItem.unit || "PCS",
       });
     } else if (!editItem && isOpen) {
-      // Reset form for new item
       setFormData({
         name: "",
         description: "",
@@ -113,14 +118,22 @@ export function AddItemModal({
         unit: "PCS",
       });
     }
-  }, [editItem, isOpen]);
+  }, [editItem, isOpen, brandsData, subBrandsData]);
 
-  // Filter sub-brands based on selected brand
+  // Filter sub-brands based on selected brand (ensure current sub-brand is in the list)
   const filteredSubBrands = useMemo(() => {
     const subBrands = subBrandsData?.subBrands || [];
     if (!formData.brandId) return [];
-    return subBrands.filter((sb: SubBrand) => sb.brandId === formData.brandId);
-  }, [formData.brandId, subBrandsData]);
+
+    let filtered = subBrands.filter((sb: SubBrand) => sb.brandId === formData.brandId);
+
+    // Ensure current sub-brand is in the list (just like GST options are always there)
+    if (editItem?.subBrand && !filtered.find((sb: SubBrand) => sb.id === editItem.subBrand?.id)) {
+      filtered = [{ id: editItem.subBrand.id, name: editItem.subBrand.name, brandId: formData.brandId }, ...filtered];
+    }
+
+    return filtered;
+  }, [formData.brandId, subBrandsData, editItem]);
 
   // Reset sub-brand when brand changes (but only if sub-brands data is loaded)
   // This prevents resetting subBrandId during initial form population when editing
@@ -311,14 +324,14 @@ export function AddItemModal({
                   Brand
                 </label>
                 <Select
-                  value={formData.brandId || ""}
-                  onValueChange={(value) => handleSelectChange("brandId", value === "__none__" ? "" : value)}
+                  key={`brand-${formData.brandId}-${brands.length}`}
+                  value={formData.brandId}
+                  onValueChange={(value) => handleSelectChange("brandId", value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a brand" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
                     {brands.map((brand: Brand) => (
                       <SelectItem key={brand.id} value={brand.id}>
                         {brand.name}
@@ -332,15 +345,15 @@ export function AddItemModal({
                   Sub-brand
                 </label>
                 <Select
-                  value={formData.subBrandId || ""}
-                  onValueChange={(value) => handleSelectChange("subBrandId", value === "__none__" ? "" : value)}
+                  key={`subbrand-${formData.subBrandId}-${filteredSubBrands.length}`}
+                  value={formData.subBrandId}
+                  onValueChange={(value) => handleSelectChange("subBrandId", value)}
                   disabled={!formData.brandId}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={formData.brandId ? "Select a sub-brand" : "Select brand first"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
                     {filteredSubBrands.map((subBrand: SubBrand) => (
                       <SelectItem key={subBrand.id} value={subBrand.id}>
                         {subBrand.name}

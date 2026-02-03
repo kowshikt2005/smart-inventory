@@ -23,6 +23,7 @@ import {
   BookOpen,
   ClipboardList,
   Truck,
+  BarChart3,
 } from "lucide-react";
 import { useState, memo, useMemo } from "react";
 
@@ -31,30 +32,35 @@ const ROLE_PERMISSIONS = {
   SALESMAN: {
     sales: true,
     ledger: false,
+    reports: false,
     masters: false,
     employees: false,
   },
   BILLING_OPERATOR: {
     sales: true,
     ledger: true,
+    reports: true,
     masters: false,
     employees: false,
   },
   ACCOUNTANT: {
     sales: true,
     ledger: true,
+    reports: true,
     masters: true,
     employees: false,
   },
   MANAGER: {
     sales: true,
     ledger: true,
+    reports: true,
     masters: true,
     employees: true,
   },
   ADMIN: {
     sales: true,
     ledger: true,
+    reports: true,
     masters: true,
     employees: true,
   },
@@ -68,6 +74,7 @@ export const Sidebar = memo(function Sidebar() {
   const [mastersOpen, setMastersOpen] = useState(false);
   const [itemsOpen, setItemsOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [reportsOpen, setReportsOpen] = useState(false);
 
   // Get user permissions
   const userRole = session?.user?.role || "SALESMAN";
@@ -104,6 +111,10 @@ export const Sidebar = memo(function Sidebar() {
     { icon: Users, label: "Customer Ledger", href: "/ledger/customers" },
     { icon: Package, label: "Stock Ledger", href: "/ledger/items" },
     { icon: ClipboardList, label: "Stock Journal", href: "/ledger/stock-journal" },
+  ], []);
+
+  const reportItems = useMemo(() => [
+    { icon: FileText, label: "Claim Report", href: "/reports/claim-report" },
   ], []);
 
   return (
@@ -251,6 +262,54 @@ export const Sidebar = memo(function Sidebar() {
             {ledgerOpen && (
               <div className="ml-8 mt-1 space-y-1">
                 {ledgerItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
+                        isActive && "bg-white/15 text-white font-medium shadow-sm"
+                      )}
+                    >
+                      <Icon className="h-4 w-4" strokeWidth={1.5} />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Reports Section */}
+        {permissions.reports && (
+          <div className="mb-2">
+            <button
+              onClick={() => setReportsOpen(!reportsOpen)}
+              className={cn(
+                "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
+                pathname.startsWith("/reports") && "bg-white/15 text-white"
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <BarChart3 className="h-5 w-5" strokeWidth={1.5} />
+                <span>Reports</span>
+              </div>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 transition-transform",
+                  reportsOpen && "rotate-180"
+                )}
+              />
+            </button>
+
+            {/* Reports Dropdown */}
+            {reportsOpen && (
+              <div className="ml-8 mt-1 space-y-1">
+                {reportItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
 
