@@ -86,7 +86,8 @@ export async function PUT(
     const body = await request.json();
 
     console.log('🔄 Updating employee:', id);
-    console.log('📝 Update data:', JSON.stringify(body, null, 2));
+    const { password: _pw, ...loggableData } = body;
+    console.log('📝 Update data:', JSON.stringify(loggableData, null, 2));
 
     // Check if employee exists
     const existingEmployee = await db.employee.findUnique({

@@ -3,6 +3,8 @@ import { db } from '@/lib/db';
 import { generateInvoiceNumber, calculateDueDate } from '@/lib/invoice-utils';
 import { calculateOrderTotals } from '@/lib/order-utils';
 import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
+import { auth } from '@/lib/auth';
+import { hasRole } from '@/lib/auth-utils';
 
 // GET /api/sales-invoices - Get all invoices with filtering
 export async function GET(request: Request) {
@@ -15,6 +17,8 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
 
+    const session = await auth();
+
     // Build where clause
     const where: any = {};
 
@@ -22,7 +26,7 @@ export async function GET(request: Request) {
       where.paymentStatus = status;
     }
 
-    if (customerId) {
+    if (customerId && session?.user && hasRole(session.user.role, 'MANAGER')) {
       where.customerId = customerId;
     }
 

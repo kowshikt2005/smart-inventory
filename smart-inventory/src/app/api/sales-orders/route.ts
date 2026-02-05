@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { generateOrderNumber, calculateLineItemV2, calculateOrderTotals, SYSTEM_USER_ID } from '@/lib/order-utils';
 import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
+import { auth } from '@/lib/auth';
+import { hasRole } from '@/lib/auth-utils';
 
 // GET /api/sales-orders - Get all sales orders with filtering
 export async function GET(request: Request) {
@@ -14,6 +16,8 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
 
+    const session = await auth();
+
     // Build where clause
     const where: any = {};
 
@@ -21,7 +25,7 @@ export async function GET(request: Request) {
       where.status = status;
     }
 
-    if (customerId) {
+    if (customerId && session?.user && hasRole(session.user.role, 'MANAGER')) {
       where.customerId = customerId;
     }
 

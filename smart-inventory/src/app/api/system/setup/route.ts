@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { SYSTEM_USER_ID } from '@/lib/order-utils';
+import { auth } from '@/lib/auth';
 
 // POST /api/system/setup - Create system user if not exists
 export async function POST() {
   try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Check if system user already exists
     const existingUser = await db.user.findUnique({
       where: { id: SYSTEM_USER_ID },
@@ -62,6 +68,11 @@ export async function POST() {
 // GET /api/system/setup - Check if system user exists
 export async function GET() {
   try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const systemUser = await db.user.findUnique({
       where: { id: SYSTEM_USER_ID },
       select: {
