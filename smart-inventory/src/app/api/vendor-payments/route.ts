@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generateVendorPaymentNumber } from '@/lib/purchase-utils';
 
 // GET /api/vendor-payments - Get all vendor payments with filtering
@@ -223,7 +223,7 @@ export async function POST(request: Request) {
       }
 
       // Check bank has sufficient balance
-      if (Number(bankAccount.balance) < body.amount) {
+      if (Number(bankAccount.currentBalance) < body.amount) {
         return NextResponse.json(
           { error: 'Insufficient bank balance' },
           { status: 400 }
@@ -232,9 +232,12 @@ export async function POST(request: Request) {
     }
 
     // Create payment in a transaction
-    const vendorPayment = await db.$transaction(async (tx) => {
+    const vendorPayment = await transaction(async (tx) => {
       // Generate payment number
       const paymentNumber = await generateVendorPaymentNumber(tx as any);
+
+      // Determine bankAccountId from paidFrom
+      const bankAccountId = body.paidFrom !== 'Cash' ? body.paidFrom : null;
 
       // Create the payment
       const payment = await tx.vendorPayment.create({
@@ -246,6 +249,9 @@ export async function POST(request: Request) {
           amount: body.amount,
           mode: body.mode,
           paidFrom: body.paidFrom,
+          bankAccountId,
+          chequeCollected: body.chequeCollected || false,
+          chequeCollectedDate: body.chequeCollectedDate ? new Date(body.chequeCollectedDate) : null,
           reference: body.reference || null,
           notes: body.notes || null,
         },
@@ -282,16 +288,38 @@ export async function POST(request: Request) {
         });
       }
 
-      // Update bank account balance if not cash
-      if (body.paidFrom !== 'Cash') {
-        await tx.bankAccount.update({
-          where: { id: body.paidFrom },
-          data: {
-            balance: {
-              decrement: body.amount,
-            },
-          },
+      // Update bank account balance and create bank ledger entry if not cash
+      if (bankAccountId) {
+        const bankAcct = await tx.bankAccount.findUnique({
+          where: { id: bankAccountId },
         });
+
+        if (bankAcct) {
+          const newBankBalance = Number(bankAcct.currentBalance) - body.amount;
+
+          await tx.bankLedger.create({
+            data: {
+              bankAccountId,
+              date: new Date(body.date),
+              description: `Vendor Payment ${paymentNumber} to ${vendor.name}`,
+              type: 'PURCHASE_PAYMENT',
+              debit: body.amount,
+              credit: 0,
+              balance: newBankBalance,
+              referenceType: 'vendor_payment',
+              referenceId: payment.id,
+            },
+          });
+
+          await tx.bankAccount.update({
+            where: { id: bankAccountId },
+            data: {
+              currentBalance: {
+                decrement: body.amount,
+              },
+            },
+          });
+        }
       }
 
       // Get the last ledger entry for this vendor to calculate running balance

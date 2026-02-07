@@ -11,7 +11,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Loader2, ChevronDown, X, Calendar, Eye } from "lucide-react";
 
 interface OutstandingInvoice {
   invoiceId: string;
@@ -20,10 +22,69 @@ interface OutstandingInvoice {
   dueDate: string;
   totalAmount: number;
   balanceAmount: number;
+  paidAmount: number;
   daysOverdue: number;
+  status: string;
   customerId: string;
   customerName: string;
   creditDays: number;
+}
+
+interface InvoiceItem {
+  id: string;
+  quantity: number;
+  rate: number;
+  taxRate: number;
+  taxAmount: number;
+  amount: number;
+  item: {
+    id: string;
+    itemCode: string;
+    name: string;
+    unit: string;
+    hsnCode: string | null;
+  };
+}
+
+interface InvoiceDetail {
+  id: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  dueDate: string | null;
+  subtotal: number;
+  cgst: number;
+  sgst: number;
+  taxAmount: number;
+  roundOff: number;
+  totalAmount: number;
+  paidAmount: number;
+  balanceAmount: number;
+  paymentStatus: string;
+  effectiveStatus: string;
+  notes: string | null;
+  customer: {
+    id: string;
+    customerNumber: string;
+    name: string;
+    gstin: string | null;
+    phone: string | null;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    pincode: string | null;
+    creditDays: number;
+  };
+  items: InvoiceItem[];
+  allocations: Array<{
+    id: string;
+    amount: number;
+    payment: {
+      paymentNumber: string;
+      paymentDate: string;
+      amount: number;
+      mode: string;
+    };
+  }>;
 }
 
 interface Summary {
@@ -35,6 +96,10 @@ interface Summary {
 export default function OutstandingReportPage() {
   const [customerId, setCustomerId] = useState("all");
   const [showCustomerDrop, setShowCustomerDrop] = useState(false);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDetail | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
   // ── Customer list for filter ──────────────────────────────
   const { data: customersData } = useSWR("/api/customers?limit=500");
@@ -48,9 +113,12 @@ export default function OutstandingReportPage() {
 
   // ── API query ─────────────────────────────────────────────
   const queryString = useMemo(() => {
-    if (customerId === "all") return "";
-    return `customerId=${customerId}`;
-  }, [customerId]);
+    const params: string[] = [];
+    if (customerId !== "all") params.push(`customerId=${customerId}`);
+    if (fromDate) params.push(`fromDate=${fromDate}`);
+    if (toDate) params.push(`toDate=${toDate}`);
+    return params.join("&");
+  }, [customerId, fromDate, toDate]);
 
   const { data, isLoading } = useSWR(
     `/api/reports/outstanding${queryString ? `?${queryString}` : ""}`
@@ -76,10 +144,52 @@ export default function OutstandingReportPage() {
     return `${d}-${m}-${y}`;
   };
 
+  const formatDateLong = (dateStr: string | null) => {
+    if (!dateStr) return "-";
+    return new Date(dateStr).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
   const getOverdueBadgeClass = (days: number) => {
+    if (days <= 0) return "bg-green-100 text-green-700";
     if (days <= 30) return "bg-amber-100 text-amber-700";
     if (days <= 60) return "bg-orange-100 text-orange-700";
     return "bg-red-100 text-red-700";
+  };
+
+  const getStatusBadge = (status: string, daysOverdue: number) => {
+    if (status === "CANCELLED") return { label: "Cancelled", class: "bg-gray-100 text-gray-700" };
+    if (status === "PARTIAL") return { label: "Partial", class: "bg-blue-100 text-blue-700" };
+    if (daysOverdue > 0) return { label: `${daysOverdue} days overdue`, class: getOverdueBadgeClass(daysOverdue) };
+    return { label: "Pending", class: "bg-yellow-100 text-yellow-700" };
+  };
+
+  const clearDateFilters = () => {
+    setFromDate("");
+    setToDate("");
+  };
+
+  // ── Fetch invoice detail ──────────────────────────────────
+  const handleInvoiceClick = async (invoiceId: string) => {
+    setIsLoadingDetail(true);
+    try {
+      const response = await fetch(`/api/sales-invoices/${invoiceId}`);
+      if (!response.ok) throw new Error("Failed to fetch invoice details");
+      const data = await response.json();
+      setSelectedInvoice(data);
+    } catch (err) {
+      console.error("Error fetching invoice:", err);
+      alert("Failed to load invoice details");
+    } finally {
+      setIsLoadingDetail(false);
+    }
+  };
+
+  const closeModal = () => {
+    setSelectedInvoice(null);
   };
 
   // ── Render ────────────────────────────────────────────────
@@ -90,18 +200,18 @@ export default function OutstandingReportPage() {
         <div className="text-center mb-4">
           <h1 className="text-2xl font-bold text-gray-900">Outstanding Report</h1>
           <p className="text-sm text-gray-500">
-            Customers with payments overdue beyond their credit days
+            All unpaid invoices (excluding fully paid)
           </p>
         </div>
 
         {/* ── Summary cards ── */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
-            <p className="text-sm text-gray-500 mb-1">Customers Overdue</p>
-            <p className="text-2xl font-bold text-red-600">{summary.totalCustomers}</p>
+            <p className="text-sm text-gray-500 mb-1">Customers</p>
+            <p className="text-2xl font-bold text-blue-600">{summary.totalCustomers}</p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
-            <p className="text-sm text-gray-500 mb-1">Overdue Invoices</p>
+            <p className="text-sm text-gray-500 mb-1">Invoices</p>
             <p className="text-2xl font-bold text-orange-600">{summary.totalInvoices}</p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
@@ -110,8 +220,9 @@ export default function OutstandingReportPage() {
           </div>
         </div>
 
-        {/* ── Customer dropdown ── */}
-        <div className="flex justify-center mb-4">
+        {/* ── Filters ── */}
+        <div className="flex flex-wrap items-center justify-center gap-4 mb-4">
+          {/* Customer dropdown */}
           <div className="relative">
             <button
               onClick={() => setShowCustomerDrop(!showCustomerDrop)}
@@ -156,10 +267,44 @@ export default function OutstandingReportPage() {
               </div>
             )}
           </div>
+
+          {/* Date filters */}
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-gray-500" />
+            <Input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="w-40"
+              placeholder="From Date"
+            />
+            <span className="text-gray-400">to</span>
+            <Input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="w-40"
+              placeholder="To Date"
+            />
+            {(fromDate || toDate) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearDateFilters}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* ── Legend ── */}
         <div className="flex justify-center gap-4 mb-4">
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-full bg-green-100 border border-green-300" />
+            <span className="text-xs text-gray-500">Not due</span>
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-full bg-amber-100 border border-amber-300" />
             <span className="text-xs text-gray-500">1–30 days</span>
@@ -183,8 +328,8 @@ export default function OutstandingReportPage() {
             </div>
           ) : invoices.length === 0 ? (
             <div className="py-16 text-center text-gray-500">
-              <p className="text-lg font-medium">No overdue invoices</p>
-              <p className="text-sm mt-1">All customers are within their credit days</p>
+              <p className="text-lg font-medium">No outstanding invoices</p>
+              <p className="text-sm mt-1">All invoices have been paid</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -196,41 +341,65 @@ export default function OutstandingReportPage() {
                     <TableHead className="font-semibold text-gray-700">Invoice Date</TableHead>
                     <TableHead className="font-semibold text-gray-700">Due Date</TableHead>
                     <TableHead className="font-semibold text-gray-700 text-right">Amount (₹)</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-right">Paid (₹)</TableHead>
                     <TableHead className="font-semibold text-gray-700 text-right">Outstanding (₹)</TableHead>
-                    <TableHead className="font-semibold text-gray-700 text-center">Overdue</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-center">Status</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-center">Action</TableHead>
                   </TableRow>
                 </TableHeader>
 
                 <TableBody>
-                  {invoices.map((inv) => (
-                    <TableRow key={inv.invoiceId}>
-                      <TableCell className="font-medium text-gray-800">
-                        {inv.customerName}
-                      </TableCell>
-                      <TableCell className="text-gray-600">
-                        {inv.invoiceNumber}
-                      </TableCell>
-                      <TableCell className="text-gray-600">
-                        {fmtDate(inv.invoiceDate)}
-                      </TableCell>
-                      <TableCell className="text-gray-600">
-                        {fmtDate(inv.dueDate)}
-                      </TableCell>
-                      <TableCell className="text-right text-gray-700">
-                        {fmt(inv.totalAmount)}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-red-600">
-                        {fmt(inv.balanceAmount)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${getOverdueBadgeClass(inv.daysOverdue)}`}
-                        >
-                          {inv.daysOverdue} days
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {invoices.map((inv) => {
+                    const statusInfo = getStatusBadge(inv.status, inv.daysOverdue);
+                    return (
+                      <TableRow
+                        key={inv.invoiceId}
+                        className="hover:bg-gray-50 cursor-pointer"
+                        onClick={() => handleInvoiceClick(inv.invoiceId)}
+                      >
+                        <TableCell className="font-medium text-gray-800">
+                          {inv.customerName}
+                        </TableCell>
+                        <TableCell className="text-teal-600 font-medium">
+                          {inv.invoiceNumber}
+                        </TableCell>
+                        <TableCell className="text-gray-600">
+                          {fmtDate(inv.invoiceDate)}
+                        </TableCell>
+                        <TableCell className="text-gray-600">
+                          {fmtDate(inv.dueDate)}
+                        </TableCell>
+                        <TableCell className="text-right text-gray-700">
+                          {fmt(inv.totalAmount)}
+                        </TableCell>
+                        <TableCell className="text-right text-green-600">
+                          {fmt(inv.paidAmount)}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-red-600">
+                          {fmt(inv.balanceAmount)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusInfo.class}`}
+                          >
+                            {statusInfo.label}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleInvoiceClick(inv.invoiceId);
+                            }}
+                          >
+                            <Eye className="h-4 w-4 text-gray-500" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
 
@@ -246,9 +415,13 @@ export default function OutstandingReportPage() {
                       <TableCell className="text-right font-bold text-gray-900">
                         {fmt(invoices.reduce((sum, inv) => sum + inv.totalAmount, 0))}
                       </TableCell>
+                      <TableCell className="text-right font-bold text-green-600">
+                        {fmt(invoices.reduce((sum, inv) => sum + inv.paidAmount, 0))}
+                      </TableCell>
                       <TableCell className="text-right font-bold text-red-600">
                         {fmt(invoices.reduce((sum, inv) => sum + inv.balanceAmount, 0))}
                       </TableCell>
+                      <TableCell />
                       <TableCell />
                     </TableRow>
                   </TableBody>
@@ -258,6 +431,208 @@ export default function OutstandingReportPage() {
           )}
         </div>
       </div>
+
+      {/* ── Invoice Detail Modal ── */}
+      {(selectedInvoice || isLoadingDetail) && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            {isLoadingDetail ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+              </div>
+            ) : selectedInvoice ? (
+              <>
+                {/* Modal Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">
+                      Invoice {selectedInvoice.invoiceNumber}
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      {selectedInvoice.customer.name}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        selectedInvoice.effectiveStatus === "PAID"
+                          ? "bg-green-100 text-green-700"
+                          : selectedInvoice.effectiveStatus === "OVERDUE"
+                          ? "bg-red-100 text-red-700"
+                          : selectedInvoice.effectiveStatus === "PARTIAL"
+                          ? "bg-blue-100 text-blue-700"
+                          : selectedInvoice.effectiveStatus === "CANCELLED"
+                          ? "bg-gray-100 text-gray-700"
+                          : "bg-yellow-100 text-yellow-700"
+                      }`}
+                    >
+                      {selectedInvoice.effectiveStatus}
+                    </span>
+                    <Button variant="ghost" size="sm" onClick={closeModal}>
+                      <X className="h-5 w-5" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Modal Body */}
+                <div className="overflow-y-auto max-h-[calc(90vh-140px)] p-6">
+                  {/* Invoice Info */}
+                  <div className="grid grid-cols-2 gap-6 mb-6">
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h3 className="font-semibold text-gray-700 mb-3">Customer Details</h3>
+                      <div className="space-y-1 text-sm">
+                        <p><span className="text-gray-500">Name:</span> {selectedInvoice.customer.name}</p>
+                        <p><span className="text-gray-500">Customer #:</span> {selectedInvoice.customer.customerNumber}</p>
+                        {selectedInvoice.customer.gstin && (
+                          <p><span className="text-gray-500">GSTIN:</span> {selectedInvoice.customer.gstin}</p>
+                        )}
+                        {selectedInvoice.customer.phone && (
+                          <p><span className="text-gray-500">Phone:</span> {selectedInvoice.customer.phone}</p>
+                        )}
+                        {selectedInvoice.customer.address && (
+                          <p>
+                            <span className="text-gray-500">Address:</span> {selectedInvoice.customer.address}
+                            {selectedInvoice.customer.city && `, ${selectedInvoice.customer.city}`}
+                            {selectedInvoice.customer.state && `, ${selectedInvoice.customer.state}`}
+                            {selectedInvoice.customer.pincode && ` - ${selectedInvoice.customer.pincode}`}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h3 className="font-semibold text-gray-700 mb-3">Invoice Details</h3>
+                      <div className="space-y-1 text-sm">
+                        <p><span className="text-gray-500">Invoice Date:</span> {formatDateLong(selectedInvoice.invoiceDate)}</p>
+                        <p><span className="text-gray-500">Due Date:</span> {formatDateLong(selectedInvoice.dueDate)}</p>
+                        <p><span className="text-gray-500">Credit Days:</span> {selectedInvoice.customer.creditDays} days</p>
+                        {selectedInvoice.notes && (
+                          <p><span className="text-gray-500">Notes:</span> {selectedInvoice.notes}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Items Table */}
+                  <div className="mb-6">
+                    <h3 className="font-semibold text-gray-700 mb-3">Items</h3>
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-gray-100">
+                            <TableHead className="font-semibold">Item</TableHead>
+                            <TableHead className="font-semibold">HSN</TableHead>
+                            <TableHead className="font-semibold text-right">Qty</TableHead>
+                            <TableHead className="font-semibold text-right">Rate (₹)</TableHead>
+                            <TableHead className="font-semibold text-right">GST %</TableHead>
+                            <TableHead className="font-semibold text-right">Total (₹)</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedInvoice.items.map((item) => (
+                            <TableRow key={item.id}>
+                              <TableCell>
+                                <div>
+                                  <p className="font-medium">{item.item.name}</p>
+                                  <p className="text-xs text-gray-500">{item.item.itemCode}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-sm">{item.item.hsnCode || "-"}</TableCell>
+                              <TableCell className="text-right">
+                                {Number(item.quantity)} {item.item.unit}
+                              </TableCell>
+                              <TableCell className="text-right">{fmt(Number(item.rate))}</TableCell>
+                              <TableCell className="text-right">{Number(item.taxRate)}%</TableCell>
+                              <TableCell className="text-right font-medium">
+                                {fmt(Number(item.quantity) * Number(item.rate))}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+
+                  {/* Payments & Summary */}
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Payments */}
+                    {selectedInvoice.allocations.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-gray-700 mb-3">Payments Received</h3>
+                        <div className="border rounded-lg p-4 space-y-2">
+                          {selectedInvoice.allocations.map((alloc) => (
+                            <div key={alloc.id} className="flex justify-between text-sm border-b pb-2 last:border-0">
+                              <div>
+                                <p className="font-medium">{alloc.payment.paymentNumber}</p>
+                                <p className="text-xs text-gray-500">
+                                  {formatDateLong(alloc.payment.paymentDate)} - {alloc.payment.mode}
+                                </p>
+                              </div>
+                              <p className="font-medium text-green-600">₹{fmt(Number(alloc.amount))}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Summary */}
+                    <div className={selectedInvoice.allocations.length === 0 ? "col-span-2" : ""}>
+                      <h3 className="font-semibold text-gray-700 mb-3">Summary</h3>
+                      <div className="border rounded-lg p-4 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Subtotal</span>
+                          <span>₹{fmt(Number(selectedInvoice.subtotal))}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">CGST</span>
+                          <span>₹{fmt(Number(selectedInvoice.cgst))}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">SGST</span>
+                          <span>₹{fmt(Number(selectedInvoice.sgst))}</span>
+                        </div>
+                        {Number(selectedInvoice.roundOff) !== 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Round Off</span>
+                            <span>₹{fmt(Number(selectedInvoice.roundOff))}</span>
+                          </div>
+                        )}
+                        <hr />
+                        <div className="flex justify-between font-bold text-lg">
+                          <span>Total Amount</span>
+                          <span>₹{fmt(Number(selectedInvoice.totalAmount))}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Paid</span>
+                          <span className="text-green-600 font-medium">₹{fmt(Number(selectedInvoice.paidAmount))}</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-lg text-red-600">
+                          <span>Balance</span>
+                          <span>₹{fmt(Number(selectedInvoice.balanceAmount))}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50">
+                  <Button variant="outline" onClick={closeModal}>
+                    Close
+                  </Button>
+                  <Button
+                    className="bg-teal-600 hover:bg-teal-700"
+                    onClick={() => {
+                      window.location.href = `/sales/invoices/${selectedInvoice.id}`;
+                    }}
+                  >
+                    View Full Details
+                  </Button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

@@ -76,10 +76,49 @@ function NewPaymentContent() {
   const [referenceNumber, setReferenceNumber] = useState("");
   const [notes, setNotes] = useState("");
 
+  // Bank account & cheque tracking
+  const [bankAccounts, setBankAccounts] = useState<{ id: string; accountName: string; bankName: string; currentBalance: number }[]>([]);
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState("");
+  const [chequeCollected, setChequeCollected] = useState(false);
+  const [chequeCollectedDate, setChequeCollectedDate] = useState("");
+
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paymentNumber, setPaymentNumber] = useState("Loading...");
+
+  // Fetch next payment number
+  useEffect(() => {
+    const fetchNextPaymentNumber = async () => {
+      try {
+        const response = await fetch("/api/payments/next-number");
+        if (response.ok) {
+          const data = await response.json();
+          setPaymentNumber(data.paymentNumber);
+        }
+      } catch (err) {
+        console.error("Error fetching next payment number:", err);
+      }
+    };
+    fetchNextPaymentNumber();
+  }, []);
+
+  // Fetch bank accounts
+  useEffect(() => {
+    const fetchBankAccounts = async () => {
+      try {
+        const response = await fetch("/api/bank-accounts?activeOnly=true");
+        if (response.ok) {
+          const data = await response.json();
+          setBankAccounts(data.bankAccounts || []);
+        }
+      } catch (err) {
+        console.error("Error fetching bank accounts:", err);
+      }
+    };
+    fetchBankAccounts();
+  }, []);
 
   // Fetch customers
   useEffect(() => {
@@ -208,6 +247,9 @@ function NewPaymentContent() {
           mode: paymentMode,
           referenceNumber: referenceNumber || null,
           notes: notes || null,
+          bankAccountId: selectedBankAccountId || null,
+          chequeCollected,
+          chequeCollectedDate: chequeCollectedDate || null,
           allocations: allocationsList,
         }),
       });
@@ -260,8 +302,8 @@ function NewPaymentContent() {
             Back to Payments
           </Button>
           <h1 className="text-2xl font-bold text-gray-900">Record Payment</h1>
-          <p className="text-gray-600">
-            Record a new payment and allocate it to invoices
+          <p className="text-sm text-gray-600">
+            Receipt #: {paymentNumber}
           </p>
         </div>
 
@@ -327,6 +369,23 @@ function NewPaymentContent() {
                   </Select>
                 </div>
 
+                {/* Deposit To (Bank Account) */}
+                <div>
+                  <Label htmlFor="bankAccount">Deposit To</Label>
+                  <Select value={selectedBankAccountId} onValueChange={setSelectedBankAccountId}>
+                    <SelectTrigger id="bankAccount">
+                      <SelectValue placeholder="Select account..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bankAccounts.map((acc) => (
+                        <SelectItem key={acc.id} value={acc.id}>
+                          {acc.accountName} ({acc.bankName})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {/* Reference Number */}
                 <div>
                   <Label htmlFor="referenceNumber">Reference Number</Label>
@@ -338,6 +397,41 @@ function NewPaymentContent() {
                     onChange={(e) => setReferenceNumber(e.target.value)}
                   />
                 </div>
+
+                {/* Cheque Collection Tracking */}
+                {paymentMode === "CHEQUE" && (
+                  <div className="border border-amber-200 bg-amber-50 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        type="checkbox"
+                        id="chequeCollected"
+                        checked={chequeCollected}
+                        onChange={(e) => {
+                          setChequeCollected(e.target.checked);
+                          if (!e.target.checked) setChequeCollectedDate("");
+                        }}
+                        className="rounded border-gray-300"
+                      />
+                      <Label htmlFor="chequeCollected" className="text-amber-800 font-medium cursor-pointer">
+                        Cheque Collected
+                      </Label>
+                    </div>
+                    {chequeCollected && (
+                      <div className="mt-2">
+                        <Label htmlFor="chequeCollectedDate" className="text-amber-700 text-sm">
+                          Collection Date
+                        </Label>
+                        <Input
+                          id="chequeCollectedDate"
+                          type="date"
+                          value={chequeCollectedDate}
+                          onChange={(e) => setChequeCollectedDate(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Notes */}
                 <div>

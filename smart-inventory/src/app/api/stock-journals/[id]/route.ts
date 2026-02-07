@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 
 // GET /api/stock-journals/[id] - Get a single stock journal
 export async function GET(
@@ -76,7 +76,7 @@ export async function DELETE(
     const qty = Number(journal.quantity);
 
     // Reverse the transaction
-    await db.$transaction(async (tx) => {
+    await transaction(async (tx) => {
       // Determine what to reverse based on the original type
       // ADJUSTMENT_IN was either INCREASE or UNRESERVED
       // ADJUSTMENT_OUT was either DECREASE or RESERVED
@@ -128,9 +128,6 @@ export async function DELETE(
       await tx.stockJournal.delete({
         where: { id },
       });
-    }, {
-      maxWait: 10000,
-      timeout: 30000,
     });
 
     return NextResponse.json({ success: true, message: 'Stock journal deleted and reversed' });

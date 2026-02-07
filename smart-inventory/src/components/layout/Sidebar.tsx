@@ -24,6 +24,7 @@ import {
   ClipboardList,
   Truck,
   BarChart3,
+  Landmark,
 } from "lucide-react";
 import { useState, memo, useMemo } from "react";
 
@@ -71,6 +72,7 @@ export const Sidebar = memo(function Sidebar() {
   const { data: session } = useSession();
   const [salesOpen, setSalesOpen] = useState(false);
   const [purchasesOpen, setPurchasesOpen] = useState(false);
+  const [bankCashOpen, setBankCashOpen] = useState(false);
   const [mastersOpen, setMastersOpen] = useState(false);
   const [itemsOpen, setItemsOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
@@ -93,6 +95,11 @@ export const Sidebar = memo(function Sidebar() {
     { icon: Receipt, label: "Invoices", href: "/purchases/invoices" },
     { icon: CreditCard, label: "Payments", href: "/purchases/payments" },
     { icon: RotateCcw, label: "Returns", href: "/purchases/returns" },
+  ], []);
+
+  const bankCashItems = useMemo(() => [
+    { icon: Building2, label: "Accounts", href: "/bank-cash/accounts" },
+    { icon: BookOpen, label: "Bank Ledger", href: "/bank-cash/ledger" },
   ], []);
 
   const masterItems = useMemo(() => [
@@ -119,6 +126,7 @@ export const Sidebar = memo(function Sidebar() {
     { icon: BarChart3, label: "Sales Register", href: "/reports/sales-register" },
     { icon: BarChart3, label: "Purchase Register", href: "/reports/purchase-register" },
     { icon: ClipboardList, label: "Outstanding", href: "/reports/outstanding" },
+    { icon: FileText, label: "Billed & Unbilled", href: "/reports/billed-unbilled" },
   ], []);
 
   return (
@@ -239,6 +247,54 @@ export const Sidebar = memo(function Sidebar() {
             </div>
           )}
         </div>
+
+        {/* Bank/Cash Section */}
+        {permissions.ledger && (
+          <div className="mb-2">
+            <button
+              onClick={() => setBankCashOpen(!bankCashOpen)}
+              className={cn(
+                "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
+                pathname.startsWith("/bank-cash") && "bg-white/15 text-white"
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <Landmark className="h-5 w-5" strokeWidth={1.5} />
+                <span>Bank/Cash</span>
+              </div>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 transition-transform",
+                  bankCashOpen && "rotate-180"
+                )}
+              />
+            </button>
+
+            {/* Bank/Cash Dropdown */}
+            {bankCashOpen && (
+              <div className="ml-8 mt-1 space-y-1">
+                {bankCashItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
+                        isActive && "bg-white/15 text-white font-medium shadow-sm"
+                      )}
+                    >
+                      <Icon className="h-4 w-4" strokeWidth={1.5} />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Ledger Section */}
         {permissions.ledger && (

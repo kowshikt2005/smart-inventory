@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { PaymentStatus } from '@/generated/prisma';
 
 // GET /api/payments/[id] - Get single payment
@@ -84,7 +84,7 @@ export async function DELETE(
     }
 
     // Reverse payment in transaction
-    await db.$transaction(async (tx) => {
+    await transaction(async (tx) => {
       // Reverse each invoice allocation
       for (const allocation of payment.allocations) {
         const invoice = allocation.invoice;
@@ -136,6 +136,28 @@ export async function DELETE(
           referenceId: payment.id,
         },
       });
+
+      // Bank ledger reversal
+      if (payment.bankAccountId) {
+        await tx.bankLedger.create({
+          data: {
+            bankAccountId: payment.bankAccountId,
+            date: new Date(),
+            description: `Reversed Sales Receipt ${payment.paymentNumber}`,
+            type: 'ADJUSTMENT',
+            debit: Number(payment.amount),
+            credit: 0,
+            balance: 0, // Will be recalculated
+            referenceType: 'sales_receipt',
+            referenceId: payment.id,
+          },
+        });
+
+        await tx.bankAccount.update({
+          where: { id: payment.bankAccountId },
+          data: { currentBalance: { decrement: Number(payment.amount) } },
+        });
+      }
 
       // Delete allocations (cascade should handle this, but explicit)
       await tx.paymentAllocation.deleteMany({

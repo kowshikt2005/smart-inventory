@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 
 // GET /api/items - Get all items with optional search and pagination
 export async function GET(request: Request) {
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
     const itemCode = `item-${Date.now()}`;
 
     // Create item with inventory record in transaction (without includes for speed)
-    const newItem = await db.$transaction(async (tx) => {
+    const newItem = await transaction(async (tx) => {
       // Create the item (without includes to keep transaction fast)
       const item = await tx.item.create({
         data: {
@@ -105,6 +105,8 @@ export async function POST(request: Request) {
           purchasePrice: body.purchasePrice || 0,
           mrp: body.mrp || 0,
           sellingPrice: body.sellingPrice || body.mrp || 0,
+          margin: body.margin !== undefined && body.margin !== null ? body.margin : null,
+          marginType: body.marginType || "PERCENTAGE",
           discountPercent: body.discountPercent || null,
           minStock: body.minStock || 0,
           unit: body.unit || 'PCS',

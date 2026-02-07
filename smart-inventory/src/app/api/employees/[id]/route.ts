@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { hashPassword, hasRole } from '@/lib/auth-utils';
 import { UserRole } from '@/generated/prisma';
 
@@ -127,7 +127,7 @@ export async function PUT(
     }
 
     // Update employee and user in transaction
-    const result = await db.$transaction(async (tx) => {
+    const result = await transaction(async (tx) => {
       // Update employee record
       const employee = await tx.employee.update({
         where: { id },
@@ -240,7 +240,7 @@ export async function DELETE(
     }
 
     // Delete employee and user in transaction
-    await db.$transaction(async (tx) => {
+    await transaction(async (tx) => {
       // Delete employee record
       await tx.employee.delete({
         where: { id },

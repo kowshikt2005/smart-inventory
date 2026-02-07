@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { SYSTEM_USER_ID } from '@/lib/order-utils';
 
 // POST /api/items/[id]/adjust-stock - Adjust physical stock for an item
@@ -77,7 +77,7 @@ export async function POST(
     }
 
     // Update stock in transaction
-    const result = await db.$transaction(async (tx) => {
+    const result = await transaction(async (tx) => {
       let inventory;
 
       // Create or update inventory

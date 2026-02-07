@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 
 // POST /api/sales-returns/[id]/complete - Complete sales return (restore inventory, update invoice, create ledger entry)
 export async function POST(
@@ -41,7 +41,7 @@ export async function POST(
     }
 
     // Complete return in transaction - OPTIMIZED VERSION
-    await db.$transaction(async (tx) => {
+    await transaction(async (tx) => {
       // Prepare batch operations
       const inventoryUpdates: Promise<any>[] = [];
       const stockMovements: any[] = [];

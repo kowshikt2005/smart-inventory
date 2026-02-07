@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,11 +11,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   Search,
   Users,
@@ -190,8 +186,6 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
   const debouncedQuery = useDebounce(query, 400);
 
   // Fetch unified search data with a single API call
@@ -347,7 +341,6 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         setOpen(true);
-        setTimeout(() => inputRef.current?.focus(), 100);
       }
       
       // Escape to close
@@ -385,24 +378,24 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className={`w-full justify-start text-sm text-muted-foreground ${className}`}
-          onClick={() => setOpen(true)}
-        >
-          <Search className="mr-2 h-4 w-4" />
-          {placeholder}
-          <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
-            <span className="text-xs">⌘</span>K
-          </kbd>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[600px] p-0" align="start">
+    <>
+      <Button
+        variant="outline"
+        className={`w-full justify-start text-sm text-muted-foreground ${className}`}
+        onClick={() => setOpen(true)}
+      >
+        <Search className="mr-2 h-4 w-4" />
+        {placeholder}
+        <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+          <span className="text-xs">⌘</span>K
+        </kbd>
+      </Button>
+
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="overflow-hidden p-0 shadow-lg sm:max-w-[600px]">
+        <DialogTitle className="sr-only">Search</DialogTitle>
         <Command shouldFilter={false}>
           <CommandInput
-            ref={inputRef}
             placeholder="Search customers, items, orders, navigation..."
             value={query}
             onValueChange={setQuery}
@@ -523,7 +516,8 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
             )}
           </CommandList>
         </Command>
-      </PopoverContent>
-    </Popover>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

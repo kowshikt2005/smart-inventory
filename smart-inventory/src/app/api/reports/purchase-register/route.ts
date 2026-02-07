@@ -23,59 +23,36 @@ export async function GET(request: Request) {
     const dateFilter = { gte: start, lte: end };
     const vendorFilter = vendorId ? { vendorId } : {};
 
-    // Credit = purchase invoices, Debit = vendor payments + completed purchase returns
-    const [invoices, payments, returns] = await Promise.all([
-      db.purchaseInvoice.findMany({
-        where: { date: dateFilter, ...vendorFilter },
-        select: { date: true, totalAmount: true },
-      }),
-      db.vendorPayment.findMany({
-        where: { date: dateFilter, ...vendorFilter },
-        select: { date: true, amount: true },
-      }),
-      db.purchaseReturn.findMany({
-        where: { date: dateFilter, status: 'COMPLETED', ...vendorFilter },
-        select: { date: true, totalAmount: true },
-      }),
-    ]);
+    const invoices = await db.purchaseInvoice.findMany({
+      where: { date: dateFilter, ...vendorFilter },
+      select: { date: true, amount: true, taxAmount: true, totalAmount: true },
+    });
 
     // Aggregate by "YYYY-M" key
-    const monthlyDebit: Record<string, number> = {};
-    const monthlyCredit: Record<string, number> = {};
+    const monthlyGross: Record<string, number> = {};
+    const monthlyTax: Record<string, number> = {};
+    const monthlyNet: Record<string, number> = {};
 
     for (const inv of invoices) {
       const d = new Date(inv.date);
       const key = `${d.getFullYear()}-${d.getMonth()}`;
-      monthlyCredit[key] = (monthlyCredit[key] || 0) + Number(inv.totalAmount);
-    }
-
-    for (const pay of payments) {
-      const d = new Date(pay.date);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      monthlyDebit[key] = (monthlyDebit[key] || 0) + Number(pay.amount);
-    }
-
-    for (const ret of returns) {
-      const d = new Date(ret.date);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      monthlyDebit[key] = (monthlyDebit[key] || 0) + Number(ret.totalAmount);
+      monthlyGross[key] = (monthlyGross[key] || 0) + Number(inv.amount);
+      monthlyTax[key] = (monthlyTax[key] || 0) + Number(inv.taxAmount);
+      monthlyNet[key] = (monthlyNet[key] || 0) + Number(inv.totalAmount);
     }
 
     // Walk month by month from start to end
-    const months: { month: string; debit: number; credit: number; balance: number }[] = [];
+    const months: { month: string; grossAmount: number; taxAmount: number; netAmount: number }[] = [];
     let y = start.getFullYear();
     let m = start.getMonth();
 
     while (y < end.getFullYear() || (y === end.getFullYear() && m <= end.getMonth())) {
       const key = `${y}-${m}`;
-      const debit = monthlyDebit[key] || 0;
-      const credit = monthlyCredit[key] || 0;
-
       months.push({
         month: MONTH_NAMES[m],
-        debit,
-        credit,
-        balance: credit - debit,
+        grossAmount: monthlyGross[key] || 0,
+        taxAmount: monthlyTax[key] || 0,
+        netAmount: monthlyNet[key] || 0,
       });
 
       m++;
@@ -84,11 +61,11 @@ export async function GET(request: Request) {
 
     const totals = months.reduce(
       (acc, row) => ({
-        debit: acc.debit + row.debit,
-        credit: acc.credit + row.credit,
-        balance: acc.balance + row.balance,
+        grossAmount: acc.grossAmount + row.grossAmount,
+        taxAmount: acc.taxAmount + row.taxAmount,
+        netAmount: acc.netAmount + row.netAmount,
       }),
-      { debit: 0, credit: 0, balance: 0 }
+      { grossAmount: 0, taxAmount: 0, netAmount: 0 }
     );
 
     return NextResponse.json({ months, totals });

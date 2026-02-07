@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { calculateLineItemV2, calculateOrderTotals } from '@/lib/order-utils';
 import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
 
@@ -220,7 +220,7 @@ export async function PUT(
       }
 
       // Update in transaction with extended timeout
-      const updatedOrder = await db.$transaction(async (tx) => {
+      const updatedOrder = await transaction(async (tx) => {
         // Release old inventory reservations (only if inventory exists) - OPTIMIZED
         const oldItemIds = existingOrder.items.map(item => item.itemId);
         const newItemIds = body.items.map((item: any) => item.itemId);
@@ -431,7 +431,7 @@ export async function DELETE(
     }
 
     // Delete in transaction with extended timeout - OPTIMIZED
-    await db.$transaction(async (tx) => {
+    await transaction(async (tx) => {
       // Get all inventory records in one query
       const itemIds = existingOrder.items.map(item => item.itemId);
       const inventories = await tx.inventory.findMany({

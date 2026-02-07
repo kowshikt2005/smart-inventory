@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Loader2, FileText } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import useSWR from "swr";
 
 interface ClaimRecord {
@@ -91,7 +91,7 @@ export default function ClaimReportPage() {
     `/api/reports/claim-report?${queryString}`
   );
 
-  const claims: ClaimRecord[] = data?.claims || [];
+  const claims: ClaimRecord[] = useMemo(() => data?.claims || [], [data]);
 
   // Paginate claims
   const totalPages = Math.ceil(claims.length / itemsPerPage);

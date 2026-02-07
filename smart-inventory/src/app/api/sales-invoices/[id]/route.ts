@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 
 // GET /api/sales-invoices/[id] - Get single invoice
 export async function GET(
@@ -199,7 +199,7 @@ export async function DELETE(
     }
 
     // Cancel invoice, restore inventory, and reverse ledger entry in transaction
-    await db.$transaction(async (tx) => {
+    await transaction(async (tx) => {
       // Update invoice status to cancelled
       await tx.invoice.update({
         where: { id },

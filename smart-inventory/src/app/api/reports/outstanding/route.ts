@@ -5,26 +5,40 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
+    const fromDate = searchParams.get('fromDate');
+    const toDate = searchParams.get('toDate');
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Fetch all invoices that still have a balance, excluding paid/cancelled
+    // Build date filter
+    const dateFilter: { gte?: Date; lte?: Date } = {};
+    if (fromDate) {
+      dateFilter.gte = new Date(fromDate);
+    }
+    if (toDate) {
+      const endDate = new Date(toDate);
+      endDate.setHours(23, 59, 59, 999);
+      dateFilter.lte = endDate;
+    }
+
+    // Fetch all invoices that still have a balance, excluding only PAID
     const invoices = await db.invoice.findMany({
       where: {
         balanceAmount: { gt: 0 },
-        paymentStatus: { notIn: ['PAID', 'CANCELLED'] },
+        paymentStatus: { not: 'PAID' },
         ...(customerId ? { customerId } : {}),
+        ...(Object.keys(dateFilter).length > 0 ? { invoiceDate: dateFilter } : {}),
       },
       include: {
         customer: {
           select: { id: true, name: true, creditDays: true },
         },
       },
-      orderBy: { invoiceDate: 'asc' },
+      orderBy: { invoiceDate: 'desc' },
     });
 
-    // Calculate effective due date per invoice, keep only overdue ones
+    // Calculate effective due date and days overdue for each invoice
     const outstanding = invoices
       .map((inv) => {
         const invoiceDate = new Date(inv.invoiceDate);
@@ -51,13 +65,14 @@ export async function GET(request: Request) {
           dueDate: effectiveDueDate.toISOString().split('T')[0],
           totalAmount: Number(inv.totalAmount),
           balanceAmount: Number(inv.balanceAmount),
+          paidAmount: Number(inv.paidAmount),
           daysOverdue,
+          status: inv.paymentStatus,
           customerId: inv.customer.id,
           customerName: inv.customer.name,
           creditDays: inv.customer.creditDays,
         };
       })
-      .filter((inv) => inv.daysOverdue > 0)
       .sort((a, b) => b.daysOverdue - a.daysOverdue);
 
     const uniqueCustomers = new Set(outstanding.map((inv) => inv.customerId));

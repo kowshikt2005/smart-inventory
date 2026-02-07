@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generateOrderNumber, calculateLineItemV2, calculateOrderTotals, SYSTEM_USER_ID } from '@/lib/order-utils';
 import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
 import { auth } from '@/lib/auth';
@@ -327,7 +327,7 @@ export async function POST(request: Request) {
     }
 
     // Create order in a transaction with extended timeout
-    const salesOrder = await db.$transaction(async (tx) => {
+    const salesOrder = await transaction(async (tx) => {
       // Generate order number
       const orderNumber = await generateOrderNumber(tx as any);
 

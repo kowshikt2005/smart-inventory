@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 
 // GET /api/rate-sheets - Get all rate sheets
 export async function GET(request: Request) {
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
     }
 
     // Create rate sheet and join table entries in a transaction
-    const rateSheet = await db.$transaction(async (tx) => {
+    const rateSheet = await transaction(async (tx) => {
       const created = await tx.rateSheet.create({
         data: {
           name: body.name,

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 
 // GET /api/vendor-payments/[id] - Get a single vendor payment
 export async function GET(
@@ -79,7 +79,7 @@ export async function DELETE(
     }
 
     // Delete payment and reverse changes in a transaction
-    await db.$transaction(async (tx) => {
+    await transaction(async (tx) => {
       const paymentAmount = Number(existingPayment.amount);
 
       // If this payment was linked to an invoice, update the invoice
@@ -110,12 +110,36 @@ export async function DELETE(
         });
       }
 
-      // Restore bank account balance if not cash
-      if (existingPayment.paidFrom !== 'Cash') {
+      // Restore bank account balance and create reversal ledger entry if not cash
+      if (existingPayment.bankAccountId) {
+        await tx.bankLedger.create({
+          data: {
+            bankAccountId: existingPayment.bankAccountId,
+            date: new Date(),
+            description: `Reversed Vendor Payment ${existingPayment.paymentNumber}`,
+            type: 'ADJUSTMENT',
+            debit: 0,
+            credit: paymentAmount,
+            balance: 0, // Will be approximate
+            referenceType: 'vendor_payment',
+            referenceId: id,
+          },
+        });
+
+        await tx.bankAccount.update({
+          where: { id: existingPayment.bankAccountId },
+          data: {
+            currentBalance: {
+              increment: paymentAmount,
+            },
+          },
+        });
+      } else if (existingPayment.paidFrom !== 'Cash') {
+        // Fallback for legacy payments without bankAccountId
         await tx.bankAccount.update({
           where: { id: existingPayment.paidFrom },
           data: {
-            balance: {
+            currentBalance: {
               increment: paymentAmount,
             },
           },

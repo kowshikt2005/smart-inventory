@@ -1,5 +1,6 @@
 "use client";
 
+
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Calendar, ChevronDown, DollarSign, FileText, CreditCard, TrendingUp } from "lucide-react";

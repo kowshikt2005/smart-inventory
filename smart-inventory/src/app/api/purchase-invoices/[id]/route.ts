@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 
 // GET /api/purchase-invoices/[id] - Get a single purchase invoice
 export async function GET(
@@ -220,7 +220,7 @@ export async function DELETE(
     }
 
     // Delete invoice and reverse inventory/ledger in a transaction
-    await db.$transaction(async (tx) => {
+    await transaction(async (tx) => {
       // Reverse inventory changes - decrease physical stock
       for (const invoiceItem of existingInvoice.items) {
         const inventory = await tx.inventory.findUnique({

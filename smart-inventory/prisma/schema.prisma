@@ -100,6 +100,15 @@ enum PaymentMode {
   OTHER
 }
 
+enum BankAccountType {
+  CASH
+  SAVINGS
+  CURRENT
+  OVERDRAFT
+  LOAN
+  CREDIT_CARD
+}
+
 // ============================================
 // USER MANAGEMENT
 // ============================================
@@ -265,6 +274,8 @@ model Item {
   purchasePrice Decimal  @default(0) @db.Decimal(15, 2) // Cost price (what you pay to buy the item)
   mrp           Decimal  @default(0) @db.Decimal(15, 2) // MRP - Maximum Retail Price (legal max, tax-inclusive)
   sellingPrice  Decimal  @default(0) @db.Decimal(15, 2) // Selling price (actual price you sell at, tax-inclusive, <= MRP)
+  margin        Decimal? @db.Decimal(15, 2) // Margin value
+  marginType    String   @default("PERCENTAGE") // "PERCENTAGE" or "AMOUNT"
   discountPercent Decimal? @db.Decimal(5, 2) // Default discount percentage
   minStock      Decimal  @default(0) @db.Decimal(15, 3)
   unit          String   @default("PCS") // PCS, KG, LTR, etc.
@@ -602,27 +613,32 @@ model InvoiceItem {
 }
 
 model Payment {
-  id              String      @id @default(uuid())
-  paymentNumber   String      @unique // PAY-xxxx
-  paymentDate     DateTime
-  customerId      String
-  invoiceId       String?     // Legacy - use allocations for new payments
-  amount          Decimal     @db.Decimal(15, 2)
-  mode            PaymentMode
-  referenceNumber String?     // Cheque number, transaction ID, etc.
-  notes           String?     @db.Text
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id                   String      @id @default(uuid())
+  paymentNumber        String      @unique // PAY-xxxx
+  paymentDate          DateTime
+  customerId           String
+  invoiceId            String?     // Legacy - use allocations for new payments
+  amount               Decimal     @db.Decimal(15, 2)
+  mode                 PaymentMode
+  referenceNumber      String?     // Cheque number, transaction ID, etc.
+  bankAccountId        String?
+  chequeCollected      Boolean     @default(false)
+  chequeCollectedDate  DateTime?
+  notes                String?     @db.Text
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
 
   // Relations
   customer    Customer            @relation(fields: [customerId], references: [id])
   invoice     Invoice?            @relation(fields: [invoiceId], references: [id])
+  bankAccount BankAccount?        @relation(fields: [bankAccountId], references: [id])
   allocations PaymentAllocation[]
 
   @@index([paymentNumber])
   @@index([customerId])
   @@index([invoiceId])
   @@index([paymentDate])
+  @@index([bankAccountId])
   @@map("payments")
 }
 
@@ -720,19 +736,50 @@ model Employee {
 // ============================================
 
 model BankAccount {
-  id            String   @id @default(uuid())
-  accountName   String
-  accountNumber String   @unique
-  bankName      String
-  ifscCode      String
-  branch        String?
-  balance       Decimal  @default(0) @db.Decimal(15, 2)
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String          @id @default(uuid())
+  accountName    String
+  accountNumber  String          @unique
+  bankName       String
+  ifscCode       String?
+  branch         String?
+  accountType    BankAccountType @default(SAVINGS)
+  openingBalance Decimal         @default(0) @db.Decimal(15, 2)
+  currentBalance Decimal         @default(0) @db.Decimal(15, 2)
+  isDefault      Boolean         @default(false)
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  // Relations
+  payments       Payment[]
+  vendorPayments VendorPayment[]
+  ledgerEntries  BankLedger[]
 
   @@index([accountNumber])
   @@map("bank_accounts")
+}
+
+model BankLedger {
+  id            String          @id @default(uuid())
+  bankAccountId String
+  date          DateTime
+  description   String
+  type          LedgerEntryType
+  debit         Decimal         @default(0) @db.Decimal(15, 2)
+  credit        Decimal         @default(0) @db.Decimal(15, 2)
+  balance       Decimal         @default(0) @db.Decimal(15, 2)
+  referenceType String
+  referenceId   String
+  createdAt     DateTime        @default(now())
+
+  // Relations
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+
+  @@index([bankAccountId])
+  @@index([date])
+  @@index([type])
+  @@index([referenceType, referenceId])
+  @@map("bank_ledger")
 }
 
 // ============================================
@@ -796,26 +843,31 @@ model PurchaseInvoiceItem {
 // ============================================
 
 model VendorPayment {
-  id                String      @id @default(uuid())
-  paymentNumber     String      @unique // VP-xxxx
-  vendorId          String
-  purchaseInvoiceId String?     // Optional - can be advance payment
-  date              DateTime
-  amount            Decimal     @db.Decimal(15, 2)
-  mode              PaymentMode
-  paidFrom          String      // 'Cash' or BankAccount ID
-  reference         String?     // Check number, transaction ID, etc.
-  notes             String?     @db.Text
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  id                  String      @id @default(uuid())
+  paymentNumber       String      @unique // VP-xxxx
+  vendorId            String
+  purchaseInvoiceId   String?     // Optional - can be advance payment
+  date                DateTime
+  amount              Decimal     @db.Decimal(15, 2)
+  mode                PaymentMode
+  paidFrom            String      // 'Cash' or BankAccount ID
+  bankAccountId       String?
+  chequeCollected     Boolean     @default(false)
+  chequeCollectedDate DateTime?
+  reference           String?     // Check number, transaction ID, etc.
+  notes               String?     @db.Text
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   // Relations
   vendor          Vendor           @relation(fields: [vendorId], references: [id])
   purchaseInvoice PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id])
+  bankAccount     BankAccount?     @relation(fields: [bankAccountId], references: [id])
 
   @@index([paymentNumber])
   @@index([vendorId])
   @@index([purchaseInvoiceId])
+  @@index([bankAccountId])
   @@index([date])
   @@map("vendor_payments")
 }

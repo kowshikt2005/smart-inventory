@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generatePurchaseInvoiceNumber, calculatePurchaseLineItem, calculatePurchaseTotals } from '@/lib/purchase-utils';
 import { auth } from '@/lib/auth';
 import { hasRole } from '@/lib/auth-utils';
@@ -236,7 +236,7 @@ export async function POST(request: Request) {
     }
 
     // Create invoice in a transaction
-    const purchaseInvoice = await db.$transaction(async (tx) => {
+    const purchaseInvoice = await transaction(async (tx) => {
       // Generate invoice number
       const invoiceNumber = await generatePurchaseInvoiceNumber(tx as any);
 

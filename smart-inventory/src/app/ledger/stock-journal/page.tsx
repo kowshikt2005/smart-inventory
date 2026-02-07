@@ -139,7 +139,7 @@ export default function StockJournalPage() {
     return `${displayHours}:${minutes} ${ampm}`;
   };
 
-  const formatDate = (dateStr: string) => {
+  const _formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",

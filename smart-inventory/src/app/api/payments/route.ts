@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generatePaymentNumber } from '@/lib/invoice-utils';
 
 // GET /api/payments - Get all payments with filtering
@@ -38,6 +38,13 @@ export async function GET(request: Request) {
               id: true,
               customerNumber: true,
               name: true,
+            },
+          },
+          bankAccount: {
+            select: {
+              id: true,
+              accountName: true,
+              bankName: true,
             },
           },
           allocations: {
@@ -176,7 +183,7 @@ export async function POST(request: Request) {
     }
 
     // Create payment in transaction
-    const payment = await db.$transaction(async (tx) => {
+    const payment = await transaction(async (tx) => {
       // Generate payment number
       const paymentNumber = await generatePaymentNumber(tx as any);
 
@@ -189,6 +196,9 @@ export async function POST(request: Request) {
           amount: body.amount,
           mode: body.mode,
           referenceNumber: body.referenceNumber || null,
+          bankAccountId: body.bankAccountId || null,
+          chequeCollected: body.chequeCollected || false,
+          chequeCollectedDate: body.chequeCollectedDate ? new Date(body.chequeCollectedDate) : null,
           notes: body.notes || null,
         },
       });
@@ -248,6 +258,36 @@ export async function POST(request: Request) {
           referenceId: newPayment.id,
         },
       });
+
+      // Bank ledger entry (CREDIT to bank = money received)
+      if (body.bankAccountId) {
+        const bankAccount = await tx.bankAccount.findUnique({
+          where: { id: body.bankAccountId },
+        });
+
+        if (bankAccount) {
+          const newBankBalance = Number(bankAccount.currentBalance) + body.amount;
+
+          await tx.bankLedger.create({
+            data: {
+              bankAccountId: body.bankAccountId,
+              date: new Date(body.paymentDate),
+              description: `Sales Receipt ${paymentNumber} from ${customer.name}`,
+              type: 'SALES_RECEIPT',
+              debit: 0,
+              credit: body.amount,
+              balance: newBankBalance,
+              referenceType: 'sales_receipt',
+              referenceId: newPayment.id,
+            },
+          });
+
+          await tx.bankAccount.update({
+            where: { id: body.bankAccountId },
+            data: { currentBalance: { increment: body.amount } },
+          });
+        }
+      }
 
       return newPayment;
     }, {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { calculatePurchaseLineItem, calculatePurchaseTotals } from '@/lib/purchase-utils';
 
 // GET /api/purchase-orders/[id] - Get a single purchase order
@@ -168,7 +168,7 @@ export async function PUT(
     }
 
     // Update order in a transaction
-    const purchaseOrder = await db.$transaction(async (tx) => {
+    const purchaseOrder = await transaction(async (tx) => {
       // Delete existing items if new items provided
       if (orderItems.length > 0) {
         await tx.purchaseOrderItem.deleteMany({

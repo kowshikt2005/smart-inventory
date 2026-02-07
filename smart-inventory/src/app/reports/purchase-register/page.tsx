@@ -2,6 +2,7 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import {
   Table,
@@ -20,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, ChevronDown } from "lucide-react";
+import { Loader2, ChevronDown, ChevronRight } from "lucide-react";
 
 // ── Indian fiscal year helpers ──────────────────────────────────
 function getCurrentFiscalYear(): number {
@@ -37,9 +38,19 @@ function fiscalDates(year: number) {
 
 type Period = "this_fy" | "last_fy" | "custom";
 
+interface MonthData {
+  month: string;
+  monthIndex: number;
+  year: number;
+  grossAmount: number;
+  taxAmount: number;
+  netAmount: number;
+}
+
 // ── Page ────────────────────────────────────────────────────────
 export default function PurchaseRegisterPage() {
   const currentFY = getCurrentFiscalYear();
+  const router = useRouter();
 
   const [period, setPeriod] = useState<Period>("this_fy");
   const [customStart, setCustomStart] = useState("");
@@ -77,13 +88,27 @@ export default function PurchaseRegisterPage() {
     startDate && endDate ? `/api/reports/purchase-register?${queryString}` : null
   );
 
-  const months: {
-    month: string;
-    debit: number;
-    credit: number;
-    balance: number;
-  }[] = data?.months || [];
-  const totals = data?.totals || { debit: 0, credit: 0, balance: 0 };
+  // Process months data to include year and month index
+  const months: MonthData[] = useMemo(() => {
+    if (!data?.months || !startDate) return [];
+
+    const start = new Date(startDate);
+    let y = start.getFullYear();
+    let m = start.getMonth();
+
+    return (data.months as { month: string; grossAmount: number; taxAmount: number; netAmount: number }[]).map((row) => {
+      const result = {
+        ...row,
+        monthIndex: m,
+        year: y,
+      };
+      m++;
+      if (m > 11) { m = 0; y++; }
+      return result;
+    });
+  }, [data?.months, startDate]);
+
+  const totals = data?.totals || { grossAmount: 0, taxAmount: 0, netAmount: 0 };
 
   // ── Helpers ─────────────────────────────────────────────────
   const fmt = (n: number) =>
@@ -100,6 +125,19 @@ export default function PurchaseRegisterPage() {
 
   const now = new Date();
   const currentMonthName = now.toLocaleString("en-US", { month: "long" });
+
+  // ── Handle month row click ─────────────────────────────────
+  const handleMonthClick = (monthData: MonthData) => {
+    const hasData = monthData.grossAmount > 0 || monthData.taxAmount > 0 || monthData.netAmount > 0;
+    if (!hasData) return;
+
+    const params = new URLSearchParams();
+    params.append("month", String(monthData.monthIndex));
+    params.append("year", String(monthData.year));
+    if (vendorId !== "all") params.append("vendorId", vendorId);
+
+    router.push(`/reports/purchase-register/details?${params}`);
+  };
 
   // ── Render ──────────────────────────────────────────────────
   return (
@@ -204,6 +242,11 @@ export default function PurchaseRegisterPage() {
           </div>
         )}
 
+        {/* ── Hint ── */}
+        <p className="text-center text-xs text-gray-400 mb-2">
+          Click on a month to view detailed transactions
+        </p>
+
         {/* ── Main table ── */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
           {isLoading ? (
@@ -220,13 +263,13 @@ export default function PurchaseRegisterPage() {
                       Month
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 text-right">
-                      Debit (₹)
+                      Total Gross Amount (₹)
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 text-right">
-                      Credit (₹)
+                      Total Tax Amount (₹)
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 text-right">
-                      Balance (₹)
+                      Net Amount (₹)
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -234,45 +277,37 @@ export default function PurchaseRegisterPage() {
                 <TableBody>
                   {months.map((row, idx) => {
                     const isCurrent = row.month === currentMonthName;
-                    const hasData = row.debit > 0 || row.credit > 0;
-                    const balCr = row.balance >= 0;
+                    const hasData = row.grossAmount > 0 || row.taxAmount > 0 || row.netAmount > 0;
 
                     return (
                       <TableRow
                         key={idx}
-                        className={isCurrent ? "bg-blue-100" : ""}
+                        className={`${isCurrent ? "bg-blue-50" : ""} ${hasData ? "cursor-pointer hover:bg-gray-50" : ""}`}
+                        onClick={() => handleMonthClick(row)}
                       >
                         <TableCell
                           className={`font-medium ${
                             isCurrent ? "text-blue-800" : "text-gray-800"
                           }`}
                         >
-                          {row.month}
+                          <div className="flex items-center gap-2">
+                            {hasData && (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                            {row.month} {row.year}
+                          </div>
                         </TableCell>
 
                         <TableCell className="text-right text-gray-700">
-                          {row.debit > 0 ? fmt(row.debit) : ""}
+                          {row.grossAmount > 0 ? fmt(row.grossAmount) : ""}
                         </TableCell>
 
                         <TableCell className="text-right text-gray-700">
-                          {row.credit > 0 ? fmt(row.credit) : ""}
+                          {row.taxAmount > 0 ? fmt(row.taxAmount) : ""}
                         </TableCell>
 
-                        <TableCell className="text-right">
-                          {hasData ? (
-                            <span
-                              className={`font-semibold ${
-                                balCr ? "text-pink-600" : "text-blue-600"
-                              }`}
-                            >
-                              {fmt(Math.abs(row.balance))}{" "}
-                              <span className="text-xs font-normal">
-                                {balCr ? "Cr" : "Dr"}
-                              </span>
-                            </span>
-                          ) : (
-                            ""
-                          )}
+                        <TableCell className="text-right font-semibold text-gray-900">
+                          {row.netAmount > 0 ? fmt(row.netAmount) : ""}
                         </TableCell>
                       </TableRow>
                     );
@@ -289,24 +324,13 @@ export default function PurchaseRegisterPage() {
                         Total
                       </TableCell>
                       <TableCell className="text-right font-bold text-gray-900">
-                        {totals.debit > 0 ? fmt(totals.debit) : ""}
+                        {totals.grossAmount > 0 ? fmt(totals.grossAmount) : ""}
                       </TableCell>
                       <TableCell className="text-right font-bold text-gray-900">
-                        {totals.credit > 0 ? fmt(totals.credit) : ""}
+                        {totals.taxAmount > 0 ? fmt(totals.taxAmount) : ""}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <span
-                          className={`font-bold ${
-                            totals.balance >= 0
-                              ? "text-pink-600"
-                              : "text-blue-600"
-                          }`}
-                        >
-                          {fmt(Math.abs(totals.balance))}{" "}
-                          <span className="text-xs font-normal">
-                            {totals.balance >= 0 ? "Cr" : "Dr"}
-                          </span>
-                        </span>
+                      <TableCell className="text-right font-bold text-gray-900">
+                        {totals.netAmount > 0 ? fmt(totals.netAmount) : ""}
                       </TableCell>
                     </TableRow>
                   </TableBody>

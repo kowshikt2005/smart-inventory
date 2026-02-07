@@ -32,7 +32,7 @@ interface BankAccount {
   accountName: string;
   accountNumber: string;
   bankName: string;
-  balance: number;
+  currentBalance: number;
   isActive: boolean;
 }
 
@@ -76,6 +76,10 @@ function NewVendorPaymentPageContent() {
 
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [_isLoadingBanks, setIsLoadingBanks] = useState(false);
+
+  // Cheque tracking
+  const [chequeCollected, setChequeCollected] = useState(false);
+  const [chequeCollectedDate, setChequeCollectedDate] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -238,6 +242,8 @@ function NewVendorPaymentPageContent() {
         paidFrom: string;
         reference: string | null;
         notes: string | null;
+        chequeCollected: boolean;
+        chequeCollectedDate: string | null;
       } = {
         vendorId: paymentType === "invoice" ? selectedInvoice!.vendorId : selectedVendor!.id,
         date: paymentDate,
@@ -246,6 +252,8 @@ function NewVendorPaymentPageContent() {
         paidFrom,
         reference: reference || null,
         notes: notes || null,
+        chequeCollected,
+        chequeCollectedDate: chequeCollectedDate || null,
       };
 
       // Only include purchaseInvoiceId for invoice payments
@@ -516,7 +524,7 @@ function NewVendorPaymentPageContent() {
                     .filter((b) => b.isActive)
                     .map((bank) => (
                       <option key={bank.id} value={bank.id}>
-                        {bank.accountName} ({bank.bankName}) - {formatCurrency(Number(bank.balance))}
+                        {bank.accountName} ({bank.bankName}) - {formatCurrency(Number(bank.currentBalance))}
                       </option>
                     ))}
                 </select>
@@ -530,6 +538,37 @@ function NewVendorPaymentPageContent() {
                   placeholder="Enter reference number"
                 />
               </div>
+
+              {/* Cheque Collection Tracking */}
+              {mode === "CHEQUE" && (
+                <div className="md:col-span-2 border border-amber-200 bg-amber-50 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <input
+                      type="checkbox"
+                      id="chequeCollected"
+                      checked={chequeCollected}
+                      onChange={(e) => {
+                        setChequeCollected(e.target.checked);
+                        if (!e.target.checked) setChequeCollectedDate("");
+                      }}
+                      className="rounded border-gray-300"
+                    />
+                    <label htmlFor="chequeCollected" className="text-amber-800 font-medium cursor-pointer text-sm">
+                      Cheque Collected
+                    </label>
+                  </div>
+                  {chequeCollected && (
+                    <div className="mt-2">
+                      <label className="block text-sm text-amber-700 mb-1">Collection Date</label>
+                      <Input
+                        type="date"
+                        value={chequeCollectedDate}
+                        onChange={(e) => setChequeCollectedDate(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

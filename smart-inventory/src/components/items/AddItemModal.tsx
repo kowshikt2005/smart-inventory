@@ -32,6 +32,8 @@ interface EditItem {
   purchasePrice: string | number; // Cost price
   mrp: string | number; // Maximum Retail Price
   sellingPrice: string | number; // Actual selling price
+  margin?: string | number;
+  marginType?: string;
   unit: string;
   hsnCode?: string;
   gstRate: string | number;
@@ -70,13 +72,15 @@ export function AddItemModal({
     purchasePrice: "0", // Cost price
     mrp: "0", // Maximum Retail Price
     sellingPrice: "0", // Actual selling price
+    margin: "",
+    marginType: "PERCENTAGE",
     minStock: "0",
     unit: "PCS",
   });
 
   // Use SWR to cache brands and sub-brands - NO N+1 queries!
-  const { data: brandsData, isLoading: brandsLoading } = useSWR(isOpen ? "/api/brands" : null);
-  const { data: subBrandsData, isLoading: subBrandsLoading } = useSWR(isOpen ? "/api/sub-brands" : null);
+  const { data: brandsData, isLoading: _brandsLoading } = useSWR(isOpen ? "/api/brands" : null);
+  const { data: subBrandsData, isLoading: _subBrandsLoading } = useSWR(isOpen ? "/api/sub-brands" : null);
 
   // Ensure current brand is in the list (just like GST options are always there)
   const brands = useMemo(() => {
@@ -101,6 +105,8 @@ export function AddItemModal({
         purchasePrice: "0",
         mrp: "0",
         sellingPrice: "0",
+        margin: "",
+        marginType: "PERCENTAGE",
         minStock: "0",
         unit: "PCS",
       });
@@ -120,6 +126,8 @@ export function AddItemModal({
         purchasePrice: editItem.purchasePrice !== undefined && editItem.purchasePrice !== null ? String(editItem.purchasePrice) : "0",
         mrp: editItem.mrp !== undefined && editItem.mrp !== null ? String(editItem.mrp) : "0",
         sellingPrice: editItem.sellingPrice !== undefined && editItem.sellingPrice !== null ? String(editItem.sellingPrice) : "0",
+        margin: editItem.margin !== undefined && editItem.margin !== null ? String(editItem.margin) : "",
+        marginType: editItem.marginType || "PERCENTAGE",
         minStock: String(editItem.inventory?.minStockLevel ?? 0),
         unit: editItem.unit || "PCS",
       });
@@ -153,6 +161,26 @@ export function AddItemModal({
     }
   }, [formData.brandId, formData.subBrandId, filteredSubBrands, subBrandsData]);
 
+  // Auto-calculate selling price from purchase price + margin
+  useEffect(() => {
+    const marginVal = parseFloat(formData.margin);
+    const purchaseVal = parseFloat(formData.purchasePrice);
+    if (!isNaN(marginVal) && marginVal > 0 && !isNaN(purchaseVal)) {
+      let calculatedPrice: number;
+      if (formData.marginType === "PERCENTAGE") {
+        calculatedPrice = purchaseVal + (purchaseVal * marginVal / 100);
+      } else {
+        calculatedPrice = purchaseVal + marginVal;
+      }
+      setFormData(prev => ({
+        ...prev,
+        sellingPrice: (Math.round(calculatedPrice * 100) / 100).toString(),
+      }));
+    }
+  }, [formData.purchasePrice, formData.margin, formData.marginType]);
+
+  const hasMargin = formData.margin !== "" && parseFloat(formData.margin) > 0;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -177,6 +205,8 @@ export function AddItemModal({
           purchasePrice: parseFloat(formData.purchasePrice) || 0,
           mrp: parseFloat(formData.mrp) || 0,
           sellingPrice: parseFloat(formData.sellingPrice) || 0,
+          margin: formData.margin !== "" ? parseFloat(formData.margin) : null,
+          marginType: formData.marginType,
           minStock: parseFloat(formData.minStock) || 0,
           unit: formData.unit,
         }),
@@ -203,6 +233,8 @@ export function AddItemModal({
         purchasePrice: "0",
         mrp: "0",
         sellingPrice: "0",
+        margin: "",
+        marginType: "PERCENTAGE",
         minStock: "0",
         unit: "PCS",
       });
@@ -426,66 +458,129 @@ export function AddItemModal({
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
               Pricing
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label
-                  htmlFor="item-purchase-price"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Purchase Price (₹) <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  id="item-purchase-price"
-                  type="number"
-                  name="purchasePrice"
-                  value={formData.purchasePrice}
-                  onChange={handleChange}
-                  step="0.01"
-                  min="0"
-                  required
-                  placeholder="0.00"
-                />
-                <p className="text-xs text-gray-500 mt-1">Cost price (what you pay)</p>
+            <div className="space-y-4">
+              {/* Row 1: Purchase Price */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label
+                    htmlFor="item-purchase-price"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Purchase Price (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    id="item-purchase-price"
+                    type="number"
+                    name="purchasePrice"
+                    value={formData.purchasePrice}
+                    onChange={handleChange}
+                    step="0.01"
+                    min="0"
+                    required
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Cost price (what you pay)</p>
+                </div>
               </div>
-              <div>
-                <label
-                  htmlFor="item-mrp"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  MRP (₹) <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  id="item-mrp"
-                  type="number"
-                  name="mrp"
-                  value={formData.mrp}
-                  onChange={handleChange}
-                  step="0.01"
-                  min="0"
-                  required
-                  placeholder="0.00"
-                />
-                <p className="text-xs text-gray-500 mt-1">Maximum Retail Price</p>
+
+              {/* Row 2: Margin + Selling Price */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label
+                    htmlFor="item-margin"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Margin
+                  </label>
+                  <div className="flex gap-1">
+                    <Input
+                      id="item-margin"
+                      type="number"
+                      name="margin"
+                      value={formData.margin}
+                      onChange={handleChange}
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      className="flex-1"
+                    />
+                    <div className="flex rounded-md border border-gray-300 overflow-hidden shrink-0">
+                      <button
+                        type="button"
+                        className={`px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                          formData.marginType === "PERCENTAGE"
+                            ? "bg-teal-500 text-white"
+                            : "bg-white text-gray-600 hover:bg-gray-50"
+                        }`}
+                        onClick={() => handleSelectChange("marginType", "PERCENTAGE")}
+                      >
+                        %
+                      </button>
+                      <button
+                        type="button"
+                        className={`px-2.5 py-1.5 text-sm font-medium border-l border-gray-300 transition-colors ${
+                          formData.marginType === "AMOUNT"
+                            ? "bg-teal-500 text-white"
+                            : "bg-white text-gray-600 hover:bg-gray-50"
+                        }`}
+                        onClick={() => handleSelectChange("marginType", "AMOUNT")}
+                      >
+                        ₹
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formData.marginType === "PERCENTAGE" ? "Percentage markup on purchase price" : "Fixed amount added to purchase price"}
+                  </p>
+                </div>
+                <div>
+                  <label
+                    htmlFor="item-selling-price"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Selling Price (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    id="item-selling-price"
+                    type="number"
+                    name="sellingPrice"
+                    value={formData.sellingPrice}
+                    onChange={handleChange}
+                    step="0.01"
+                    min="0"
+                    required
+                    placeholder="0.00"
+                    disabled={hasMargin}
+                    className={hasMargin ? "bg-gray-100" : ""}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {hasMargin ? "Auto-calculated from margin" : "Actual price you sell at"}
+                  </p>
+                </div>
               </div>
-              <div>
-                <label
-                  htmlFor="item-selling-price"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Selling Price (₹) <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  id="item-selling-price"
-                  type="number"
-                  name="sellingPrice"
-                  value={formData.sellingPrice}
-                  onChange={handleChange}
-                  step="0.01"
-                  min="0"
-                  required
-                  placeholder="0.00"
-                />
-                <p className="text-xs text-gray-500 mt-1">Actual price you sell at</p>
+
+              {/* Row 3: MRP */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label
+                    htmlFor="item-mrp"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    MRP (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    id="item-mrp"
+                    type="number"
+                    name="mrp"
+                    value={formData.mrp}
+                    onChange={handleChange}
+                    step="0.01"
+                    min="0"
+                    required
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Maximum Retail Price</p>
+                </div>
               </div>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generatePurchaseReturnNumber, calculatePurchaseLineItem, calculatePurchaseTotals } from '@/lib/purchase-utils';
 
 // GET /api/purchase-returns - Get all purchase returns with filtering
@@ -211,7 +211,7 @@ export async function POST(request: Request) {
     }
 
     // Create return in a transaction
-    const purchaseReturn = await db.$transaction(async (tx) => {
+    const purchaseReturn = await transaction(async (tx) => {
       // Generate return number
       const returnNumber = await generatePurchaseReturnNumber(tx as any);
 

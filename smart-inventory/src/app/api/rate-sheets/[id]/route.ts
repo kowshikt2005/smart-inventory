@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 
 // GET /api/rate-sheets/[id] - Get a single rate sheet
 export async function GET(
@@ -92,7 +92,7 @@ export async function PUT(
     }
 
     // Run update + customer list change in a transaction
-    const rateSheet = await db.$transaction(async (tx) => {
+    const rateSheet = await transaction(async (tx) => {
       // Update rate sheet fields
       if (Object.keys(updateData).length > 0) {
         await tx.rateSheet.update({ where: { id }, data: updateData });

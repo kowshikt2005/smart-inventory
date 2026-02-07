@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 
 // POST /api/purchase-returns/[id]/complete - Complete a purchase return
 export async function POST(
@@ -58,7 +58,7 @@ export async function POST(
     }
 
     // Complete the return in a transaction
-    const completedReturn = await db.$transaction(async (tx) => {
+    const completedReturn = await transaction(async (tx) => {
       // Update inventory - decrease physical stock for each item
       for (const returnItem of existingReturn.items) {
         const inventory = returnItem.item.inventory;

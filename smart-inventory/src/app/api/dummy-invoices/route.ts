@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generateDummyInvoiceNumber, calculateDueDate } from '@/lib/invoice-utils';
 import { calculateOrderTotals, calculateLineItemV2 } from '@/lib/order-utils';
 
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'One or more items not found' }, { status: 400 });
     }
 
-    const invoice = await db.$transaction(async (tx) => {
+    const invoice = await transaction(async (tx) => {
       const invoiceNumber = await generateDummyInvoiceNumber(tx as any);
       const invoiceDate = new Date(body.invoiceDate);
       const dueDate = calculateDueDate(invoiceDate, customer.creditDays);

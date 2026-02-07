@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generateReturnNumber } from '@/lib/invoice-utils';
 import { calculateTax } from '@/lib/order-utils';
 
@@ -169,7 +169,7 @@ export async function POST(request: Request) {
     }
 
     // Create sales return in transaction
-    const salesReturn = await db.$transaction(async (tx) => {
+    const salesReturn = await transaction(async (tx) => {
       // Generate return number
       const returnNumber = await generateReturnNumber(tx as any);
 

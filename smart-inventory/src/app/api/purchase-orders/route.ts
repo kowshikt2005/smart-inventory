@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generatePurchaseOrderNumber, calculatePurchaseLineItem, calculatePurchaseTotals } from '@/lib/purchase-utils';
 import { auth } from '@/lib/auth';
 import { hasRole } from '@/lib/auth-utils';
@@ -186,7 +186,7 @@ export async function POST(request: Request) {
     }
 
     // Create order in a transaction
-    const purchaseOrder = await db.$transaction(async (tx) => {
+    const purchaseOrder = await transaction(async (tx) => {
       // Generate order number
       const orderNumber = await generatePurchaseOrderNumber(tx as any);
 

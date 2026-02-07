@@ -149,7 +149,7 @@ export default function CustomerLedgerPage() {
   };
 
   // Format time from createdAt (actual entry timestamp)
-  const formatTimeOnly = (createdAtStr: string | null | undefined) => {
+  const _formatTimeOnly = (createdAtStr: string | null | undefined) => {
     if (!createdAtStr) return '-';
     const date = new Date(createdAtStr);
     // Check if it's a valid date

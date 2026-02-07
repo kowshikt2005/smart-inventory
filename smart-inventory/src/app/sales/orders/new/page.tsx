@@ -134,7 +134,7 @@ function NewSalesOrderPageContent() {
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [orderNumber, setOrderNumber] = useState("(Auto-generated)");
+  const [orderNumber, setOrderNumber] = useState("Loading...");
 
   const fetchCustomers = useCallback(async () => {
     try {
@@ -226,18 +226,34 @@ function NewSalesOrderPageContent() {
     }
   }, [router]);
 
+  // Fetch next order number for new orders
+  const fetchNextOrderNumber = useCallback(async () => {
+    try {
+      const response = await fetch("/api/sales-orders/next-number");
+      if (response.ok) {
+        const data = await response.json();
+        setOrderNumber(data.orderNumber);
+      }
+    } catch (err) {
+      console.error("Error fetching next order number:", err);
+    }
+  }, []);
+
   // Fetch customers
   useEffect(() => {
     fetchCustomers();
     fetchItems();
   }, [fetchCustomers, fetchItems]);
 
-  // Load order for editing
+  // Load order for editing OR fetch next order number for new order
   useEffect(() => {
     if (editId) {
       loadOrderForEdit(editId);
+    } else {
+      // Fetch next order number for new orders
+      fetchNextOrderNumber();
     }
-  }, [editId, loadOrderForEdit]);
+  }, [editId, loadOrderForEdit, fetchNextOrderNumber]);
 
   // Filter customers based on search
   const filteredCustomers = useMemo(() => {
@@ -298,7 +314,7 @@ function NewSalesOrderPageContent() {
     (item: Item, customer?: Customer | null): { rate: number; isGstInclusive: boolean; discountApplied: number } => {
       const mrp = Number(item.mrp) || Number(item.sellingPrice);
       const sellingPrice = Number(item.sellingPrice);
-      const gstRate = Number(item.gstRate);
+      const _gstRate = Number(item.gstRate);
       const rateSheet = (customer || selectedCustomer)?.rateSheet;
 
       // No rate sheet - use sellingPrice + EXCLUSIVE GST
@@ -360,7 +376,7 @@ function NewSalesOrderPageContent() {
   );
 
   // Backward compatible getEffectiveRate function
-  const getEffectiveRate = useCallback(
+  const _getEffectiveRate = useCallback(
     (item: Item, customer?: Customer | null) => {
       return getEffectivePricing(item, customer).rate;
     },

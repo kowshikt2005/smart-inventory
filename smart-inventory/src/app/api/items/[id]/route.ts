@@ -83,6 +83,8 @@ export async function PUT(
         purchasePrice: body.purchasePrice !== undefined ? body.purchasePrice : existingItem.purchasePrice,
         mrp: body.mrp !== undefined ? body.mrp : existingItem.mrp,
         sellingPrice: body.sellingPrice !== undefined ? body.sellingPrice : existingItem.sellingPrice,
+        margin: body.margin !== undefined ? body.margin : existingItem.margin,
+        marginType: body.marginType !== undefined ? body.marginType : existingItem.marginType,
         minStock: body.minStock !== undefined ? body.minStock : existingItem.minStock,
         unit: body.unit || existingItem.unit,
         isActive: body.isActive !== undefined ? body.isActive : existingItem.isActive,

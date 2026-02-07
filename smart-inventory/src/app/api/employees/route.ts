@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { hashPassword, generateEmployeeNumber, hasRole } from '@/lib/auth-utils';
 
 // GET /api/employees - Get all employees (Admin only)
@@ -139,7 +139,7 @@ export async function POST(request: Request) {
     const hashedPassword = await hashPassword(body.password);
 
     // Create employee and user in transaction
-    const result = await db.$transaction(async (tx) => {
+    const result = await transaction(async (tx) => {
       // Create user account
       const user = await tx.user.create({
         data: {

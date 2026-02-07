@@ -90,6 +90,23 @@ export default function NewSalesReturnPage() {
   const [isLoadingInvoiceItems, setIsLoadingInvoiceItems] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [returnNumber, setReturnNumber] = useState("Loading...");
+
+  // Fetch next return number
+  useEffect(() => {
+    const fetchNextReturnNumber = async () => {
+      try {
+        const response = await fetch("/api/sales-returns/next-number");
+        if (response.ok) {
+          const data = await response.json();
+          setReturnNumber(data.returnNumber);
+        }
+      } catch (err) {
+        console.error("Error fetching next return number:", err);
+      }
+    };
+    fetchNextReturnNumber();
+  }, []);
 
   // Fetch customers on mount
   useEffect(() => {
@@ -370,7 +387,7 @@ export default function NewSalesReturnPage() {
             Back to Returns
           </Button>
           <h1 className="text-2xl font-bold text-gray-900">New Sales Return</h1>
-          <p className="text-gray-600">Record goods returned by customer</p>
+          <p className="text-sm text-gray-600">Return #: {returnNumber}</p>
         </div>
 
         {error && (

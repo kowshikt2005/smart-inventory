@@ -215,11 +215,11 @@ export default function InvoiceDetailPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => router.push("/sales/invoices")}
+            onClick={() => router.back()}
             className="mb-2"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Invoices
+            Back
           </Button>
           <div className="flex items-center justify-between">
             <div>
@@ -328,41 +328,59 @@ export default function InvoiceDetailPage() {
                   <TableHead className="font-semibold">Item</TableHead>
                   <TableHead className="font-semibold">HSN</TableHead>
                   <TableHead className="font-semibold text-right">Qty</TableHead>
-                  <TableHead className="font-semibold text-right">Rate (Incl. Tax)</TableHead>
-                  <TableHead className="font-semibold text-right">
-                    GST %
-                  </TableHead>
-                  <TableHead className="font-semibold text-right">
-                    Total
-                  </TableHead>
+                  <TableHead className="font-semibold text-right">Rate</TableHead>
+                  <TableHead className="font-semibold text-right">Disc %</TableHead>
+                  <TableHead className="font-semibold text-right">Taxable Amt</TableHead>
+                  <TableHead className="font-semibold text-right">GST %</TableHead>
+                  <TableHead className="font-semibold text-right">Tax Amt</TableHead>
+                  <TableHead className="font-semibold text-right">Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoice.items.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{item.item.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {item.item.itemCode}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">{item.item.hsnCode || "-"}</TableCell>
-                    <TableCell className="text-right">
-                      {Number(item.quantity)} {item.item.unit}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(Number(item.rate))}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {Number(item.taxRate)}%
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCurrency(Number(item.quantity) * Number(item.rate))}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {invoice.items.map((item) => {
+                  const taxableAmount = Number(item.amount);
+                  const taxAmount = Number(item.taxAmount);
+                  const totalAmount = taxableAmount + taxAmount;
+
+                  return (
+                    <TableRow key={item.id}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{item.item.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {item.item.itemCode}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">{item.item.hsnCode || "-"}</TableCell>
+                      <TableCell className="text-right">
+                        {Number(item.quantity)} {item.item.unit}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(Number(item.rate))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {Number(item.discountPercent) > 0 ? (
+                          <span className="text-orange-600">{Number(item.discountPercent)}%</span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(taxableAmount)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {Number(item.taxRate)}%
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(taxAmount)}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatCurrency(totalAmount)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -403,7 +421,7 @@ export default function InvoiceDetailPage() {
             <h2 className="text-lg font-semibold mb-4">Summary</h2>
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Subtotal</span>
+                <span className="text-gray-600">Subtotal (Taxable Amount)</span>
                 <span className="font-medium">
                   {formatCurrency(Number(invoice.subtotal))}
                 </span>
@@ -418,6 +436,12 @@ export default function InvoiceDetailPage() {
                 <span className="text-gray-600">SGST</span>
                 <span className="font-medium">
                   {formatCurrency(Number(invoice.sgst))}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Total Tax</span>
+                <span className="font-medium">
+                  {formatCurrency(Number(invoice.taxAmount))}
                 </span>
               </div>
               {Number(invoice.roundOff) !== 0 && (
@@ -448,6 +472,14 @@ export default function InvoiceDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* Notes */}
+        {invoice.notes && (
+          <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
+            <h2 className="text-lg font-semibold mb-2">Notes</h2>
+            <p className="text-gray-700 whitespace-pre-wrap">{invoice.notes}</p>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

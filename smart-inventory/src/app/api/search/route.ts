@@ -141,12 +141,25 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
+    // Fetch item details for journal results (StockJournal has no item relation)
+    const journalItemIds = journals.map(j => j.itemId);
+    const journalItems = journalItemIds.length > 0
+      ? await db.item.findMany({
+          where: { id: { in: journalItemIds } },
+          select: { id: true, name: true, unit: true },
+        })
+      : [];
+    const journalItemMap = new Map(journalItems.map(i => [i.id, i]));
+
     return NextResponse.json({
       customers,
       vendors,
       items,
       salesOrders,
-      journals,
+      journals: journals.map(j => ({
+        ...j,
+        item: journalItemMap.get(j.itemId) || null,
+      })),
     });
   } catch (error) {
     console.error("Search error:", error);

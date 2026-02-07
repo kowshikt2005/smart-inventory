@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generateJournalNumber } from '@/lib/invoice-utils';
 import { SYSTEM_USER_ID } from '@/lib/order-utils';
 
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
     }
 
     // Create journal entry in transaction
-    const result = await db.$transaction(async (tx) => {
+    const result = await transaction(async (tx) => {
       // Generate journal number
       const journalNumber = await generateJournalNumber(tx as any);
 
