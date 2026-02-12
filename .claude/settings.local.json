@@ -21,7 +21,8 @@
       "mcp__playwright__browser_wait_for",
       "mcp__playwright__browser_run_code",
       "WebFetch(domain:ui.aceternity.com)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(npx prisma migrate dev:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

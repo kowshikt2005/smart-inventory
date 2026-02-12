@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X } from "lucide-react";
+import { getStateFromGSTIN } from "@/lib/gst-state-codes";
 
 interface AddCustomerModalProps {
   isOpen: boolean;
@@ -108,6 +109,22 @@ export function AddCustomerModal({
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value, type } = e.target;
+
+    if (name === "gstin") {
+      const upperValue = value.toUpperCase();
+      const stateInfo = getStateFromGSTIN(upperValue);
+      setFormData((prev) => ({
+        ...prev,
+        gstin: upperValue,
+        ...(stateInfo
+          ? { stateCode: stateInfo.stateCode, state: stateInfo.stateName }
+          : upperValue.length < 2
+            ? { stateCode: "", state: "" }
+            : {}),
+      }));
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       [name]:
@@ -276,8 +293,14 @@ export function AddCustomerModal({
                   required
                   maxLength={2}
                   placeholder="27"
+                  readOnly={formData.gstin.length >= 2 && !!getStateFromGSTIN(formData.gstin)}
+                  className={formData.gstin.length >= 2 && getStateFromGSTIN(formData.gstin) ? "bg-gray-100" : ""}
                 />
-                <p className="text-xs text-gray-500 mt-1">2 characters</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {formData.gstin.length >= 2 && getStateFromGSTIN(formData.gstin)
+                    ? "Auto-filled from GSTIN"
+                    : "2 characters"}
+                </p>
               </div>
               <div>
                 <label
@@ -294,6 +317,8 @@ export function AddCustomerModal({
                   onChange={handleChange}
                   required
                   placeholder="Maharashtra"
+                  readOnly={formData.gstin.length >= 2 && !!getStateFromGSTIN(formData.gstin)}
+                  className={formData.gstin.length >= 2 && getStateFromGSTIN(formData.gstin) ? "bg-gray-100" : ""}
                 />
               </div>
               <div>

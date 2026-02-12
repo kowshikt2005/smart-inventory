@@ -188,6 +188,19 @@ export async function PUT(
       );
     }
 
+    // Validate customer if changed
+    if (body.customerId && body.customerId !== existingOrder.customerId) {
+      const customer = await db.customer.findUnique({
+        where: { id: body.customerId },
+      });
+      if (!customer) {
+        return NextResponse.json(
+          { error: 'Customer not found' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Validate items if provided
     if (body.items && Array.isArray(body.items) && body.items.length > 0) {
       const itemIds = body.items.map((item: any) => item.itemId);
@@ -288,6 +301,7 @@ export async function PUT(
         const order = await tx.salesOrder.update({
           where: { id },
           data: {
+            customerId: body.customerId || existingOrder.customerId,
             orderDate: body.orderDate ? new Date(body.orderDate) : undefined,
             expectedDelivery: body.expectedDelivery
               ? new Date(body.expectedDelivery)
@@ -354,6 +368,7 @@ export async function PUT(
 
     // Update only non-item fields
     const updateData: any = {};
+    if (body.customerId !== undefined) updateData.customerId = body.customerId;
     if (body.orderDate !== undefined) updateData.orderDate = new Date(body.orderDate);
     if (body.expectedDelivery !== undefined)
       updateData.expectedDelivery = body.expectedDelivery

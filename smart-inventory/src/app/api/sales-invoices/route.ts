@@ -221,45 +221,53 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate stock availability using priority-based allocation
-    const allocationResult = await calculateStockAllocation(db);
-    const allocations = getOrderAllocation(salesOrder.id, allocationResult);
-    const stockStatus = calculateOrderStockStatus(allocations);
+    // Check if negative billing is enabled
+    const negativeBillingSetting = await db.appSetting.findUnique({
+      where: { key: 'negative_billing' },
+    });
+    const negativeBillingEnabled = negativeBillingSetting?.value === 'true';
 
-    // Only allow invoice creation for fully allocated orders (In Stock)
-    if (stockStatus !== 'Available') {
-      const allocationMap = new Map(allocations.map((a) => [a.itemId, a]));
+    // Validate stock availability using priority-based allocation (skip if negative billing is ON)
+    if (!negativeBillingEnabled) {
+      const allocationResult = await calculateStockAllocation(db);
+      const allocations = getOrderAllocation(salesOrder.id, allocationResult);
+      const stockStatus = calculateOrderStockStatus(allocations);
 
-      const insufficientStockItems = salesOrder.items
-        .map((orderItem) => {
-          const allocation = allocationMap.get(orderItem.itemId);
-          const allocatedQty = allocation?.allocatedQty || 0;
-          const orderedQty = Number(orderItem.quantity);
-          const shortfall = allocation?.shortfallQty || orderedQty;
+      // Only allow invoice creation for fully allocated orders (In Stock)
+      if (stockStatus !== 'Available') {
+        const allocationMap = new Map(allocations.map((a) => [a.itemId, a]));
 
-          if (shortfall > 0) {
-            return {
-              itemCode: orderItem.item.itemCode,
-              itemName: orderItem.item.name,
-              required: orderedQty,
-              available: allocatedQty,
-              shortfall,
-            };
-          }
-          return null;
-        })
-        .filter((item) => item !== null);
+        const insufficientStockItems = salesOrder.items
+          .map((orderItem) => {
+            const allocation = allocationMap.get(orderItem.itemId);
+            const allocatedQty = allocation?.allocatedQty || 0;
+            const orderedQty = Number(orderItem.quantity);
+            const shortfall = allocation?.shortfallQty || orderedQty;
 
-      return NextResponse.json(
-        {
-          error: stockStatus === 'Partial'
-            ? 'Cannot create invoice: Order is partially allocated. Some items have insufficient stock based on priority allocation.'
-            : 'Cannot create invoice: No stock allocated for this order. All items are out of stock or allocated to higher priority orders.',
-          stockStatus,
-          insufficientStock: insufficientStockItems,
-        },
-        { status: 400 }
-      );
+            if (shortfall > 0) {
+              return {
+                itemCode: orderItem.item.itemCode,
+                itemName: orderItem.item.name,
+                required: orderedQty,
+                available: allocatedQty,
+                shortfall,
+              };
+            }
+            return null;
+          })
+          .filter((item) => item !== null);
+
+        return NextResponse.json(
+          {
+            error: stockStatus === 'Partial'
+              ? 'Cannot create invoice: Order is partially allocated. Some items have insufficient stock based on priority allocation.'
+              : 'Cannot create invoice: No stock allocated for this order. All items are out of stock or allocated to higher priority orders.',
+            stockStatus,
+            insufficientStock: insufficientStockItems,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // Create invoice in transaction

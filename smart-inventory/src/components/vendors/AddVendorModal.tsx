@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X } from "lucide-react";
+import { getStateFromGSTIN } from "@/lib/gst-state-codes";
 
 interface AddVendorModalProps {
   isOpen: boolean;
@@ -86,6 +87,22 @@ export function AddVendorModal({
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
+
+    if (name === "gstin") {
+      const upperValue = value.toUpperCase();
+      const stateInfo = getStateFromGSTIN(upperValue);
+      setFormData((prev) => ({
+        ...prev,
+        gstin: upperValue,
+        ...(stateInfo
+          ? { state: stateInfo.stateName }
+          : upperValue.length < 2
+            ? { state: "" }
+            : {}),
+      }));
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       [name]: value,
@@ -271,7 +288,12 @@ export function AddVendorModal({
                     value={formData.state}
                     onChange={handleChange}
                     placeholder="Maharashtra"
+                    readOnly={formData.gstin.length >= 2 && !!getStateFromGSTIN(formData.gstin)}
+                    className={formData.gstin.length >= 2 && getStateFromGSTIN(formData.gstin) ? "bg-gray-100" : ""}
                   />
+                  {formData.gstin.length >= 2 && getStateFromGSTIN(formData.gstin) && (
+                    <p className="text-xs text-gray-500 mt-1">Auto-filled from GSTIN</p>
+                  )}
                 </div>
                 <div>
                   <label

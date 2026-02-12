@@ -25,6 +25,7 @@ import {
   Truck,
   BarChart3,
   Landmark,
+  Settings,
 } from "lucide-react";
 import { useState, memo, useMemo } from "react";
 
@@ -36,6 +37,7 @@ const ROLE_PERMISSIONS = {
     reports: false,
     masters: false,
     employees: false,
+    settings: false,
   },
   BILLING_OPERATOR: {
     sales: true,
@@ -43,6 +45,7 @@ const ROLE_PERMISSIONS = {
     reports: true,
     masters: false,
     employees: false,
+    settings: false,
   },
   ACCOUNTANT: {
     sales: true,
@@ -50,6 +53,7 @@ const ROLE_PERMISSIONS = {
     reports: true,
     masters: true,
     employees: false,
+    settings: false,
   },
   MANAGER: {
     sales: true,
@@ -57,6 +61,7 @@ const ROLE_PERMISSIONS = {
     reports: true,
     masters: true,
     employees: true,
+    settings: true,
   },
   ADMIN: {
     sales: true,
@@ -64,6 +69,7 @@ const ROLE_PERMISSIONS = {
     reports: true,
     masters: true,
     employees: true,
+    settings: true,
   },
 };
 
@@ -483,6 +489,21 @@ export const Sidebar = memo(function Sidebar() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+        {/* Settings */}
+        {permissions.settings && (
+          <div className="mb-2">
+            <Link
+              href="/settings"
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
+                pathname === "/settings" && "bg-white/15 text-white font-medium shadow-sm"
+              )}
+            >
+              <Settings className="h-5 w-5" strokeWidth={1.5} />
+              <span>Settings</span>
+            </Link>
           </div>
         )}
       </nav>

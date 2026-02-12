@@ -925,6 +925,22 @@ model PurchaseReturnItem {
 }
 
 // ============================================
+// APPLICATION SETTINGS
+// ============================================
+
+model AppSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @db.Text
+  label     String?  // Human-readable label
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@map("app_settings")
+}
+
+// ============================================
 // VENDOR LEDGER (Financial Tracking)
 // ============================================
 

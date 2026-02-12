@@ -187,9 +187,19 @@ function NewSalesOrderPageContent() {
         setTerms(order.terms || "");
         setRoundOff(Number(order.discountAmount) || 0);
 
-        // Set customer
+        // Set customer - fetch full customer with rate sheet for proper pricing
         if (order.customer) {
-          setSelectedCustomer(order.customer);
+          try {
+            const customerResponse = await fetch(`/api/customers/${order.customer.id}`);
+            if (customerResponse.ok) {
+              const fullCustomer = await customerResponse.json();
+              setSelectedCustomer(fullCustomer);
+            } else {
+              setSelectedCustomer(order.customer);
+            }
+          } catch {
+            setSelectedCustomer(order.customer);
+          }
         }
 
         // Set order items
