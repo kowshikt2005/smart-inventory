@@ -17,6 +17,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus,
@@ -26,6 +33,7 @@ import {
   CreditCard,
   Eye,
   Trash2,
+  Filter,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -71,8 +79,18 @@ const MODE_LABELS: Record<string, string> = {
 export default function PaymentsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const [customerFilter, setCustomerFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+
+  // Fetch customers for filters
+  const { data: customersData } = useSWR("/api/customers?limit=500");
+  const customers = customersData?.customers || [];
+
+  const activeFilterCount = [customerFilter, dateFrom, dateTo].filter(Boolean).length;
 
   // Debounce search
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -80,11 +98,20 @@ export default function PaymentsPage() {
   // Build API URL
   const apiUrl = useMemo(() => {
     let url = `/api/payments?page=${currentPage}&limit=${itemsPerPage}`;
+    if (customerFilter) {
+      url += `&customerId=${customerFilter}`;
+    }
+    if (dateFrom) {
+      url += `&dateFrom=${dateFrom}`;
+    }
+    if (dateTo) {
+      url += `&dateTo=${dateTo}`;
+    }
     if (debouncedSearch) {
       url += `&search=${encodeURIComponent(debouncedSearch)}`;
     }
     return url;
-  }, [currentPage, debouncedSearch]);
+  }, [currentPage, customerFilter, dateFrom, dateTo, debouncedSearch]);
 
   // Use SWR for caching
   const { data, error, isLoading, mutate } = useSWR(apiUrl);
@@ -188,35 +215,98 @@ export default function PaymentsPage() {
         </div>
 
         {/* Search and Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-          <div className="flex items-center gap-2">
-            {/* Search */}
-            <div className="relative w-64">
-              <Input
-                type="text"
-                placeholder="Search payments..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pr-8"
-              />
-              {searchQuery && (
-                <button
-                  onClick={handleClearSearch}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  aria-label="Clear search"
+        <div className="space-y-3 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <div className="relative w-64">
+                <Input
+                  type="text"
+                  placeholder="Search payments..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-8"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={handleClearSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+                className={activeFilterCount > 0 ? "border-teal-500 text-teal-600" : ""}
+              >
+                <Filter className="h-4 w-4 mr-1" />
+                Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
+              </Button>
+            </div>
+            <Button
+              onClick={() => router.push("/sales/receipts/new")}
+              className="bg-teal-500 hover:bg-teal-600 text-white"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Record Payment
+            </Button>
+          </div>
+
+          {showFilters && (
+            <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="min-w-[200px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Customer</label>
+                <Select value={customerFilter} onValueChange={(v) => { setCustomerFilter(v === "ALL" ? "" : v); setCurrentPage(1); }}>
+                  <SelectTrigger className="h-9 bg-white">
+                    <SelectValue placeholder="All Customers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Customers</SelectItem>
+                    {customers.map((c: any) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-[150px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }}
+                  className="h-9 bg-white"
+                />
+              </div>
+              <div className="min-w-[150px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }}
+                  className="h-9 bg-white"
+                />
+              </div>
+              {activeFilterCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setCustomerFilter("");
+                    setDateFrom("");
+                    setDateTo("");
+                    setCurrentPage(1);
+                  }}
+                  className="text-gray-500 hover:text-gray-700 h-9"
                 >
-                  <X className="h-4 w-4" />
-                </button>
+                  <X className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
               )}
             </div>
-          </div>
-          <Button
-            onClick={() => router.push("/sales/receipts/new")}
-            className="bg-teal-500 hover:bg-teal-600 text-white"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Record Payment
-          </Button>
+          )}
         </div>
 
         {/* Payments Table */}

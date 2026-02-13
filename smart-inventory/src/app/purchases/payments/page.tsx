@@ -17,7 +17,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Plus, MoreHorizontal, Trash2, Loader2, X, Eye, CreditCard, Wallet } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus, MoreHorizontal, Trash2, Loader2, X, Eye, CreditCard, Wallet, Filter } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -53,7 +60,17 @@ export default function VendorPaymentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
+  const [vendorFilter, setVendorFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const itemsPerPage = 15;
+
+  // Fetch vendors for filters
+  const { data: vendorsData } = useSWR("/api/vendors?limit=500");
+  const vendors = vendorsData?.vendors || [];
+
+  const activeFilterCount = [vendorFilter, dateFrom, dateTo].filter(Boolean).length;
 
   const debouncedSearch = useDebounce(searchQuery, 300);
 
@@ -65,8 +82,17 @@ export default function VendorPaymentsPage() {
     if (paymentFilter !== "all") {
       url += `&type=${paymentFilter}`;
     }
+    if (vendorFilter) {
+      url += `&vendorId=${vendorFilter}`;
+    }
+    if (dateFrom) {
+      url += `&dateFrom=${dateFrom}`;
+    }
+    if (dateTo) {
+      url += `&dateTo=${dateTo}`;
+    }
     return url;
-  }, [currentPage, debouncedSearch, paymentFilter]);
+  }, [currentPage, debouncedSearch, paymentFilter, vendorFilter, dateFrom, dateTo]);
 
   const { data, error, isLoading, mutate } = useSWR(apiUrl);
 
@@ -175,31 +201,97 @@ export default function VendorPaymentsPage() {
         </div>
 
         {/* Search and Actions */}
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-          <div className="relative w-64">
-            <Input
-              type="text"
-              placeholder="Search payments..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pr-8"
-            />
-            {searchQuery && (
-              <button
-                onClick={handleClearSearch}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+        <div className="space-y-3 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <div className="relative w-64">
+                <Input
+                  type="text"
+                  placeholder="Search payments..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-8"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={handleClearSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+                className={activeFilterCount > 0 ? "border-teal-500 text-teal-600" : ""}
               >
-                <X className="h-4 w-4" />
-              </button>
-            )}
+                <Filter className="h-4 w-4 mr-1" />
+                Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
+              </Button>
+            </div>
+            <Button
+              onClick={() => router.push("/purchases/payments/new")}
+              className="bg-teal-500 hover:bg-teal-600 text-white"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Payment
+            </Button>
           </div>
-          <Button
-            onClick={() => router.push("/purchases/payments/new")}
-            className="bg-teal-500 hover:bg-teal-600 text-white"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            New Payment
-          </Button>
+
+          {showFilters && (
+            <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="min-w-[200px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Vendor</label>
+                <Select value={vendorFilter} onValueChange={(v) => { setVendorFilter(v === "ALL" ? "" : v); setCurrentPage(1); }}>
+                  <SelectTrigger className="h-9 bg-white">
+                    <SelectValue placeholder="All Vendors" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Vendors</SelectItem>
+                    {vendors.map((v: any) => (
+                      <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-[150px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }}
+                  className="h-9 bg-white"
+                />
+              </div>
+              <div className="min-w-[150px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }}
+                  className="h-9 bg-white"
+                />
+              </div>
+              {activeFilterCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setVendorFilter("");
+                    setDateFrom("");
+                    setDateTo("");
+                    setCurrentPage(1);
+                  }}
+                  className="text-gray-500 hover:text-gray-700 h-9"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Payments Table */}

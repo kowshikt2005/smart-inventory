@@ -74,6 +74,7 @@ export async function PUT(
       where: { id },
       data: {
         itemCode: body.itemCode || existingItem.itemCode,
+        userCode: body.userCode !== undefined ? (body.userCode || null) : existingItem.userCode,
         name: body.name || existingItem.name,
         description: body.description !== undefined ? body.description : existingItem.description,
         brandId: body.brandId !== undefined ? body.brandId : existingItem.brandId,

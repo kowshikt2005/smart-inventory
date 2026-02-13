@@ -1,3 +1,8 @@
+---
+name: project-guidelines
+description: Project-specific guidelines, preferences, and rules for the Ledger project
+---
+
 # Project Guidelines & Memory
 
 > **Purpose**: This file contains project-specific guidelines, preferences, and rules for Claude to follow throughout this project.

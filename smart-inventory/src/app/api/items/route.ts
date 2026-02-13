@@ -20,6 +20,7 @@ export async function GET(request: Request) {
       where.OR = [
         { name: { contains: search } },
         { itemCode: { contains: search } },
+        { userCode: { contains: search } },
         { description: { contains: search } },
         { hsnCode: { contains: search } },
       ];
@@ -76,15 +77,16 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     // Validate required fields
-    const requiredFields = ['name'];
+    const missing: string[] = [];
+    if (!body.name) missing.push('Item Name');
+    if (!body.brandId) missing.push('Brand');
+    if (!body.subBrandId) missing.push('Sub-brand');
 
-    for (const field of requiredFields) {
-      if (!body[field]) {
-        return NextResponse.json(
-          { error: `Missing required field: ${field}` },
-          { status: 400 }
-        );
-      }
+    if (missing.length > 0) {
+      return NextResponse.json(
+        { error: `Required fields missing: ${missing.join(', ')}` },
+        { status: 400 }
+      );
     }
 
     // Generate unique item code
@@ -96,10 +98,11 @@ export async function POST(request: Request) {
       const item = await tx.item.create({
         data: {
           itemCode: itemCode,
+          userCode: body.userCode || null,
           name: body.name,
           description: body.description || null,
-          brandId: body.brandId || null,
-          subBrandId: body.subBrandId || null,
+          brandId: body.brandId,
+          subBrandId: body.subBrandId,
           hsnCode: body.hsnCode || null,
           gstRate: body.gstRate || 0,
           purchasePrice: body.purchasePrice || 0,

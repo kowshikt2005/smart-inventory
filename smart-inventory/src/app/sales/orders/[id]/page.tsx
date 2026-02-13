@@ -306,8 +306,8 @@ export default function SalesOrderDetailPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {/* Edit - only for OPEN orders */}
-                  {order.status === "OPEN" && (
+                  {/* Edit - for OPEN and HOLD orders */}
+                  {(order.status === "OPEN" || order.status === "HOLD") && (
                     <DropdownMenuItem
                       onClick={() => router.push(`/sales/orders/new?edit=${id}`)}
                     >
@@ -362,11 +362,11 @@ export default function SalesOrderDetailPage() {
                     </>
                   )}
 
-                  {/* Delete - only for OPEN orders */}
-                  {order.status === "OPEN" && (
+                  {/* Delete - for OPEN, HOLD, and REJECTED orders */}
+                  {(order.status === "OPEN" || order.status === "HOLD" || order.status === "REJECTED") && (
                     <DropdownMenuItem
                       onClick={handleDelete}
-                      className="text-red-600"
+                      className="text-red-600 focus:text-red-600"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete Order

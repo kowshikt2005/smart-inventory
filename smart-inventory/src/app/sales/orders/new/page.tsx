@@ -174,8 +174,8 @@ function NewSalesOrderPageContent() {
         const order = await response.json();
 
         // Check if order is editable
-        if (order.status !== "OPEN") {
-          alert("Only orders with OPEN status can be edited");
+        if (order.status !== "OPEN" && order.status !== "HOLD") {
+          alert("Only orders with OPEN or HOLD status can be edited");
           router.push("/sales/orders");
           return;
         }

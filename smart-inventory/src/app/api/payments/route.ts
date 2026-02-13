@@ -8,6 +8,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const customerId = searchParams.get('customerId') || '';
+    const dateFrom = searchParams.get('dateFrom') || '';
+    const dateTo = searchParams.get('dateTo') || '';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
@@ -17,6 +19,16 @@ export async function GET(request: Request) {
 
     if (customerId) {
       where.customerId = customerId;
+    }
+
+    if (dateFrom || dateTo) {
+      where.paymentDate = {};
+      if (dateFrom) where.paymentDate.gte = new Date(dateFrom);
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23, 59, 59, 999);
+        where.paymentDate.lte = to;
+      }
     }
 
     if (search) {

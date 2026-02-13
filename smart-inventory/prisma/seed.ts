@@ -40,10 +40,21 @@ async function main() {
     prisma.vendor.deleteMany(),
     prisma.employee.deleteMany(),
     prisma.bankAccount.deleteMany(),
+    prisma.appSetting.deleteMany(),
     prisma.user.deleteMany(),
   ]);
 
-  // 1. Create Users
+  // 1. Create App Settings
+  console.log('⚙️  Creating app settings...');
+  await prisma.appSetting.create({
+    data: {
+      key: 'negative_billing',
+      value: 'false',
+      label: 'Negative Billing',
+    },
+  });
+
+  // 2. Create Users
   console.log('👥 Creating users...');
   const hashedPassword = await hash('password123', 10);
 
@@ -65,7 +76,7 @@ async function main() {
     },
   });
 
-  // 2. Create Brands and SubBrands
+  // 3. Create Brands and SubBrands
   console.log('🏷️  Creating brands and sub-brands...');
   const samsungBrand = await prisma.brand.create({
     data: {
@@ -125,7 +136,7 @@ async function main() {
     include: { subBrands: true },
   });
 
-  // 3. Create Items (without inventory initially)
+  // 4. Create Items (without inventory initially)
   console.log('📦 Creating items...');
   const items = await Promise.all([
     // Samsung Items
@@ -343,7 +354,7 @@ async function main() {
     }),
   ]);
 
-  // 4. Create Customers
+  // 5. Create Customers
   console.log('👤 Creating customers...');
   const customers = await Promise.all([
     prisma.customer.create({
@@ -416,7 +427,7 @@ async function main() {
     }),
   ]);
 
-  // 5. Create Vendors
+  // 6. Create Vendors
   console.log('🏭 Creating vendors...');
   const vendors = await Promise.all([
     prisma.vendor.create({
@@ -481,7 +492,7 @@ async function main() {
     }),
   ]);
 
-  // 6. Create Employees
+  // 7. Create Employees
   console.log('👨‍💼 Creating employees...');
   await Promise.all([
     prisma.employee.create({
@@ -534,7 +545,7 @@ async function main() {
     }),
   ]);
 
-  // 7. Create Bank Accounts
+  // 8. Create Bank Accounts
   console.log('🏦 Creating bank accounts...');
   const cashAccount = await prisma.bankAccount.create({
     data: {
@@ -617,7 +628,7 @@ async function main() {
     }),
   ]);
 
-  // 8. Opening Balance Ledger Entries
+  // 9. Opening Balance Ledger Entries
   console.log('📒 Creating opening balance ledger entries...');
 
   // Customer opening balance
@@ -2565,6 +2576,7 @@ async function main() {
   console.log('\n✅ Database seeding completed successfully!');
   console.log('\n📊 Summary:');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('⚙️  App Settings: 1 (Negative Billing)');
   console.log('👥 Users: 2');
   console.log('🏷️  Brands: 4 (with 9 sub-brands)');
   console.log('📦 Items: 11 (with inventory)');

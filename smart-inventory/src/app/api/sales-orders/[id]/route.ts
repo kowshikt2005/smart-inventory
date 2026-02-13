@@ -180,10 +180,10 @@ export async function PUT(
       );
     }
 
-    // Only allow updates for OPEN orders
-    if (existingOrder.status !== 'OPEN') {
+    // Only allow updates for OPEN and HOLD orders
+    if (existingOrder.status !== 'OPEN' && existingOrder.status !== 'HOLD') {
       return NextResponse.json(
-        { error: 'Can only edit orders with OPEN status' },
+        { error: 'Can only edit orders with OPEN or HOLD status' },
         { status: 400 }
       );
     }
@@ -437,10 +437,10 @@ export async function DELETE(
       );
     }
 
-    // Only allow deletion for OPEN orders
-    if (existingOrder.status !== 'OPEN') {
+    // Only allow deletion for OPEN, HOLD, and REJECTED orders
+    if (!['OPEN', 'HOLD', 'REJECTED'].includes(existingOrder.status)) {
       return NextResponse.json(
-        { error: 'Can only delete orders with OPEN status' },
+        { error: 'Cannot delete invoiced orders' },
         { status: 400 }
       );
     }

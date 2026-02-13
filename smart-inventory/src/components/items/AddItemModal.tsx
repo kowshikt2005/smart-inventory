@@ -64,6 +64,7 @@ export function AddItemModal({
 
   const [formData, setFormData] = useState({
     name: "",
+    userCode: "",
     description: "",
     brandId: "",
     subBrandId: "",
@@ -97,6 +98,7 @@ export function AddItemModal({
     if (!editItem && isOpen) {
       setFormData({
         name: "",
+        userCode: "",
         description: "",
         brandId: "",
         subBrandId: "",
@@ -118,6 +120,7 @@ export function AddItemModal({
     if (editItem && isOpen && brandsData && subBrandsData) {
       setFormData({
         name: editItem.name || "",
+        userCode: (editItem as any).userCode || "",
         description: editItem.description || "",
         brandId: editItem.brand?.id || "",
         subBrandId: editItem.subBrand?.id || "",
@@ -183,8 +186,20 @@ export function AddItemModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
     setError(null);
+
+    // Client-side validation for required fields
+    const missing: string[] = [];
+    if (!formData.name.trim()) missing.push("Item Name");
+    if (!formData.brandId) missing.push("Brand");
+    if (!formData.subBrandId) missing.push("Sub-brand");
+
+    if (missing.length > 0) {
+      setError(`Required fields missing: ${missing.join(", ")}`);
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
       const url = isEditing ? `/api/items/${editItem.id}` : "/api/items";
@@ -197,9 +212,10 @@ export function AddItemModal({
         },
         body: JSON.stringify({
           name: formData.name,
+          userCode: formData.userCode || null,
           description: formData.description || null,
-          brandId: formData.brandId || null,
-          subBrandId: formData.subBrandId || null,
+          brandId: formData.brandId,
+          subBrandId: formData.subBrandId,
           hsnCode: formData.hsnCode || null,
           gstRate: parseFloat(formData.gstRate) || 0,
           purchasePrice: parseFloat(formData.purchasePrice) || 0,
@@ -225,6 +241,7 @@ export function AddItemModal({
       // Reset form
       setFormData({
         name: "",
+        userCode: "",
         description: "",
         brandId: "",
         subBrandId: "",
@@ -332,6 +349,23 @@ export function AddItemModal({
                   placeholder="Enter item name"
                 />
               </div>
+              <div>
+                <label
+                  htmlFor="item-usercode"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Item Code
+                </label>
+                <Input
+                  id="item-usercode"
+                  type="text"
+                  name="userCode"
+                  value={formData.userCode}
+                  onChange={handleChange}
+                  placeholder="Enter your item code"
+                />
+                <p className="text-xs text-gray-500 mt-1">Your own code for searching</p>
+              </div>
               <div className="md:col-span-2">
                 <label
                   htmlFor="item-description"
@@ -359,7 +393,7 @@ export function AddItemModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Brand
+                  Brand <span className="text-red-500">*</span>
                 </label>
                 <Select
                   key={`brand-${formData.brandId}-${brands.length}`}
@@ -380,7 +414,7 @@ export function AddItemModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Sub-brand
+                  Sub-brand <span className="text-red-500">*</span>
                 </label>
                 <Select
                   key={`subbrand-${formData.subBrandId}-${filteredSubBrands.length}`}

@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, MoreHorizontal, Eye, Edit, Loader2, X, Package } from "lucide-react";
+import { Plus, MoreHorizontal, Eye, Edit, Loader2, X, Package, Trash2 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -104,6 +104,27 @@ export default function ItemsPage() {
     if (item) {
       setEditingItem(item);
       setShowAddModal(true);
+    }
+  };
+
+  const handleDeleteItem = async (item: Item) => {
+    if (!confirm(`Are you sure you want to delete "${item.name}"?`)) return;
+
+    try {
+      const response = await fetch(`/api/items/${item.id}`, {
+        method: "DELETE",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to delete item");
+      }
+
+      mutate();
+    } catch (err) {
+      console.error("Error deleting item:", err);
+      alert(err instanceof Error ? err.message : "Failed to delete item");
     }
   };
 
@@ -293,6 +314,10 @@ export default function ItemsPage() {
                           <DropdownMenuItem onClick={() => handleAdjustStock(item)}>
                             <Package className="h-4 w-4 mr-2" />
                             Adjust Stock
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDeleteItem(item)} className="text-red-600 focus:text-red-600">
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Item
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

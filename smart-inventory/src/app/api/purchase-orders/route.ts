@@ -11,6 +11,9 @@ export async function GET(request: Request) {
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const vendorId = searchParams.get('vendorId') || '';
+    const brandId = searchParams.get('brandId') || '';
+    const dateFrom = searchParams.get('dateFrom') || '';
+    const dateTo = searchParams.get('dateTo') || '';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
@@ -24,8 +27,22 @@ export async function GET(request: Request) {
       where.status = status;
     }
 
-    if (vendorId && session?.user && hasRole(session.user.role, 'MANAGER')) {
+    if (vendorId) {
       where.vendorId = vendorId;
+    }
+
+    if (brandId) {
+      where.items = { some: { item: { brandId } } };
+    }
+
+    if (dateFrom || dateTo) {
+      where.date = {};
+      if (dateFrom) where.date.gte = new Date(dateFrom);
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23, 59, 59, 999);
+        where.date.lte = to;
+      }
     }
 
     if (search) {
