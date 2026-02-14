@@ -6,6 +6,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
+    const brandId = searchParams.get('brandId');
     const fromDate = searchParams.get('fromDate');
     const toDate = searchParams.get('toDate');
     const type = searchParams.get('type') || 'unbilled'; // 'billed' or 'unbilled'
@@ -31,6 +32,7 @@ export async function GET(request: Request) {
       where: {
         status: statusFilter,
         ...(customerId ? { customerId } : {}),
+        ...(brandId ? { items: { some: { item: { brandId } } } } : {}),
         ...(Object.keys(dateFilter).length > 0 ? { orderDate: dateFilter } : {}),
       },
       include: {

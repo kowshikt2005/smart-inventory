@@ -43,7 +43,9 @@ function NewPurchaseInvoicePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const purchaseOrderId = searchParams.get("purchaseOrderId");
+  const editId = searchParams.get("edit");
 
+  const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -135,13 +137,45 @@ function NewPurchaseInvoicePageContent() {
     }
   }, []);
 
+  const loadInvoiceForEdit = useCallback(async (invoiceId: string) => {
+    try {
+      const response = await fetch(`/api/purchase-invoices/${invoiceId}`);
+      if (response.ok) {
+        const invoice = await response.json();
+        setInvoiceNumber(invoice.invoiceNumber || "");
+        setInvoiceDate(invoice.date ? new Date(invoice.date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
+        setDueDate(invoice.dueDate ? new Date(invoice.dueDate).toISOString().split("T")[0] : "");
+        setNotes(invoice.notes || "");
+        setSelectedVendor(invoice.vendor);
+
+        if (invoice.items && invoice.items.length > 0) {
+          setInvoiceItems(
+            invoice.items.map((item: { itemId: string; quantity: number; rate: number; taxRate: number; taxAmount: number; amount: number }) => ({
+              id: generateId(),
+              itemId: item.itemId,
+              quantity: Number(item.quantity),
+              rate: Number(item.rate),
+              taxRate: Number(item.taxRate),
+              taxAmount: Number(item.taxAmount),
+              amount: Number(item.amount),
+            }))
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Error loading invoice for edit:", err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchVendors();
     fetchItems();
-    if (purchaseOrderId) {
+    if (editId) {
+      loadInvoiceForEdit(editId);
+    } else if (purchaseOrderId) {
       loadPurchaseOrder(purchaseOrderId);
     }
-  }, [fetchVendors, fetchItems, purchaseOrderId, loadPurchaseOrder]);
+  }, [fetchVendors, fetchItems, purchaseOrderId, loadPurchaseOrder, editId, loadInvoiceForEdit]);
 
   // Set due date when vendor is selected
   useEffect(() => {
@@ -268,8 +302,11 @@ function NewPurchaseInvoicePageContent() {
         })),
       };
 
-      const response = await fetch("/api/purchase-invoices", {
-        method: "POST",
+      const url = editId ? `/api/purchase-invoices/${editId}` : "/api/purchase-invoices";
+      const method = editId ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -299,8 +336,12 @@ function NewPurchaseInvoicePageContent() {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Invoices
           </Button>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">New Purchase Invoice</h1>
-          <p className="text-gray-600">Create a new purchase invoice from vendor</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            {editId ? `Edit Purchase Invoice${invoiceNumber ? ` - ${invoiceNumber}` : ""}` : "New Purchase Invoice"}
+          </h1>
+          <p className="text-gray-600">
+            {editId ? "Update purchase invoice details" : "Create a new purchase invoice from vendor"}
+          </p>
         </div>
 
         {error && (
@@ -527,12 +568,12 @@ function NewPurchaseInvoicePageContent() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
+                  {editId ? "Updating..." : "Creating..."}
                 </>
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" />
-                  Create Invoice
+                  {editId ? "Update Invoice" : "Create Invoice"}
                 </>
               )}
             </Button>

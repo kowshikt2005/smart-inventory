@@ -28,6 +28,7 @@ import {
   Settings,
 } from "lucide-react";
 import { useState, memo, useMemo } from "react";
+import { motion, AnimatePresence } from "motion/react";
 
 // Role-based access control
 const ROLE_PERMISSIONS = {
@@ -72,6 +73,32 @@ const ROLE_PERMISSIONS = {
     settings: true,
   },
 };
+
+function CollapsibleSection({
+  isOpen,
+  children,
+}: {
+  isOpen: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <AnimatePresence initial={false}>
+      {isOpen && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: "auto", opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.2, ease: "easeInOut" }}
+          className="overflow-hidden"
+        >
+          <div className="ml-8 mt-1 space-y-0.5 pb-1">
+            {children}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
 
 export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname();
@@ -135,307 +162,238 @@ export const Sidebar = memo(function Sidebar() {
     { icon: FileText, label: "Billed & Unbilled", href: "/reports/billed-unbilled" },
   ], []);
 
+  const navLinkClass = (isActive: boolean) =>
+    cn(
+      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150",
+      isActive
+        ? "bg-white/[0.14] text-white font-medium border-l-2 border-amber-400 ml-[-2px]"
+        : "text-white/80 hover:bg-white/[0.10] hover:text-white"
+    );
+
+  const subLinkClass = (isActive: boolean) =>
+    cn(
+      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150",
+      isActive
+        ? "bg-white/[0.14] text-white font-medium"
+        : "text-white/70 hover:bg-white/[0.10] hover:text-white"
+    );
+
+  const sectionButtonClass = (isActive: boolean) =>
+    cn(
+      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-all duration-150",
+      isActive
+        ? "bg-white/[0.14] text-white"
+        : "text-white/80 hover:bg-white/[0.10] hover:text-white"
+    );
+
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-primary border-r border-primary/20 flex flex-col shadow-lg">
+    <aside className="fixed left-0 top-0 z-40 h-screen w-[230px] bg-gradient-to-b from-[#2D2A5E] via-[#272462] to-[#1A1740] flex flex-col shadow-xl">
       {/* Logo */}
-      <div className="flex items-center gap-3 p-6 border-b border-white/10">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent shadow-md">
-          <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-white/[0.12]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 shadow-lg shadow-amber-900/20">
+          <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M9 1v6m6-6v6" />
           </svg>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-white font-semibold text-sm tracking-wide leading-tight">SRI BALAJI</span>
+          <span className="text-amber-400/70 text-[10px] font-medium tracking-wider uppercase">Enterprises</span>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto p-3">
+      <nav className="flex-1 overflow-y-auto p-3 sidebar-scrollbar">
         {/* Dashboard */}
-        <Link
-          href="/"
-          className={cn(
-            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors mb-2",
-            pathname === "/" && "bg-white/15 text-white font-medium shadow-sm"
-          )}
-        >
+        <Link href="/" className={navLinkClass(pathname === "/")}>
           <LayoutDashboard className="h-5 w-5" strokeWidth={1.5} />
           <span>Dashboard</span>
         </Link>
 
-        {/* Sales Section */}
+        {/* TRANSACTIONS section */}
         {permissions.sales && (
-          <div className="mb-2">
-            <button
-              onClick={() => setSalesOpen(!salesOpen)}
-              className={cn(
-                "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
-                pathname.startsWith("/sales") && "bg-white/15 text-white"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <ShoppingCart className="h-5 w-5" strokeWidth={1.5} />
-                <span>Sales</span>
-              </div>
-              <ChevronDown
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  salesOpen && "rotate-180"
-                )}
-              />
-            </button>
+          <>
+            <div className="mx-3 my-3 h-px bg-white/[0.12]" />
+            <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
+              Transactions
+            </p>
 
-            {/* Sales Dropdown */}
-            {salesOpen && (
-              <div className="ml-8 mt-1 space-y-1">
+            {/* Sales */}
+            <div className="mb-0.5">
+              <button
+                onClick={() => setSalesOpen(!salesOpen)}
+                className={sectionButtonClass(pathname.startsWith("/sales"))}
+              >
+                <div className="flex items-center gap-3">
+                  <ShoppingCart className="h-5 w-5" strokeWidth={1.5} />
+                  <span>Sales</span>
+                </div>
+                <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", salesOpen && "rotate-180")} />
+              </button>
+              <CollapsibleSection isOpen={salesOpen}>
                 {salesItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
-                        isActive && "bg-white/15 text-white font-medium shadow-sm"
-                      )}
-                    >
+                    <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
                       <Icon className="h-4 w-4" strokeWidth={1.5} />
                       <span>{item.label}</span>
                     </Link>
                   );
                 })}
-              </div>
-            )}
-          </div>
+              </CollapsibleSection>
+            </div>
+
+            {/* Purchases */}
+            <div className="mb-0.5">
+              <button
+                onClick={() => setPurchasesOpen(!purchasesOpen)}
+                className={sectionButtonClass(pathname.startsWith("/purchases"))}
+              >
+                <div className="flex items-center gap-3">
+                  <Truck className="h-5 w-5" strokeWidth={1.5} />
+                  <span>Purchases</span>
+                </div>
+                <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", purchasesOpen && "rotate-180")} />
+              </button>
+              <CollapsibleSection isOpen={purchasesOpen}>
+                {purchaseItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                  return (
+                    <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
+                      <Icon className="h-4 w-4" strokeWidth={1.5} />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </CollapsibleSection>
+            </div>
+          </>
         )}
 
-        {/* Purchase Section */}
-        <div className="mb-2">
-          <button
-            onClick={() => setPurchasesOpen(!purchasesOpen)}
-            className={cn(
-              "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
-              pathname.startsWith("/purchases") && "bg-white/15 text-white"
-            )}
-          >
-            <div className="flex items-center gap-3">
-              <Truck className="h-5 w-5" strokeWidth={1.5} />
-              <span>Purchases</span>
-            </div>
-            <ChevronDown
-              className={cn(
-                "h-4 w-4 transition-transform",
-                purchasesOpen && "rotate-180"
-              )}
-            />
-          </button>
-
-          {/* Purchase Dropdown */}
-          {purchasesOpen && (
-            <div className="ml-8 mt-1 space-y-1">
-              {purchaseItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
-                      isActive && "bg-white/15 text-white font-medium shadow-sm"
-                    )}
-                  >
-                    <Icon className="h-4 w-4" strokeWidth={1.5} />
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Bank/Cash Section */}
+        {/* FINANCE section */}
         {permissions.ledger && (
-          <div className="mb-2">
-            <button
-              onClick={() => setBankCashOpen(!bankCashOpen)}
-              className={cn(
-                "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
-                pathname.startsWith("/bank-cash") && "bg-white/15 text-white"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <Landmark className="h-5 w-5" strokeWidth={1.5} />
-                <span>Bank/Cash</span>
-              </div>
-              <ChevronDown
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  bankCashOpen && "rotate-180"
-                )}
-              />
-            </button>
+          <>
+            <div className="mx-3 my-3 h-px bg-white/[0.12]" />
+            <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
+              Finance
+            </p>
 
-            {/* Bank/Cash Dropdown */}
-            {bankCashOpen && (
-              <div className="ml-8 mt-1 space-y-1">
+            {/* Bank/Cash */}
+            <div className="mb-0.5">
+              <button
+                onClick={() => setBankCashOpen(!bankCashOpen)}
+                className={sectionButtonClass(pathname.startsWith("/bank-cash"))}
+              >
+                <div className="flex items-center gap-3">
+                  <Landmark className="h-5 w-5" strokeWidth={1.5} />
+                  <span>Bank/Cash</span>
+                </div>
+                <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", bankCashOpen && "rotate-180")} />
+              </button>
+              <CollapsibleSection isOpen={bankCashOpen}>
                 {bankCashItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
-                        isActive && "bg-white/15 text-white font-medium shadow-sm"
-                      )}
-                    >
+                    <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
                       <Icon className="h-4 w-4" strokeWidth={1.5} />
                       <span>{item.label}</span>
                     </Link>
                   );
                 })}
-              </div>
-            )}
-          </div>
-        )}
+              </CollapsibleSection>
+            </div>
 
-        {/* Ledger Section */}
-        {permissions.ledger && (
-          <div className="mb-2">
-            <button
-              onClick={() => setLedgerOpen(!ledgerOpen)}
-              className={cn(
-                "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
-                pathname.startsWith("/ledger") && "bg-white/15 text-white"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <BookOpen className="h-5 w-5" strokeWidth={1.5} />
-                <span>Ledger</span>
-              </div>
-              <ChevronDown
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  ledgerOpen && "rotate-180"
-                )}
-              />
-            </button>
-
-            {/* Ledger Dropdown */}
-            {ledgerOpen && (
-              <div className="ml-8 mt-1 space-y-1">
+            {/* Ledger */}
+            <div className="mb-0.5">
+              <button
+                onClick={() => setLedgerOpen(!ledgerOpen)}
+                className={sectionButtonClass(pathname.startsWith("/ledger"))}
+              >
+                <div className="flex items-center gap-3">
+                  <BookOpen className="h-5 w-5" strokeWidth={1.5} />
+                  <span>Ledger</span>
+                </div>
+                <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", ledgerOpen && "rotate-180")} />
+              </button>
+              <CollapsibleSection isOpen={ledgerOpen}>
                 {ledgerItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
-                        isActive && "bg-white/15 text-white font-medium shadow-sm"
-                      )}
-                    >
+                    <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
                       <Icon className="h-4 w-4" strokeWidth={1.5} />
                       <span>{item.label}</span>
                     </Link>
                   );
                 })}
-              </div>
-            )}
-          </div>
+              </CollapsibleSection>
+            </div>
+          </>
         )}
 
-        {/* Reports Section */}
+        {/* ANALYTICS section */}
         {permissions.reports && (
-          <div className="mb-2">
-            <button
-              onClick={() => setReportsOpen(!reportsOpen)}
-              className={cn(
-                "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
-                pathname.startsWith("/reports") && "bg-white/15 text-white"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <BarChart3 className="h-5 w-5" strokeWidth={1.5} />
-                <span>Reports</span>
-              </div>
-              <ChevronDown
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  reportsOpen && "rotate-180"
-                )}
-              />
-            </button>
+          <>
+            <div className="mx-3 my-3 h-px bg-white/[0.12]" />
+            <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
+              Analytics
+            </p>
 
-            {/* Reports Dropdown */}
-            {reportsOpen && (
-              <div className="ml-8 mt-1 space-y-1">
+            <div className="mb-0.5">
+              <button
+                onClick={() => setReportsOpen(!reportsOpen)}
+                className={sectionButtonClass(pathname.startsWith("/reports"))}
+              >
+                <div className="flex items-center gap-3">
+                  <BarChart3 className="h-5 w-5" strokeWidth={1.5} />
+                  <span>Reports</span>
+                </div>
+                <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", reportsOpen && "rotate-180")} />
+              </button>
+              <CollapsibleSection isOpen={reportsOpen}>
                 {reportItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
-                        isActive && "bg-white/15 text-white font-medium shadow-sm"
-                      )}
-                    >
+                    <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
                       <Icon className="h-4 w-4" strokeWidth={1.5} />
                       <span>{item.label}</span>
                     </Link>
                   );
                 })}
-              </div>
-            )}
-          </div>
+              </CollapsibleSection>
+            </div>
+          </>
         )}
 
-        {/* Masters Section */}
+        {/* CONFIGURATION section */}
         {permissions.masters && (
-          <div className="mb-2">
-            <button
-              onClick={() => setMastersOpen(!mastersOpen)}
-              className={cn(
-                "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
-                pathname.startsWith("/masters") && "bg-white/15 text-white"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <Database className="h-5 w-5" strokeWidth={1.5} />
-                <span>Masters</span>
-              </div>
-              <ChevronDown
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  mastersOpen && "rotate-180"
-                )}
-              />
-            </button>
+          <>
+            <div className="mx-3 my-3 h-px bg-white/[0.12]" />
+            <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
+              Configuration
+            </p>
 
-            {/* Masters Dropdown */}
-            {mastersOpen && (
-              <div className="ml-8 mt-1 space-y-1">
+            {/* Masters */}
+            <div className="mb-0.5">
+              <button
+                onClick={() => setMastersOpen(!mastersOpen)}
+                className={sectionButtonClass(pathname.startsWith("/masters"))}
+              >
+                <div className="flex items-center gap-3">
+                  <Database className="h-5 w-5" strokeWidth={1.5} />
+                  <span>Masters</span>
+                </div>
+                <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", mastersOpen && "rotate-180")} />
+              </button>
+              <CollapsibleSection isOpen={mastersOpen}>
                 {masterItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href;
-
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
-                        isActive && "bg-white/15 text-white font-medium shadow-sm"
-                      )}
-                    >
+                    <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
                       <Icon className="h-4 w-4" strokeWidth={1.5} />
                       <span>{item.label}</span>
                     </Link>
@@ -447,60 +405,62 @@ export const Sidebar = memo(function Sidebar() {
                   <button
                     onClick={() => setItemsOpen(!itemsOpen)}
                     className={cn(
-                      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors",
-                      pathname.startsWith("/masters/items") && "bg-white/15 text-white"
+                      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-all duration-150",
+                      pathname.startsWith("/masters/items")
+                        ? "bg-white/[0.14] text-white"
+                        : "text-white/70 hover:bg-white/[0.10] hover:text-white"
                     )}
                   >
                     <div className="flex items-center gap-3">
                       <Package className="h-4 w-4" strokeWidth={1.5} />
                       <span>Items</span>
                     </div>
-                    <ChevronDown
-                      className={cn(
-                        "h-3 w-3 transition-transform",
-                        itemsOpen && "rotate-180"
-                      )}
-                    />
+                    <ChevronDown className={cn("h-3 w-3 transition-transform duration-200", itemsOpen && "rotate-180")} />
                   </button>
 
-                  {/* Items Sub-dropdown */}
-                  {itemsOpen && (
-                    <div className="ml-7 mt-1 space-y-1">
-                      {itemSubMenu.map((item) => {
-                        const Icon = item.icon;
-                        const isActive = pathname === item.href;
-
-                        return (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            className={cn(
-                              "flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors",
-                              isActive && "bg-white/15 text-white font-medium shadow-sm"
-                            )}
-                          >
-                            <Icon className="h-3 w-3" strokeWidth={1.5} />
-                            <span>{item.label}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <AnimatePresence initial={false}>
+                    {itemsOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                      >
+                        <div className="ml-7 mt-1 space-y-0.5">
+                          {itemSubMenu.map((item) => {
+                            const Icon = item.icon;
+                            const isActive = pathname === item.href;
+                            return (
+                              <Link
+                                key={item.href}
+                                href={item.href}
+                                className={cn(
+                                  "flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-all duration-150",
+                                  isActive
+                                    ? "bg-white/[0.14] text-white font-medium"
+                                    : "text-white/60 hover:bg-white/[0.10] hover:text-white"
+                                )}
+                              >
+                                <Icon className="h-3 w-3" strokeWidth={1.5} />
+                                <span>{item.label}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
-              </div>
-            )}
-          </div>
+              </CollapsibleSection>
+            </div>
+          </>
         )}
+
         {/* Settings */}
         {permissions.settings && (
-          <div className="mb-2">
-            <Link
-              href="/settings"
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors",
-                pathname === "/settings" && "bg-white/15 text-white font-medium shadow-sm"
-              )}
-            >
+          <div className="mb-0.5">
+            <Link href="/settings" className={navLinkClass(pathname === "/settings")}>
               <Settings className="h-5 w-5" strokeWidth={1.5} />
               <span>Settings</span>
             </Link>
@@ -508,6 +468,10 @@ export const Sidebar = memo(function Sidebar() {
         )}
       </nav>
 
+      {/* Footer */}
+      <div className="px-5 py-3 border-t border-white/[0.12]">
+        <p className="text-[10px] text-white/40 text-center">v0.2 by ksolutions</p>
+      </div>
     </aside>
   );
 });

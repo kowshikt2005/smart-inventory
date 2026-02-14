@@ -191,16 +191,18 @@ export default function PurchaseOrderDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {(order.status === "OPEN" || order.status === "RECEIVED") && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push(`/purchases/orders/new?edit=${order.id}`)}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+              )}
               {order.status === "OPEN" && (
                 <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push(`/purchases/orders/new?edit=${order.id}`)}
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Edit
-                  </Button>
                   <Button
                     variant="outline"
                     size="sm"

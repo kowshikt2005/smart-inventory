@@ -25,9 +25,15 @@ interface OutstandingInvoice {
   paidAmount: number;
   daysOverdue: number;
   status: string;
-  customerId: string;
-  customerName: string;
+  partyId: string;
+  partyName: string;
   creditDays: number;
+  // Customer-specific
+  customerId?: string;
+  customerName?: string;
+  // Vendor-specific
+  vendorId?: string;
+  vendorName?: string;
 }
 
 interface InvoiceItem {
@@ -87,51 +93,107 @@ interface InvoiceDetail {
   }>;
 }
 
+interface PurchaseInvoiceDetail {
+  id: string;
+  invoiceNumber: string;
+  date: string;
+  dueDate: string;
+  amount: number;
+  taxAmount: number;
+  totalAmount: number;
+  paidAmount: number;
+  balanceAmount: number;
+  status: string;
+  notes: string | null;
+  vendor: {
+    id: string;
+    vendorNumber: string;
+    name: string;
+    gstin: string | null;
+    phone: string | null;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+  };
+  items: {
+    id: string;
+    quantity: number;
+    rate: number;
+    taxRate: number;
+    taxAmount: number;
+    amount: number;
+    item: {
+      id: string;
+      itemCode: string;
+      name: string;
+      unit: string;
+      hsnCode: string | null;
+    };
+  }[];
+  vendorPayments: {
+    id: string;
+    paymentNumber: string;
+    date: string;
+    amount: number;
+    mode: string;
+  }[];
+}
+
 interface Summary {
-  totalCustomers: number;
+  totalParties: number;
   totalInvoices: number;
   totalOutstanding: number;
 }
 
+type TabType = "customer" | "vendor";
+
 export default function OutstandingReportPage() {
+  const [tab, setTab] = useState<TabType>("customer");
   const [customerId, setCustomerId] = useState("all");
-  const [showCustomerDrop, setShowCustomerDrop] = useState(false);
+  const [vendorId, setVendorId] = useState("all");
+  const [showPartyDrop, setShowPartyDrop] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDetail | null>(null);
+  const [selectedPurchaseInvoice, setSelectedPurchaseInvoice] = useState<PurchaseInvoiceDetail | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
-  // ── Customer list for filter ──────────────────────────────
+  // Party lists for filters
   const { data: customersData } = useSWR("/api/customers?limit=500");
-  const customers: { id: string; name: string }[] =
-    customersData?.customers || [];
+  const { data: vendorsData } = useSWR("/api/vendors?limit=500");
+  const customers: { id: string; name: string }[] = customersData?.customers || [];
+  const vendors: { id: string; name: string }[] = vendorsData?.vendors || [];
 
-  const selectedCustomerName =
-    customerId === "all"
-      ? "All Customers"
-      : customers.find((c) => c.id === customerId)?.name || "All Customers";
+  const parties = tab === "customer" ? customers : vendors;
+  const selectedPartyId = tab === "customer" ? customerId : vendorId;
 
-  // ── API query ─────────────────────────────────────────────
+  const selectedPartyName =
+    selectedPartyId === "all"
+      ? tab === "customer" ? "All Customers" : "All Vendors"
+      : parties.find((p) => p.id === selectedPartyId)?.name || (tab === "customer" ? "All Customers" : "All Vendors");
+
+  // API query
   const queryString = useMemo(() => {
-    const params: string[] = [];
-    if (customerId !== "all") params.push(`customerId=${customerId}`);
+    const params: string[] = [`type=${tab}`];
+    if (tab === "customer" && customerId !== "all") params.push(`customerId=${customerId}`);
+    if (tab === "vendor" && vendorId !== "all") params.push(`vendorId=${vendorId}`);
     if (fromDate) params.push(`fromDate=${fromDate}`);
     if (toDate) params.push(`toDate=${toDate}`);
     return params.join("&");
-  }, [customerId, fromDate, toDate]);
+  }, [tab, customerId, vendorId, fromDate, toDate]);
 
   const { data, isLoading } = useSWR(
-    `/api/reports/outstanding${queryString ? `?${queryString}` : ""}`
+    `/api/reports/outstanding?${queryString}`
   );
 
   const invoices: OutstandingInvoice[] = data?.invoices || [];
   const summary: Summary = data?.summary || {
-    totalCustomers: 0,
+    totalParties: 0,
     totalInvoices: 0,
     totalOutstanding: 0,
   };
 
-  // ── Helpers ───────────────────────────────────────────────
+  // Helpers
   const fmt = (n: number) =>
     new Intl.NumberFormat("en-IN", {
       minimumFractionDigits: 2,
@@ -139,7 +201,7 @@ export default function OutstandingReportPage() {
     }).format(n);
 
   const fmtDate = (s: string) => {
-    if (!s) return "—";
+    if (!s) return "\u2014";
     const [y, m, d] = s.split("-");
     return `${d}-${m}-${y}`;
   };
@@ -172,9 +234,10 @@ export default function OutstandingReportPage() {
     setToDate("");
   };
 
-  // ── Fetch invoice detail ──────────────────────────────────
-  const handleInvoiceClick = async (invoiceId: string) => {
+  // Fetch invoice detail (customer)
+  const handleCustomerInvoiceClick = async (invoiceId: string) => {
     setIsLoadingDetail(true);
+    setSelectedPurchaseInvoice(null);
     try {
       const response = await fetch(`/api/sales-invoices/${invoiceId}`);
       if (!response.ok) throw new Error("Failed to fetch invoice details");
@@ -188,15 +251,54 @@ export default function OutstandingReportPage() {
     }
   };
 
-  const closeModal = () => {
+  // Fetch invoice detail (vendor)
+  const handleVendorInvoiceClick = async (invoiceId: string) => {
+    setIsLoadingDetail(true);
     setSelectedInvoice(null);
+    try {
+      const response = await fetch(`/api/purchase-invoices/${invoiceId}`);
+      if (!response.ok) throw new Error("Failed to fetch invoice details");
+      const data = await response.json();
+      setSelectedPurchaseInvoice(data);
+    } catch (err) {
+      console.error("Error fetching invoice:", err);
+      alert("Failed to load invoice details");
+    } finally {
+      setIsLoadingDetail(false);
+    }
   };
 
-  // ── Render ────────────────────────────────────────────────
+  const handleInvoiceClick = (invoiceId: string) => {
+    if (tab === "customer") {
+      handleCustomerInvoiceClick(invoiceId);
+    } else {
+      handleVendorInvoiceClick(invoiceId);
+    }
+  };
+
+  const closeModal = () => {
+    setSelectedInvoice(null);
+    setSelectedPurchaseInvoice(null);
+  };
+
+  const handleTabChange = (newTab: TabType) => {
+    setTab(newTab);
+    setShowPartyDrop(false);
+  };
+
+  const handlePartySelect = (id: string) => {
+    if (tab === "customer") {
+      setCustomerId(id);
+    } else {
+      setVendorId(id);
+    }
+    setShowPartyDrop(false);
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
-        {/* ── Header ── */}
+        {/* Header */}
         <div className="text-center mb-4">
           <h1 className="text-2xl font-bold text-gray-900">Outstanding Report</h1>
           <p className="text-sm text-gray-500">
@@ -204,64 +306,84 @@ export default function OutstandingReportPage() {
           </p>
         </div>
 
-        {/* ── Summary cards ── */}
+        {/* Customer / Vendor Toggle */}
+        <div className="flex justify-center mb-6">
+          <div className="flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => handleTabChange("customer")}
+              className={`px-5 py-2 rounded-md text-sm font-medium transition-colors ${
+                tab === "customer"
+                  ? "bg-teal-600 text-white shadow-sm"
+                  : "text-gray-600 hover:text-gray-800"
+              }`}
+            >
+              Customers
+            </button>
+            <button
+              onClick={() => handleTabChange("vendor")}
+              className={`px-5 py-2 rounded-md text-sm font-medium transition-colors ${
+                tab === "vendor"
+                  ? "bg-teal-600 text-white shadow-sm"
+                  : "text-gray-600 hover:text-gray-800"
+              }`}
+            >
+              Vendors
+            </button>
+          </div>
+        </div>
+
+        {/* Summary cards */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
-            <p className="text-sm text-gray-500 mb-1">Customers</p>
-            <p className="text-2xl font-bold text-blue-600">{summary.totalCustomers}</p>
+            <p className="text-sm text-gray-500 mb-1">{tab === "customer" ? "Customers" : "Vendors"}</p>
+            <p className="text-2xl font-bold text-blue-600">{summary.totalParties}</p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
             <p className="text-sm text-gray-500 mb-1">Invoices</p>
             <p className="text-2xl font-bold text-orange-600">{summary.totalInvoices}</p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
-            <p className="text-sm text-gray-500 mb-1">Total Outstanding (₹)</p>
-            <p className="text-2xl font-bold text-red-600">₹{fmt(summary.totalOutstanding)}</p>
+            <p className="text-sm text-gray-500 mb-1">Total Outstanding</p>
+            <p className="text-2xl font-bold text-red-600">{"\u20B9"}{fmt(summary.totalOutstanding)}</p>
           </div>
         </div>
 
-        {/* ── Filters ── */}
+        {/* Filters */}
         <div className="flex flex-wrap items-center justify-center gap-4 mb-4">
-          {/* Customer dropdown */}
+          {/* Party dropdown */}
           <div className="relative">
             <button
-              onClick={() => setShowCustomerDrop(!showCustomerDrop)}
+              onClick={() => setShowPartyDrop(!showPartyDrop)}
               className="flex items-center gap-2 bg-amber-700 hover:bg-amber-800 text-white px-5 py-2 rounded-md text-sm font-medium shadow-sm"
             >
-              <span>🏠</span>
-              <span>{selectedCustomerName}</span>
+              <span>{tab === "customer" ? "\uD83C\uDFE0" : "\uD83C\uDFED"}</span>
+              <span>{selectedPartyName}</span>
               <ChevronDown className="h-4 w-4" />
             </button>
 
-            {showCustomerDrop && (
+            {showPartyDrop && (
               <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-white border rounded-lg shadow-lg z-10 w-64 max-h-56 overflow-y-auto">
                 <button
-                  onClick={() => {
-                    setCustomerId("all");
-                    setShowCustomerDrop(false);
-                  }}
+                  onClick={() => handlePartySelect("all")}
                   className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
-                    customerId === "all"
+                    selectedPartyId === "all"
                       ? "bg-teal-50 font-semibold text-teal-700"
                       : "text-gray-700"
                   }`}
                 >
-                  All Customers
+                  {tab === "customer" ? "All Customers" : "All Vendors"}
                 </button>
-                {customers.map((c) => (
+                {parties.map((p) => (
                   <button
-                    key={c.id}
-                    onClick={() => {
-                      setCustomerId(c.id);
-                      setShowCustomerDrop(false);
-                    }}
+                    key={p.id}
+                    onClick={() => handlePartySelect(p.id)}
                     className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
-                      customerId === c.id
+                      selectedPartyId === p.id
                         ? "bg-teal-50 font-semibold text-teal-700"
                         : "text-gray-700"
                     }`}
                   >
-                    {c.name}
+                    {p.name}
                   </button>
                 ))}
               </div>
@@ -299,7 +421,7 @@ export default function OutstandingReportPage() {
           </div>
         </div>
 
-        {/* ── Legend ── */}
+        {/* Legend */}
         <div className="flex justify-center gap-4 mb-4">
           <div className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-full bg-green-100 border border-green-300" />
@@ -307,11 +429,11 @@ export default function OutstandingReportPage() {
           </div>
           <div className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-full bg-amber-100 border border-amber-300" />
-            <span className="text-xs text-gray-500">1–30 days</span>
+            <span className="text-xs text-gray-500">1-30 days</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-full bg-orange-100 border border-orange-300" />
-            <span className="text-xs text-gray-500">31–60 days</span>
+            <span className="text-xs text-gray-500">31-60 days</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-full bg-red-100 border border-red-300" />
@@ -319,12 +441,12 @@ export default function OutstandingReportPage() {
           </div>
         </div>
 
-        {/* ── Main table ── */}
+        {/* Main table */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center gap-2 py-16 text-gray-500">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <span>Loading outstanding report…</span>
+              <span>Loading outstanding report...</span>
             </div>
           ) : invoices.length === 0 ? (
             <div className="py-16 text-center text-gray-500">
@@ -336,13 +458,15 @@ export default function OutstandingReportPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-gray-100">
-                    <TableHead className="font-semibold text-gray-700">Customer</TableHead>
+                    <TableHead className="font-semibold text-gray-700">
+                      {tab === "customer" ? "Customer" : "Vendor"}
+                    </TableHead>
                     <TableHead className="font-semibold text-gray-700">Invoice No</TableHead>
                     <TableHead className="font-semibold text-gray-700">Invoice Date</TableHead>
                     <TableHead className="font-semibold text-gray-700">Due Date</TableHead>
-                    <TableHead className="font-semibold text-gray-700 text-right">Amount (₹)</TableHead>
-                    <TableHead className="font-semibold text-gray-700 text-right">Paid (₹)</TableHead>
-                    <TableHead className="font-semibold text-gray-700 text-right">Outstanding (₹)</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-right">Amount</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-right">Paid</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-right">Outstanding</TableHead>
                     <TableHead className="font-semibold text-gray-700 text-center">Status</TableHead>
                     <TableHead className="font-semibold text-gray-700 text-center">Action</TableHead>
                   </TableRow>
@@ -358,7 +482,7 @@ export default function OutstandingReportPage() {
                         onClick={() => handleInvoiceClick(inv.invoiceId)}
                       >
                         <TableCell className="font-medium text-gray-800">
-                          {inv.customerName}
+                          {inv.partyName}
                         </TableCell>
                         <TableCell className="text-teal-600 font-medium">
                           {inv.invoiceNumber}
@@ -403,7 +527,7 @@ export default function OutstandingReportPage() {
                 </TableBody>
               </Table>
 
-              {/* ── Total row ── */}
+              {/* Total row */}
               <div className="border-t-2 border-gray-300 bg-gray-50">
                 <Table>
                   <TableBody>
@@ -432,8 +556,8 @@ export default function OutstandingReportPage() {
         </div>
       </div>
 
-      {/* ── Invoice Detail Modal ── */}
-      {(selectedInvoice || isLoadingDetail) && (
+      {/* Customer Invoice Detail Modal */}
+      {(selectedInvoice || isLoadingDetail) && !selectedPurchaseInvoice && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
             {isLoadingDetail ? (
@@ -442,7 +566,6 @@ export default function OutstandingReportPage() {
               </div>
             ) : selectedInvoice ? (
               <>
-                {/* Modal Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
                   <div>
                     <h2 className="text-xl font-bold text-gray-900">
@@ -474,9 +597,7 @@ export default function OutstandingReportPage() {
                   </div>
                 </div>
 
-                {/* Modal Body */}
                 <div className="overflow-y-auto max-h-[calc(90vh-140px)] p-6">
-                  {/* Invoice Info */}
                   <div className="grid grid-cols-2 gap-6 mb-6">
                     <div className="bg-gray-50 rounded-lg p-4">
                       <h3 className="font-semibold text-gray-700 mb-3">Customer Details</h3>
@@ -512,7 +633,6 @@ export default function OutstandingReportPage() {
                     </div>
                   </div>
 
-                  {/* Items Table */}
                   <div className="mb-6">
                     <h3 className="font-semibold text-gray-700 mb-3">Items</h3>
                     <div className="border rounded-lg overflow-hidden">
@@ -522,9 +642,9 @@ export default function OutstandingReportPage() {
                             <TableHead className="font-semibold">Item</TableHead>
                             <TableHead className="font-semibold">HSN</TableHead>
                             <TableHead className="font-semibold text-right">Qty</TableHead>
-                            <TableHead className="font-semibold text-right">Rate (₹)</TableHead>
+                            <TableHead className="font-semibold text-right">Rate</TableHead>
                             <TableHead className="font-semibold text-right">GST %</TableHead>
-                            <TableHead className="font-semibold text-right">Total (₹)</TableHead>
+                            <TableHead className="font-semibold text-right">Total</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -552,9 +672,7 @@ export default function OutstandingReportPage() {
                     </div>
                   </div>
 
-                  {/* Payments & Summary */}
                   <div className="grid grid-cols-2 gap-6">
-                    {/* Payments */}
                     {selectedInvoice.allocations.length > 0 && (
                       <div>
                         <h3 className="font-semibold text-gray-700 mb-3">Payments Received</h3>
@@ -567,54 +685,52 @@ export default function OutstandingReportPage() {
                                   {formatDateLong(alloc.payment.paymentDate)} - {alloc.payment.mode}
                                 </p>
                               </div>
-                              <p className="font-medium text-green-600">₹{fmt(Number(alloc.amount))}</p>
+                              <p className="font-medium text-green-600">{"\u20B9"}{fmt(Number(alloc.amount))}</p>
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
 
-                    {/* Summary */}
                     <div className={selectedInvoice.allocations.length === 0 ? "col-span-2" : ""}>
                       <h3 className="font-semibold text-gray-700 mb-3">Summary</h3>
                       <div className="border rounded-lg p-4 space-y-2">
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">Subtotal</span>
-                          <span>₹{fmt(Number(selectedInvoice.subtotal))}</span>
+                          <span>{"\u20B9"}{fmt(Number(selectedInvoice.subtotal))}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">CGST</span>
-                          <span>₹{fmt(Number(selectedInvoice.cgst))}</span>
+                          <span>{"\u20B9"}{fmt(Number(selectedInvoice.cgst))}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">SGST</span>
-                          <span>₹{fmt(Number(selectedInvoice.sgst))}</span>
+                          <span>{"\u20B9"}{fmt(Number(selectedInvoice.sgst))}</span>
                         </div>
                         {Number(selectedInvoice.roundOff) !== 0 && (
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">Round Off</span>
-                            <span>₹{fmt(Number(selectedInvoice.roundOff))}</span>
+                            <span>{"\u20B9"}{fmt(Number(selectedInvoice.roundOff))}</span>
                           </div>
                         )}
                         <hr />
                         <div className="flex justify-between font-bold text-lg">
                           <span>Total Amount</span>
-                          <span>₹{fmt(Number(selectedInvoice.totalAmount))}</span>
+                          <span>{"\u20B9"}{fmt(Number(selectedInvoice.totalAmount))}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">Paid</span>
-                          <span className="text-green-600 font-medium">₹{fmt(Number(selectedInvoice.paidAmount))}</span>
+                          <span className="text-green-600 font-medium">{"\u20B9"}{fmt(Number(selectedInvoice.paidAmount))}</span>
                         </div>
                         <div className="flex justify-between font-bold text-lg text-red-600">
                           <span>Balance</span>
-                          <span>₹{fmt(Number(selectedInvoice.balanceAmount))}</span>
+                          <span>{"\u20B9"}{fmt(Number(selectedInvoice.balanceAmount))}</span>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Modal Footer */}
                 <div className="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50">
                   <Button variant="outline" onClick={closeModal}>
                     Close
@@ -623,6 +739,184 @@ export default function OutstandingReportPage() {
                     className="bg-teal-600 hover:bg-teal-700"
                     onClick={() => {
                       window.location.href = `/sales/invoices/${selectedInvoice.id}`;
+                    }}
+                  >
+                    View Full Details
+                  </Button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Vendor Invoice Detail Modal */}
+      {(selectedPurchaseInvoice || (isLoadingDetail && !selectedInvoice)) && !selectedInvoice && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            {isLoadingDetail ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+              </div>
+            ) : selectedPurchaseInvoice ? (
+              <>
+                <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">
+                      Purchase Invoice {selectedPurchaseInvoice.invoiceNumber}
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      {selectedPurchaseInvoice.vendor.name}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        selectedPurchaseInvoice.status === "PAID"
+                          ? "bg-green-100 text-green-700"
+                          : selectedPurchaseInvoice.status === "OVERDUE"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-yellow-100 text-yellow-700"
+                      }`}
+                    >
+                      {selectedPurchaseInvoice.status}
+                    </span>
+                    <Button variant="ghost" size="sm" onClick={closeModal}>
+                      <X className="h-5 w-5" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="overflow-y-auto max-h-[calc(90vh-140px)] p-6">
+                  <div className="grid grid-cols-2 gap-6 mb-6">
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h3 className="font-semibold text-gray-700 mb-3">Vendor Details</h3>
+                      <div className="space-y-1 text-sm">
+                        <p><span className="text-gray-500">Name:</span> {selectedPurchaseInvoice.vendor.name}</p>
+                        <p><span className="text-gray-500">Vendor #:</span> {selectedPurchaseInvoice.vendor.vendorNumber}</p>
+                        {selectedPurchaseInvoice.vendor.gstin && (
+                          <p><span className="text-gray-500">GSTIN:</span> {selectedPurchaseInvoice.vendor.gstin}</p>
+                        )}
+                        {selectedPurchaseInvoice.vendor.phone && (
+                          <p><span className="text-gray-500">Phone:</span> {selectedPurchaseInvoice.vendor.phone}</p>
+                        )}
+                        {selectedPurchaseInvoice.vendor.address && (
+                          <p>
+                            <span className="text-gray-500">Address:</span> {selectedPurchaseInvoice.vendor.address}
+                            {selectedPurchaseInvoice.vendor.city && `, ${selectedPurchaseInvoice.vendor.city}`}
+                            {selectedPurchaseInvoice.vendor.state && `, ${selectedPurchaseInvoice.vendor.state}`}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h3 className="font-semibold text-gray-700 mb-3">Invoice Details</h3>
+                      <div className="space-y-1 text-sm">
+                        <p><span className="text-gray-500">Invoice Date:</span> {formatDateLong(selectedPurchaseInvoice.date)}</p>
+                        <p><span className="text-gray-500">Due Date:</span> {formatDateLong(selectedPurchaseInvoice.dueDate)}</p>
+                        {selectedPurchaseInvoice.notes && (
+                          <p><span className="text-gray-500">Notes:</span> {selectedPurchaseInvoice.notes}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <h3 className="font-semibold text-gray-700 mb-3">Items</h3>
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-gray-100">
+                            <TableHead className="font-semibold">Item</TableHead>
+                            <TableHead className="font-semibold">HSN</TableHead>
+                            <TableHead className="font-semibold text-right">Qty</TableHead>
+                            <TableHead className="font-semibold text-right">Rate</TableHead>
+                            <TableHead className="font-semibold text-right">Tax %</TableHead>
+                            <TableHead className="font-semibold text-right">Amount</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedPurchaseInvoice.items.map((item) => (
+                            <TableRow key={item.id}>
+                              <TableCell>
+                                <div>
+                                  <p className="font-medium">{item.item.name}</p>
+                                  <p className="text-xs text-gray-500">{item.item.itemCode}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-sm">{item.item.hsnCode || "-"}</TableCell>
+                              <TableCell className="text-right">
+                                {Number(item.quantity)} {item.item.unit}
+                              </TableCell>
+                              <TableCell className="text-right">{fmt(Number(item.rate))}</TableCell>
+                              <TableCell className="text-right">{Number(item.taxRate)}%</TableCell>
+                              <TableCell className="text-right font-medium">
+                                {fmt(Number(item.amount) + Number(item.taxAmount))}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6">
+                    {selectedPurchaseInvoice.vendorPayments.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-gray-700 mb-3">Payments Made</h3>
+                        <div className="border rounded-lg p-4 space-y-2">
+                          {selectedPurchaseInvoice.vendorPayments.map((payment) => (
+                            <div key={payment.id} className="flex justify-between text-sm border-b pb-2 last:border-0">
+                              <div>
+                                <p className="font-medium">{payment.paymentNumber}</p>
+                                <p className="text-xs text-gray-500">
+                                  {formatDateLong(payment.date)} - {payment.mode}
+                                </p>
+                              </div>
+                              <p className="font-medium text-green-600">{"\u20B9"}{fmt(Number(payment.amount))}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className={selectedPurchaseInvoice.vendorPayments.length === 0 ? "col-span-2" : ""}>
+                      <h3 className="font-semibold text-gray-700 mb-3">Summary</h3>
+                      <div className="border rounded-lg p-4 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Subtotal</span>
+                          <span>{"\u20B9"}{fmt(Number(selectedPurchaseInvoice.amount))}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Tax</span>
+                          <span>{"\u20B9"}{fmt(Number(selectedPurchaseInvoice.taxAmount))}</span>
+                        </div>
+                        <hr />
+                        <div className="flex justify-between font-bold text-lg">
+                          <span>Total Amount</span>
+                          <span>{"\u20B9"}{fmt(Number(selectedPurchaseInvoice.totalAmount))}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Paid</span>
+                          <span className="text-green-600 font-medium">{"\u20B9"}{fmt(Number(selectedPurchaseInvoice.paidAmount))}</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-lg text-red-600">
+                          <span>Balance</span>
+                          <span>{"\u20B9"}{fmt(Number(selectedPurchaseInvoice.balanceAmount))}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50">
+                  <Button variant="outline" onClick={closeModal}>
+                    Close
+                  </Button>
+                  <Button
+                    className="bg-teal-600 hover:bg-teal-700"
+                    onClick={() => {
+                      window.location.href = `/purchases/invoices/${selectedPurchaseInvoice.id}`;
                     }}
                   >
                     View Full Details

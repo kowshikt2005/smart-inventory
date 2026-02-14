@@ -310,7 +310,7 @@ export default function PurchaseReturnsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">All Brands</SelectItem>
-                    {brands.map((brand: any) => (
+                    {brands.map((brand: { id: string; name: string }) => (
                       <SelectItem key={brand.id} value={brand.id}>{brand.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -324,7 +324,7 @@ export default function PurchaseReturnsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">All Vendors</SelectItem>
-                    {vendors.map((v: any) => (
+                    {vendors.map((v: { id: string; name: string }) => (
                       <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                     ))}
                   </SelectContent>

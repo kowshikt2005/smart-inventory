@@ -5,7 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Mail, KeyRound } from "lucide-react";
 import { TypewriterEffectSmooth } from "@/components/ui/aceternity/typewriter-effect";
-import { GridBackground } from "@/components/ui/aceternity/dot-background";
+import { AnimatedGridBackground } from "@/components/ui/aceternity/animated-background";
 
 function LoginPageContent() {
   const router = useRouter();
@@ -56,69 +56,72 @@ function LoginPageContent() {
   ];
 
   return (
-    <GridBackground className="flex items-start justify-center px-8 lg:px-16 pt-24">
-      <div className="w-full max-w-6xl flex items-center justify-between gap-12 lg:gap-20">
+    <AnimatedGridBackground className="flex items-center justify-center min-h-screen px-6 lg:px-16">
+      <div className="w-full max-w-6xl flex items-center justify-between gap-12 lg:gap-24">
 
         {/* Left Side - Branding with Visual Anchoring */}
         <div className="hidden lg:flex flex-1 items-center">
           {/* Vertical Accent Line */}
-          <div className="w-1 h-32 bg-gradient-to-b from-blue-500 via-blue-400 to-orange-400 rounded-full mr-8" />
+          <div className="w-1.5 h-36 bg-gradient-to-b from-indigo-500 via-indigo-400 to-amber-400 rounded-full mr-10 shrink-0" />
 
-          <div className="space-y-2">
-            <p className="text-sm uppercase tracking-[0.2em] text-slate-400 font-medium">
+          <div className="space-y-3">
+            <p className="text-sm uppercase tracking-[0.25em] text-slate-400 font-medium">
               welcome to
             </p>
             <TypewriterEffectSmooth
               words={typewriterWords}
               className="justify-start"
-              cursorClassName="bg-orange-500"
+              cursorClassName="bg-amber-500"
             />
-            <div className="flex items-center gap-3 pt-1">
-              <span className="text-4xl xl:text-5xl font-bold text-orange-500 tracking-tight">
+            <div className="flex items-center gap-4 pt-2">
+              <span className="text-5xl xl:text-6xl font-bold text-amber-500 tracking-tight">
                 ERP
               </span>
-              <span className="text-sm text-slate-400 border-l border-slate-300 pl-3">
-                Enterprise Resource Planning
+              <span className="text-sm text-slate-400 border-l border-slate-300 pl-4 leading-relaxed">
+                Enterprise Resource<br />Planning System
               </span>
             </div>
           </div>
         </div>
 
         {/* Right Side - Login Card */}
-        <div className="w-full max-w-md">
-          <div className="bg-gradient-to-b from-[#4a7ab8] to-[#3d6a9e] rounded-2xl shadow-2xl shadow-blue-900/20 overflow-hidden">
+        <div className="w-full max-w-[540px]">
+          <div className="bg-gradient-to-b from-[#312E81] via-[#272462] to-[#1E1B4B] rounded-3xl shadow-2xl shadow-indigo-900/40 overflow-hidden ring-1 ring-white/[0.08]">
 
-            {/* Card Header - Context-Rich */}
-            <div className="px-8 pt-8 pb-5">
-              <div className="flex items-center justify-center gap-2 mb-1">
-                <div className="w-2 h-2 rounded-full bg-white/60" />
-                <span className="text-xs uppercase tracking-[0.15em] text-white/70 font-medium">
+            {/* Card Header */}
+            <div className="px-10 pt-10 pb-6">
+              <div className="flex items-center justify-center gap-2.5 mb-3">
+                <div className="w-8 h-[2px] bg-gradient-to-r from-transparent to-amber-400/60 rounded-full" />
+                <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-medium">
                   ERP Portal
                 </span>
-                <div className="w-2 h-2 rounded-full bg-white/60" />
+                <div className="w-8 h-[2px] bg-gradient-to-l from-transparent to-amber-400/60 rounded-full" />
               </div>
-              <h1 className="text-xl font-semibold text-white text-center">
-                Sign In
+              <h1 className="text-2xl font-bold text-white text-center">
+                Welcome Back
               </h1>
+              <p className="text-sm text-white/50 text-center mt-1">
+                Sign in to continue to your dashboard
+              </p>
             </div>
 
             {/* Card Body */}
-            <div className="px-8 pb-6">
+            <div className="px-10 pb-8">
               {error && (
-                <div className="mb-5 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-red-600 text-sm text-center font-medium">{error}</p>
+                <div className="mb-6 p-3.5 bg-red-500/10 border border-red-400/20 rounded-xl backdrop-blur-sm">
+                  <p className="text-red-300 text-sm text-center font-medium">{error}</p>
                 </div>
               )}
 
               <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Email Input - ERP Grade */}
-                <div className="space-y-1.5">
-                  <label htmlFor="email" className="text-xs font-medium text-white/80 uppercase tracking-wide">
+                {/* Email Input */}
+                <div className="space-y-2">
+                  <label htmlFor="email" className="text-xs font-medium text-white/70 uppercase tracking-wider">
                     Email Address
                   </label>
                   <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-                      <Mail className="h-4 w-4" />
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-300/60">
+                      <Mail className="h-4.5 w-4.5" />
                     </div>
                     <input
                       id="email"
@@ -129,19 +132,19 @@ function LoginPageContent() {
                       required
                       disabled={isLoading}
                       placeholder="name@company.com"
-                      className="w-full h-12 pl-11 pr-4 bg-white rounded-lg border-2 border-transparent text-slate-700 placeholder-slate-400 text-sm focus:outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-200/50 disabled:opacity-50 transition-all"
+                      className="w-full h-[52px] pl-12 pr-4 bg-white/[0.07] hover:bg-white/[0.1] rounded-xl border border-white/[0.12] text-white placeholder-white/30 text-sm focus:outline-none focus:bg-white/[0.12] focus:border-indigo-400/50 focus:ring-2 focus:ring-indigo-400/20 disabled:opacity-50 transition-all duration-200"
                     />
                   </div>
                 </div>
 
-                {/* Password Input - ERP Grade */}
-                <div className="space-y-1.5">
-                  <label htmlFor="password" className="text-xs font-medium text-white/80 uppercase tracking-wide">
+                {/* Password Input */}
+                <div className="space-y-2">
+                  <label htmlFor="password" className="text-xs font-medium text-white/70 uppercase tracking-wider">
                     Password
                   </label>
                   <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-                      <KeyRound className="h-4 w-4" />
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-300/60">
+                      <KeyRound className="h-4.5 w-4.5" />
                     </div>
                     <input
                       id="password"
@@ -152,38 +155,38 @@ function LoginPageContent() {
                       required
                       disabled={isLoading}
                       placeholder="Enter your password"
-                      className="w-full h-12 pl-11 pr-4 bg-white rounded-lg border-2 border-transparent text-slate-700 placeholder-slate-400 text-sm focus:outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-200/50 disabled:opacity-50 transition-all"
+                      className="w-full h-[52px] pl-12 pr-4 bg-white/[0.07] hover:bg-white/[0.1] rounded-xl border border-white/[0.12] text-white placeholder-white/30 text-sm focus:outline-none focus:bg-white/[0.12] focus:border-indigo-400/50 focus:ring-2 focus:ring-indigo-400/20 disabled:opacity-50 transition-all duration-200"
                     />
                   </div>
                 </div>
 
-                {/* Remember Me & Forgot Password - Aligned */}
+                {/* Remember Me & Forgot Password */}
                 <div className="flex items-center justify-between pt-1">
-                  <label className="flex items-center gap-2 cursor-pointer group">
+                  <label className="flex items-center gap-2.5 cursor-pointer group">
                     <input
                       type="checkbox"
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
-                      className="h-4 w-4 rounded border-2 border-white/40 bg-white/10 text-blue-400 focus:ring-blue-300 focus:ring-offset-0 cursor-pointer"
+                      className="h-4 w-4 rounded border-2 border-white/30 bg-white/5 text-amber-500 focus:ring-amber-400 focus:ring-offset-0 cursor-pointer"
                     />
-                    <span className="text-sm text-white/80 group-hover:text-white transition-colors">
+                    <span className="text-sm text-white/60 group-hover:text-white/90 transition-colors">
                       Remember me
                     </span>
                   </label>
                   <button
                     type="button"
-                    className="text-sm text-white/70 hover:text-white underline-offset-2 hover:underline transition-colors"
+                    className="text-sm text-white/50 hover:text-amber-300 underline-offset-4 hover:underline transition-colors"
                     onClick={() => alert("Please contact your administrator to reset your password")}
                   >
                     Forgot password?
                   </button>
                 </div>
 
-                {/* Login Button - Authoritative & Decisive */}
+                {/* Login Button */}
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full h-12 mt-2 bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white font-semibold rounded-lg shadow-lg shadow-slate-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 flex items-center justify-center gap-2"
+                  className="w-full h-[52px] mt-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:from-amber-700 active:to-amber-800 text-white font-semibold rounded-xl shadow-lg shadow-amber-900/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
                 >
                   {isLoading ? (
                     <>
@@ -191,16 +194,16 @@ function LoginPageContent() {
                       <span>Signing in...</span>
                     </>
                   ) : (
-                    <span className="tracking-wide">SIGN IN</span>
+                    <span className="tracking-wider text-[15px]">SIGN IN</span>
                   )}
                 </button>
               </form>
             </div>
 
-            {/* Card Footer - Intentional & Subdued */}
-            <div className="border-t border-white/10 bg-slate-800/30 px-8 py-3">
-              <p className="text-center text-xs text-white/40">
-                powered by <span className="text-white/60">ksolutions</span>
+            {/* Card Footer */}
+            <div className="border-t border-white/[0.06] bg-indigo-950/40 px-10 py-4">
+              <p className="text-center text-xs text-white/30">
+                powered by <span className="text-white/50 font-medium">ksolutions</span>
               </p>
             </div>
           </div>
@@ -211,13 +214,13 @@ function LoginPageContent() {
             <h1 className="text-2xl font-bold text-slate-800 mt-1">
               SRI BALAJI ENTERPRISES
             </h1>
-            <h2 className="text-xl font-bold text-orange-500">
+            <h2 className="text-xl font-bold text-amber-500">
               ERP
             </h2>
           </div>
         </div>
       </div>
-    </GridBackground>
+    </AnimatedGridBackground>
   );
 }
 
@@ -225,8 +228,8 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 flex items-center justify-center">
-          <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-slate-100 flex items-center justify-center">
+          <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
         </div>
       }
     >

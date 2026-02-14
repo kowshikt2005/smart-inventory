@@ -16,6 +16,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Loader2,
   X,
   Calendar,
@@ -75,17 +82,23 @@ interface Summary {
 export default function BilledUnbilledReportPage() {
   const router = useRouter();
   const [type, setType] = useState<"unbilled" | "billed">("unbilled");
+  const [brandId, setBrandId] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
+  // Fetch brands for filter
+  const { data: brandsData } = useSWR("/api/brands");
+  const brands: { id: string; name: string }[] = brandsData?.brands || [];
+
   // API query
   const queryString = useMemo(() => {
     const params: string[] = [`type=${type}`];
+    if (brandId) params.push(`brandId=${brandId}`);
     if (fromDate) params.push(`fromDate=${fromDate}`);
     if (toDate) params.push(`toDate=${toDate}`);
     return params.join("&");
-  }, [type, fromDate, toDate]);
+  }, [type, brandId, fromDate, toDate]);
 
   const { data, isLoading } = useSWR(
     `/api/reports/billed-unbilled?${queryString}`
@@ -215,6 +228,29 @@ export default function BilledUnbilledReportPage() {
             </button>
           </div>
 
+          {/* Brand filter */}
+          <div className="w-48">
+            <Select
+              value={brandId || "ALL"}
+              onValueChange={(v) => {
+                setBrandId(v === "ALL" ? "" : v);
+                setExpandedOrder(null);
+              }}
+            >
+              <SelectTrigger className="h-10 bg-white">
+                <SelectValue placeholder="All Brands" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Brands</SelectItem>
+                {brands.map((brand) => (
+                  <SelectItem key={brand.id} value={brand.id}>
+                    {brand.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Date filters */}
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-gray-500" />
@@ -231,14 +267,18 @@ export default function BilledUnbilledReportPage() {
               onChange={(e) => setToDate(e.target.value)}
               className="w-40"
             />
-            {(fromDate || toDate) && (
+            {(fromDate || toDate || brandId) && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={clearDateFilters}
+                onClick={() => {
+                  clearDateFilters();
+                  setBrandId("");
+                }}
                 className="text-gray-500 hover:text-gray-700"
               >
-                <X className="h-4 w-4" />
+                <X className="h-4 w-4 mr-1" />
+                Clear
               </Button>
             )}
           </div>

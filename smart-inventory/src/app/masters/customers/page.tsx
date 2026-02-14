@@ -101,7 +101,7 @@ export default function CustomersPage() {
       <div className="p-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">
+          <h1 className="text-2xl font-bold text-foreground mb-6">
             All Customers
           </h1>
 
@@ -119,7 +119,7 @@ export default function CustomersPage() {
                 {searchQuery && (
                   <button
                     onClick={() => handleSearchChange("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground"
                     aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
@@ -127,7 +127,7 @@ export default function CustomersPage() {
                 )}
               </div>
               {searchQuery && (
-                <p className="text-sm text-gray-600 mt-2">
+                <p className="text-sm text-muted-foreground mt-2">
                   Found {filteredCustomers.length} customer
                   {filteredCustomers.length !== 1 ? "s" : ""}
                 </p>
@@ -135,7 +135,7 @@ export default function CustomersPage() {
             </div>
             <Button
               onClick={() => setShowAddModal(true)}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
+              className="bg-primary hover:bg-primary/90 text-white"
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Customer
@@ -144,15 +144,21 @@ export default function CustomersPage() {
         </div>
 
         {/* Customers Table */}
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
           <Table aria-label="Customer list">
             <TableHeader>
-              <TableRow className="bg-gray-50">
+              <TableRow className="bg-muted/30">
                 <TableHead scope="col" className="font-semibold">
                   Name
                 </TableHead>
                 <TableHead scope="col" className="font-semibold">
                   GST No.
+                </TableHead>
+                <TableHead scope="col" className="font-semibold">
+                  State Code
+                </TableHead>
+                <TableHead scope="col" className="font-semibold">
+                  PAN
                 </TableHead>
                 <TableHead scope="col" className="font-semibold">
                   City
@@ -178,8 +184,8 @@ export default function CustomersPage() {
               {isLoading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
-                    className="text-center text-gray-500 py-12"
+                    colSpan={10}
+                    className="text-center text-muted-foreground py-12"
                   >
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
@@ -190,7 +196,7 @@ export default function CustomersPage() {
               ) : error ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={10}
                     className="text-center text-red-600 py-8"
                   >
                     <div className="space-y-2">
@@ -208,8 +214,8 @@ export default function CustomersPage() {
               ) : paginatedCustomers.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
-                    className="text-center text-gray-500 py-8"
+                    colSpan={10}
+                    className="text-center text-muted-foreground py-8"
                   >
                     {searchQuery
                       ? "No customers found matching your search"
@@ -222,7 +228,9 @@ export default function CustomersPage() {
                     <TableCell className="font-medium">
                       {customer.name}
                     </TableCell>
-                    <TableCell>{customer.gstin}</TableCell>
+                    <TableCell className="font-mono text-sm">{customer.gstin}</TableCell>
+                    <TableCell className="font-mono text-sm">{customer.gstin && customer.gstin.length >= 2 ? customer.gstin.substring(0, 2) : "-"}</TableCell>
+                    <TableCell className="font-mono text-sm">{customer.gstin && customer.gstin.length >= 12 ? customer.gstin.substring(2, 12) : "-"}</TableCell>
                     <TableCell>{customer.city}</TableCell>
                     <TableCell>{customer.state}</TableCell>
                     <TableCell>{customer.creditDays}</TableCell>
@@ -234,7 +242,7 @@ export default function CustomersPage() {
                         className={`font-medium ${
                           customer.hasPriceList
                             ? "text-green-600"
-                            : "text-gray-600"
+                            : "text-muted-foreground"
                         }`}
                       >
                         {customer.hasPriceList ? "Yes" : "No"}
@@ -278,7 +286,7 @@ export default function CustomersPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, filteredCustomers.length)}{" "}
               of {filteredCustomers.length} customers
@@ -292,7 +300,7 @@ export default function CustomersPage() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-muted-foreground">
                 Page {currentPage} of {totalPages}
               </span>
               <Button

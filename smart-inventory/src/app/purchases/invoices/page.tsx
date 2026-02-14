@@ -29,6 +29,7 @@ import { PurchaseInvoiceStatusBadge } from "@/components/purchase-orders/Purchas
 import {
   Plus,
   MoreHorizontal,
+  Edit,
   Trash2,
   Loader2,
   X,
@@ -324,7 +325,7 @@ export default function PurchaseInvoicesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">All Vendors</SelectItem>
-                    {vendors.map((v: any) => (
+                    {vendors.map((v: { id: string; name: string }) => (
                       <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -462,6 +463,15 @@ export default function PurchaseInvoicesPage() {
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
+
+                            {invoice.status === "PENDING" && (
+                              <DropdownMenuItem
+                                onClick={() => router.push(`/purchases/invoices/new?edit=${invoice.id}`)}
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit Invoice
+                              </DropdownMenuItem>
+                            )}
 
                             {invoice.status !== "PAID" && invoice.status !== "CANCELLED" && (
                               <>

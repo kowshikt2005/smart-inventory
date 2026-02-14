@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import {
   MoreHorizontal,
+  Edit,
   Loader2,
   X,
   FileText,
@@ -403,7 +404,7 @@ export default function SalesInvoicesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">All Customers</SelectItem>
-                    {customers.map((c: any) => (
+                    {customers.map((c: { id: string; name: string }) => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -593,6 +594,14 @@ export default function SalesInvoicesPage() {
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
+                            {invoice.effectiveStatus === "PENDING" && (
+                              <DropdownMenuItem
+                                onClick={() => router.push(`/sales/invoices/new?edit=${invoice.id}`)}
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit Invoice
+                              </DropdownMenuItem>
+                            )}
                             {invoice.effectiveStatus !== "PAID" &&
                               invoice.effectiveStatus !== "CANCELLED" && (
                                 <>

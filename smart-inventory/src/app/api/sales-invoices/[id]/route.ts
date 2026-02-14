@@ -98,7 +98,7 @@ export async function GET(
   }
 }
 
-// PUT /api/sales-invoices/[id] - Update invoice (limited fields)
+// PUT /api/sales-invoices/[id] - Update invoice
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -109,6 +109,7 @@ export async function PUT(
 
     const invoice = await db.invoice.findUnique({
       where: { id },
+      include: { items: true, allocations: true },
     });
 
     if (!invoice) {
@@ -118,14 +119,146 @@ export async function PUT(
       );
     }
 
-    // Only allow updating notes and due date if not paid
-    if (invoice.paymentStatus === 'PAID') {
+    // Only allow updating if not paid or cancelled
+    if (invoice.paymentStatus === 'PAID' || invoice.paymentStatus === 'CANCELLED') {
       return NextResponse.json(
-        { error: 'Cannot update paid invoice' },
+        { error: 'Cannot update paid or cancelled invoice' },
         { status: 400 }
       );
     }
 
+    // If items are provided, do a full update
+    if (body.items && Array.isArray(body.items) && body.items.length > 0) {
+      // Check no payments have been made
+      if (invoice.allocations.length > 0 || Number(invoice.paidAmount) > 0) {
+        return NextResponse.json(
+          { error: 'Cannot edit invoice with payments' },
+          { status: 400 }
+        );
+      }
+
+      const updatedInvoice = await transaction(async (tx) => {
+        // Reverse old inventory changes - restore stock
+        for (const oldItem of invoice.items) {
+          const inventory = await tx.inventory.findUnique({
+            where: { itemId: oldItem.itemId },
+          });
+          if (inventory) {
+            await tx.inventory.update({
+              where: { itemId: oldItem.itemId },
+              data: { physicalStock: { increment: Number(oldItem.quantity) } },
+            });
+          }
+        }
+
+        // Delete old stock movements for this invoice
+        await tx.stockMovement.deleteMany({
+          where: { referenceType: 'INVOICE', referenceId: id },
+        });
+
+        // Delete old items
+        await tx.invoiceItem.deleteMany({
+          where: { invoiceId: id },
+        });
+
+        // Calculate new items
+        const newItems = body.items.map((item: any) => {
+          const amount = Number(item.quantity) * Number(item.rate);
+          const taxRate = Number(item.taxRate);
+          const taxAmount = amount * (taxRate / 100);
+          const cgst = taxAmount / 2;
+          const sgst = taxAmount / 2;
+          return {
+            itemId: item.itemId,
+            quantity: Number(item.quantity),
+            rate: Number(item.rate),
+            taxRate,
+            taxAmount: Math.round(taxAmount * 100) / 100,
+            cgst: Math.round(cgst * 100) / 100,
+            sgst: Math.round(sgst * 100) / 100,
+            amount: Math.round(amount * 100) / 100,
+          };
+        });
+
+        const subtotal = newItems.reduce((sum: number, item: any) => sum + item.amount, 0);
+        const totalCgst = newItems.reduce((sum: number, item: any) => sum + item.cgst, 0);
+        const totalSgst = newItems.reduce((sum: number, item: any) => sum + item.sgst, 0);
+        const totalTax = totalCgst + totalSgst;
+        const rawTotal = subtotal + totalTax;
+        const roundOff = Math.round(rawTotal) - rawTotal;
+        const totalAmount = Math.round(rawTotal);
+
+        // Update invoice
+        const updated = await tx.invoice.update({
+          where: { id },
+          data: {
+            notes: body.notes !== undefined ? body.notes : invoice.notes,
+            dueDate: body.dueDate ? new Date(body.dueDate) : invoice.dueDate,
+            subtotal: Math.round(subtotal * 100) / 100,
+            cgst: Math.round(totalCgst * 100) / 100,
+            sgst: Math.round(totalSgst * 100) / 100,
+            taxAmount: Math.round(totalTax * 100) / 100,
+            roundOff: Math.round(roundOff * 100) / 100,
+            totalAmount,
+            balanceAmount: totalAmount,
+            items: { create: newItems },
+          },
+          include: {
+            customer: { select: { id: true, customerNumber: true, name: true } },
+          },
+        });
+
+        // Re-apply inventory changes - reduce stock for new items
+        for (const newItem of newItems) {
+          const inventory = await tx.inventory.findUnique({
+            where: { itemId: newItem.itemId },
+          });
+          if (inventory) {
+            await tx.inventory.update({
+              where: { itemId: newItem.itemId },
+              data: { physicalStock: { decrement: newItem.quantity } },
+            });
+
+            await tx.stockMovement.create({
+              data: {
+                inventoryId: inventory.id,
+                itemId: newItem.itemId,
+                type: 'SALE',
+                quantity: newItem.quantity,
+                referenceType: 'INVOICE',
+                referenceId: id,
+                notes: `Sales Invoice ${updated.invoiceNumber} (edited)`,
+              },
+            });
+          }
+        }
+
+        // Update customer ledger
+        await tx.customerLedger.deleteMany({
+          where: { referenceType: 'SALES_INVOICE', referenceId: id },
+        });
+
+        await tx.customerLedger.create({
+          data: {
+            customerId: invoice.customerId,
+            date: invoice.invoiceDate,
+            description: `Sales Invoice ${updated.invoiceNumber}`,
+            type: 'SALES_INVOICE',
+            debit: totalAmount,
+            credit: 0,
+            balance: 0,
+            referenceType: 'SALES_INVOICE',
+            referenceId: id,
+          },
+        });
+
+        return updated;
+      }, { maxWait: 10000, timeout: 30000 });
+
+      return NextResponse.json(updatedInvoice);
+    }
+
+    // Simple update (only notes and due date)
     const updatedInvoice = await db.invoice.update({
       where: { id },
       data: {
@@ -133,19 +266,8 @@ export async function PUT(
         dueDate: body.dueDate ? new Date(body.dueDate) : invoice.dueDate,
       },
       include: {
-        customer: {
-          select: {
-            id: true,
-            customerNumber: true,
-            name: true,
-          },
-        },
-        salesOrder: {
-          select: {
-            id: true,
-            orderNumber: true,
-          },
-        },
+        customer: { select: { id: true, customerNumber: true, name: true } },
+        salesOrder: { select: { id: true, orderNumber: true } },
       },
     });
 

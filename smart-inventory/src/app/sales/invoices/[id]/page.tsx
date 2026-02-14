@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, Loader2, Save, Ban } from "lucide-react";
+import { ArrowLeft, Loader2, Save, Ban, Edit } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 
@@ -234,6 +234,15 @@ export default function InvoiceDetailPage() {
             </div>
             <div className="flex items-center gap-3">
               <InvoiceStatusBadge status={invoice.effectiveStatus} />
+              {invoice.effectiveStatus === "PENDING" && (
+                <Button
+                  onClick={() => router.push(`/sales/invoices/new?edit=${invoice.id}`)}
+                  variant="outline"
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Invoice
+                </Button>
+              )}
               {invoice.effectiveStatus !== "PAID" &&
                 invoice.effectiveStatus !== "CANCELLED" && (
                   <>

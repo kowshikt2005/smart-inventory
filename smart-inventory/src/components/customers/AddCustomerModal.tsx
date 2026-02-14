@@ -304,6 +304,27 @@ export function AddCustomerModal({
               </div>
               <div>
                 <label
+                  htmlFor="customer-pan"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  PAN
+                </label>
+                <Input
+                  id="customer-pan"
+                  type="text"
+                  value={formData.gstin.length >= 12 ? formData.gstin.substring(2, 12) : ""}
+                  readOnly
+                  placeholder="Auto-filled from GSTIN"
+                  className="bg-gray-100 uppercase"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {formData.gstin.length >= 12
+                    ? "Auto-filled from GSTIN"
+                    : "Enter GSTIN to auto-fill"}
+                </p>
+              </div>
+              <div>
+                <label
                   htmlFor="customer-state"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >

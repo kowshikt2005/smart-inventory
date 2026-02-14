@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { generatePurchaseInvoiceNumber, calculatePurchaseLineItem, calculatePurchaseTotals } from '@/lib/purchase-utils';
 import { auth } from '@/lib/auth';
-import { hasRole } from '@/lib/auth-utils';
 
 // GET /api/purchase-invoices - Get all purchase invoices with filtering
 export async function GET(request: Request) {
@@ -19,7 +18,7 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
 
-    const session = await auth();
+    await auth();
 
     // Build where clause
     const where: any = {};

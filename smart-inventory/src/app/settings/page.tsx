@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSession } from "next-auth/react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Settings, Loader2 } from "lucide-react";
+import { Settings, Loader2, AlertTriangle, Trash2, X, ShieldAlert } from "lucide-react";
 
 interface AppSetting {
   id: string;
@@ -12,11 +13,20 @@ interface AppSetting {
 }
 
 export default function SettingsPage() {
+  const { data: session } = useSession();
   const [settings, setSettings] = useState<AppSetting[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Reset data state
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirmText, setResetConfirmText] = useState("");
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchSettings();
@@ -71,6 +81,50 @@ export default function SettingsPage() {
     const current = getSettingValue(key);
     const newValue = current === "true" ? "false" : "true";
     updateSetting(key, newValue);
+  };
+
+  const openResetModal = () => {
+    setResetPassword("");
+    setResetConfirmText("");
+    setResetError(null);
+    setShowResetModal(true);
+    setTimeout(() => passwordInputRef.current?.focus(), 100);
+  };
+
+  const handleResetData = async () => {
+    if (resetConfirmText !== "RESET ALL DATA") {
+      setResetError('Please type "RESET ALL DATA" to confirm');
+      return;
+    }
+    if (!resetPassword) {
+      setResetError("Please enter your admin password");
+      return;
+    }
+
+    try {
+      setResetting(true);
+      setResetError(null);
+
+      const response = await fetch("/api/settings/reset-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: resetPassword }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to reset data");
+      }
+
+      setShowResetModal(false);
+      setSuccessMessage("All business data has been reset successfully. User accounts are preserved.");
+      setTimeout(() => setSuccessMessage(null), 5000);
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : "Failed to reset data");
+    } finally {
+      setResetting(false);
+    }
   };
 
   return (
@@ -166,9 +220,168 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+            {/* Danger Zone — Admin Only */}
+            {session?.user?.role === "ADMIN" && (
+              <div className="bg-white rounded-xl border border-red-200 shadow-sm">
+                <div className="px-6 py-4 border-b border-red-100 bg-red-50/50 rounded-t-xl">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="h-5 w-5 text-red-600" />
+                    <h2 className="text-lg font-semibold text-red-900">
+                      Danger Zone
+                    </h2>
+                  </div>
+                  <p className="text-sm text-red-600/80 mt-1">
+                    Irreversible actions — proceed with extreme caution
+                  </p>
+                </div>
+                <div className="px-6 py-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 pr-8">
+                      <h3 className="text-sm font-medium text-gray-900">
+                        Reset All Business Data
+                      </h3>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Permanently delete all sales, purchases, inventory, customers,
+                        vendors, ledger entries, bank accounts, and employees.
+                        User accounts and login credentials will be preserved.
+                      </p>
+                      <p className="text-xs text-red-500 mt-2 font-medium">
+                        This action cannot be undone.
+                      </p>
+                    </div>
+                    <button
+                      onClick={openResetModal}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 shrink-0"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Reset Data
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* Reset Confirmation Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => !resetting && setShowResetModal(false)}
+          />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-red-50 px-6 py-4 border-b border-red-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
+                    <AlertTriangle className="h-5 w-5 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-red-900">
+                      Reset All Data
+                    </h3>
+                    <p className="text-xs text-red-600">
+                      This action is permanent and irreversible
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => !resetting && setShowResetModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  disabled={resetting}
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-6 py-5 space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-sm text-red-800">
+                  This will permanently delete <strong>all business data</strong> including:
+                </p>
+                <ul className="mt-2 text-xs text-red-700 space-y-1 list-disc list-inside">
+                  <li>Sales orders, invoices, and returns</li>
+                  <li>Purchase orders, invoices, and returns</li>
+                  <li>All inventory and stock movements</li>
+                  <li>Customers, vendors, and employees</li>
+                  <li>Ledger entries and payments</li>
+                  <li>Bank accounts and transactions</li>
+                  <li>Items, brands, and rate sheets</li>
+                </ul>
+              </div>
+
+              {resetError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
+                  {resetError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Type <span className="font-mono font-bold text-red-600">RESET ALL DATA</span> to confirm
+                </label>
+                <input
+                  type="text"
+                  value={resetConfirmText}
+                  onChange={(e) => setResetConfirmText(e.target.value)}
+                  placeholder="RESET ALL DATA"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  disabled={resetting}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Admin Password
+                </label>
+                <input
+                  ref={passwordInputRef}
+                  type="password"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  placeholder="Enter your admin password"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  disabled={resetting}
+                  onKeyDown={(e) => e.key === "Enter" && handleResetData()}
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowResetModal(false)}
+                disabled={resetting}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResetData}
+                disabled={resetting || resetConfirmText !== "RESET ALL DATA" || !resetPassword}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+              >
+                {resetting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Resetting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    Reset All Data
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

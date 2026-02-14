@@ -357,7 +357,7 @@ export default function SalesReturnsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">All Brands</SelectItem>
-                    {brands.map((brand: any) => (
+                    {brands.map((brand: { id: string; name: string }) => (
                       <SelectItem key={brand.id} value={brand.id}>{brand.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -371,7 +371,7 @@ export default function SalesReturnsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">All Customers</SelectItem>
-                    {customers.map((c: any) => (
+                    {customers.map((c: { id: string; name: string }) => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}
                   </SelectContent>

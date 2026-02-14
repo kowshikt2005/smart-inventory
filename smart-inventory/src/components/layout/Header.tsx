@@ -1,7 +1,9 @@
 "use client";
 
-import { memo } from "react";
+import { memo, Fragment } from "react";
 import { useSession, signOut } from "next-auth/react";
+import { usePathname } from "next/navigation";
+import Link from "next/link";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,10 +15,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut } from "lucide-react";
+import { LogOut, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export const Header = memo(function Header() {
   const { data: session } = useSession();
+  const pathname = usePathname();
 
   const handleSignOut = () => {
     signOut({ callbackUrl: "/login" });
@@ -42,26 +46,64 @@ export const Header = memo(function Header() {
     return roleLabels[role] || role;
   };
 
+  // Build breadcrumbs from pathname
+  const segments = pathname.split("/").filter(Boolean);
+  const formatSegment = (seg: string) =>
+    seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, " ");
+
   return (
-    <header className="fixed left-64 right-0 top-0 z-30 border-b border-gray-200 bg-white">
+    <header className="fixed left-[230px] right-0 top-0 z-30 border-b border-border/30 bg-white/80 backdrop-blur-md shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
       <div className="flex h-16 items-center justify-between px-6">
-        {/* Left Section */}
-        <div className="flex items-center gap-4">
-          {/* Global Search */}
-          <div className="w-80">
-            <GlobalSearch placeholder="Search anything... (⌘K)" />
-          </div>
+        {/* Left Section - Breadcrumbs */}
+        <div className="flex items-center gap-1.5 text-sm min-w-0">
+          <Link
+            href="/"
+            className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+          >
+            Dashboard
+          </Link>
+          {segments.map((segment, i) => {
+            const href = "/" + segments.slice(0, i + 1).join("/");
+            const isLast = i === segments.length - 1;
+            // Skip UUID-like segments in display
+            const isUuid = segment.length > 20;
+
+            return (
+              <Fragment key={i}>
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                {isLast ? (
+                  <span className="font-medium text-foreground truncate">
+                    {isUuid ? "Details" : formatSegment(segment)}
+                  </span>
+                ) : (
+                  <Link
+                    href={href}
+                    className={cn(
+                      "text-muted-foreground hover:text-foreground transition-colors truncate"
+                    )}
+                  >
+                    {isUuid ? "Details" : formatSegment(segment)}
+                  </Link>
+                )}
+              </Fragment>
+            );
+          })}
         </div>
 
-        {/* Right Section - User Menu */}
-        <div className="flex items-center gap-4">
+        {/* Right Section - Search + User Menu */}
+        <div className="flex items-center gap-4 shrink-0">
+          {/* Global Search */}
+          <div className="w-72">
+            <GlobalSearch placeholder="Search... (Ctrl+K)" />
+          </div>
+
           {session?.user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                  <Avatar className="h-10 w-10">
+                <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+                  <Avatar className="h-9 w-9">
                     <AvatarImage src={session.user.image || ""} alt={session.user.name || ""} />
-                    <AvatarFallback className="bg-teal-500 text-white">
+                    <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
                       {getUserInitials(session.user.name || "U")}
                     </AvatarFallback>
                   </Avatar>

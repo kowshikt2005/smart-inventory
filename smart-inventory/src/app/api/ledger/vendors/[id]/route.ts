@@ -83,14 +83,91 @@ export async function GET(
       openingBalance += priorCredit - priorDebit;
     }
 
-    // Calculate running balances
+    // Enrich entries with reference details
+    const purchaseInvoiceIds: string[] = [];
+    const vendorPaymentIds: string[] = [];
+    const purchaseReturnIds: string[] = [];
+
+    for (const entry of entries) {
+      if (entry.referenceType === 'PURCHASE_INVOICE' && entry.referenceId) {
+        purchaseInvoiceIds.push(entry.referenceId);
+      } else if (entry.referenceType === 'PURCHASE_PAYMENT' && entry.referenceId) {
+        vendorPaymentIds.push(entry.referenceId);
+      } else if (entry.referenceType === 'PURCHASE_RETURN' && entry.referenceId) {
+        purchaseReturnIds.push(entry.referenceId);
+      }
+    }
+
+    const [purchaseInvoices, vendorPayments, purchaseReturns] = await Promise.all([
+      purchaseInvoiceIds.length > 0
+        ? db.purchaseInvoice.findMany({
+            where: { id: { in: purchaseInvoiceIds } },
+            select: { id: true, invoiceNumber: true },
+          })
+        : [],
+      vendorPaymentIds.length > 0
+        ? db.vendorPayment.findMany({
+            where: { id: { in: vendorPaymentIds } },
+            select: {
+              id: true,
+              paymentNumber: true,
+              mode: true,
+              paidFrom: true,
+              bankAccount: {
+                select: { id: true, accountName: true },
+              },
+            },
+          })
+        : [],
+      purchaseReturnIds.length > 0
+        ? db.purchaseReturn.findMany({
+            where: { id: { in: purchaseReturnIds } },
+            select: { id: true, returnNumber: true },
+          })
+        : [],
+    ]);
+
+    const piMap = new Map(purchaseInvoices.map((inv) => [inv.id, inv]));
+    const vpMap = new Map(vendorPayments.map((p) => [p.id, p]));
+    const prMap = new Map(purchaseReturns.map((r) => [r.id, r]));
+
+    // Calculate running balances and enrich with reference details
     let runningBalance = openingBalance;
     const entriesWithBalance = entries.map((entry) => {
       // For vendor: credit increases balance (we owe more), debit decreases (we paid)
       runningBalance += Number(entry.credit) - Number(entry.debit);
+
+      let referenceNumber: string | null = null;
+      let referenceLink: string | null = null;
+      let bankDetails: string | null = null;
+
+      if (entry.referenceType === 'PURCHASE_INVOICE' && entry.referenceId) {
+        const inv = piMap.get(entry.referenceId);
+        if (inv) {
+          referenceNumber = inv.invoiceNumber;
+          referenceLink = `/purchases/invoices/${entry.referenceId}`;
+        }
+      } else if (entry.referenceType === 'PURCHASE_PAYMENT' && entry.referenceId) {
+        const pmt = vpMap.get(entry.referenceId);
+        if (pmt) {
+          referenceNumber = pmt.paymentNumber;
+          referenceLink = `/purchases/payments`;
+          bankDetails = pmt.mode + (pmt.bankAccount ? ` - ${pmt.bankAccount.accountName}` : '');
+        }
+      } else if (entry.referenceType === 'PURCHASE_RETURN' && entry.referenceId) {
+        const ret = prMap.get(entry.referenceId);
+        if (ret) {
+          referenceNumber = ret.returnNumber;
+          referenceLink = `/purchases/returns/${entry.referenceId}`;
+        }
+      }
+
       return {
         ...entry,
         runningBalance,
+        referenceNumber,
+        referenceLink,
+        bankDetails,
       };
     });
 

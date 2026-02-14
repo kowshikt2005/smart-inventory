@@ -3,7 +3,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { PurchaseInvoiceStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
-import { ArrowLeft, Loader2, Trash2, CreditCard, RotateCcw } from "lucide-react";
+import { ArrowLeft, Loader2, Edit, Trash2, CreditCard, RotateCcw } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import useSWR from "swr";
 
@@ -160,6 +160,16 @@ export default function PurchaseInvoiceDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {invoice.status === "PENDING" && invoice.vendorPayments.length === 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push(`/purchases/invoices/new?edit=${invoice.id}`)}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+              )}
               {invoice.status !== "PAID" && invoice.status !== "CANCELLED" && (
                 <>
                   <Button

@@ -90,7 +90,7 @@ export async function GET(
   }
 }
 
-// PUT /api/purchase-invoices/[id] - Update a purchase invoice (only notes and due date)
+// PUT /api/purchase-invoices/[id] - Update a purchase invoice
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -99,9 +99,10 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    // Find existing invoice
+    // Find existing invoice with items and payments
     const existingInvoice = await db.purchaseInvoice.findUnique({
       where: { id },
+      include: { items: true, vendorPayments: true },
     });
 
     if (!existingInvoice) {
@@ -111,7 +112,7 @@ export async function PUT(
       );
     }
 
-    // Only allow editing PENDING invoices (limited fields)
+    // Only allow editing PENDING invoices with no payments
     if (existingInvoice.status !== 'PENDING' && existingInvoice.status !== 'OVERDUE') {
       return NextResponse.json(
         { error: 'Only PENDING or OVERDUE invoices can be edited' },
@@ -119,7 +120,163 @@ export async function PUT(
       );
     }
 
-    // Update the invoice (only notes and due date can be updated)
+    if (existingInvoice.vendorPayments.length > 0) {
+      return NextResponse.json(
+        { error: 'Cannot edit invoice with payments' },
+        { status: 400 }
+      );
+    }
+
+    // If items are provided, do a full update with item replacement
+    if (body.items && Array.isArray(body.items) && body.items.length > 0) {
+      const updatedInvoice = await transaction(async (tx) => {
+        // Reverse old inventory changes
+        for (const oldItem of existingInvoice.items) {
+          const inventory = await tx.inventory.findUnique({
+            where: { itemId: oldItem.itemId },
+          });
+          if (inventory) {
+            await tx.inventory.update({
+              where: { itemId: oldItem.itemId },
+              data: {
+                physicalStock: { decrement: Number(oldItem.quantity) },
+              },
+            });
+          }
+        }
+
+        // Delete old stock movements
+        await tx.stockMovement.deleteMany({
+          where: { referenceType: 'PURCHASE_INVOICE', referenceId: id },
+        });
+
+        // Delete old items
+        await tx.purchaseInvoiceItem.deleteMany({
+          where: { purchaseInvoiceId: id },
+        });
+
+        // Calculate new items
+        const newItems = body.items.map((item: any) => {
+          const amount = Number(item.quantity) * Number(item.rate);
+          const taxAmount = amount * (Number(item.taxRate) / 100);
+          return {
+            itemId: item.itemId,
+            quantity: Number(item.quantity),
+            rate: Number(item.rate),
+            taxRate: Number(item.taxRate),
+            taxAmount: Math.round(taxAmount * 100) / 100,
+            amount: Math.round(amount * 100) / 100,
+          };
+        });
+
+        const subtotal = newItems.reduce((sum: number, item: any) => sum + item.amount, 0);
+        const totalTax = newItems.reduce((sum: number, item: any) => sum + item.taxAmount, 0);
+        const totalAmount = subtotal + totalTax;
+
+        // Look up vendor for name
+        let vendorName = existingInvoice.vendorName;
+        const vendorId = body.vendorId || existingInvoice.vendorId;
+        if (body.vendorId && body.vendorId !== existingInvoice.vendorId) {
+          const vendor = await tx.vendor.findUnique({ where: { id: body.vendorId } });
+          if (vendor) vendorName = vendor.name;
+        }
+
+        // Update invoice
+        const updated = await tx.purchaseInvoice.update({
+          where: { id },
+          data: {
+            vendorId,
+            vendorName,
+            date: body.date ? new Date(body.date) : existingInvoice.date,
+            dueDate: body.dueDate ? new Date(body.dueDate) : existingInvoice.dueDate,
+            notes: body.notes !== undefined ? body.notes : existingInvoice.notes,
+            amount: Math.round(subtotal * 100) / 100,
+            taxAmount: Math.round(totalTax * 100) / 100,
+            totalAmount: Math.round(totalAmount * 100) / 100,
+            balanceAmount: Math.round(totalAmount * 100) / 100,
+            items: { create: newItems },
+          },
+          include: {
+            vendor: { select: { id: true, vendorNumber: true, name: true } },
+            items: { include: { item: { select: { id: true, itemCode: true, name: true, unit: true } } } },
+          },
+        });
+
+        // Re-apply inventory changes for new items
+        for (const newItem of newItems) {
+          const inventory = await tx.inventory.findUnique({
+            where: { itemId: newItem.itemId },
+          });
+          let inv = inventory;
+          if (inv) {
+            await tx.inventory.update({
+              where: { itemId: newItem.itemId },
+              data: {
+                physicalStock: { increment: newItem.quantity },
+              },
+            });
+          } else {
+            inv = await tx.inventory.create({
+              data: {
+                itemId: newItem.itemId,
+                physicalStock: newItem.quantity,
+              },
+            });
+          }
+
+          await tx.stockMovement.create({
+            data: {
+              inventoryId: inv.id,
+              itemId: newItem.itemId,
+              type: 'PURCHASE',
+              quantity: newItem.quantity,
+              referenceType: 'PURCHASE_INVOICE',
+              referenceId: id,
+              notes: `Purchase Invoice ${updated.invoiceNumber} (edited)`,
+            },
+          });
+        }
+
+        // Update vendor ledger
+        await tx.vendorLedger.deleteMany({
+          where: { referenceType: 'purchase_invoice', referenceId: id },
+        });
+
+        const vendor = await tx.vendor.findUnique({ where: { id: vendorId } });
+        const openingBalance = vendor ? Number(vendor.openingBalance) : 0;
+        const priorEntries = await tx.vendorLedger.findMany({
+          where: { vendorId },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        let runningBalance = openingBalance;
+        for (const entry of priorEntries) {
+          runningBalance = runningBalance + Number(entry.credit) - Number(entry.debit);
+        }
+
+        const newBalance = runningBalance + Math.round(totalAmount * 100) / 100;
+
+        await tx.vendorLedger.create({
+          data: {
+            vendorId,
+            date: body.date ? new Date(body.date) : existingInvoice.date,
+            description: `Purchase Invoice ${updated.invoiceNumber}`,
+            type: 'PURCHASE_INVOICE',
+            credit: Math.round(totalAmount * 100) / 100,
+            debit: 0,
+            balance: newBalance,
+            referenceType: 'purchase_invoice',
+            referenceId: id,
+          },
+        });
+
+        return updated;
+      }, { maxWait: 10000, timeout: 30000 });
+
+      return NextResponse.json(updatedInvoice);
+    }
+
+    // Simple update (only notes and due date)
     const updatedInvoice = await db.purchaseInvoice.update({
       where: { id },
       data: {
@@ -127,25 +284,8 @@ export async function PUT(
         notes: body.notes !== undefined ? body.notes : existingInvoice.notes,
       },
       include: {
-        vendor: {
-          select: {
-            id: true,
-            vendorNumber: true,
-            name: true,
-          },
-        },
-        items: {
-          include: {
-            item: {
-              select: {
-                id: true,
-                itemCode: true,
-                name: true,
-                unit: true,
-              },
-            },
-          },
-        },
+        vendor: { select: { id: true, vendorNumber: true, name: true } },
+        items: { include: { item: { select: { id: true, itemCode: true, name: true, unit: true } } } },
       },
     });
 

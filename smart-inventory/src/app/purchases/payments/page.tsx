@@ -250,7 +250,7 @@ export default function VendorPaymentsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">All Vendors</SelectItem>
-                    {vendors.map((v: any) => (
+                    {vendors.map((v: { id: string; name: string }) => (
                       <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                     ))}
                   </SelectContent>

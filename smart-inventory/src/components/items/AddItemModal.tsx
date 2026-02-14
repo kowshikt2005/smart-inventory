@@ -34,6 +34,7 @@ interface EditItem {
   sellingPrice: string | number; // Actual selling price
   margin?: string | number;
   marginType?: string;
+  userCode?: string;
   unit: string;
   hsnCode?: string;
   gstRate: string | number;
@@ -120,7 +121,7 @@ export function AddItemModal({
     if (editItem && isOpen && brandsData && subBrandsData) {
       setFormData({
         name: editItem.name || "",
-        userCode: (editItem as any).userCode || "",
+        userCode: editItem.userCode || "",
         description: editItem.description || "",
         brandId: editItem.brand?.id || "",
         subBrandId: editItem.subBrand?.id || "",

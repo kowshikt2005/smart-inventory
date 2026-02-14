@@ -265,7 +265,7 @@ export default function PaymentsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">All Customers</SelectItem>
-                    {customers.map((c: any) => (
+                    {customers.map((c: { id: string; name: string }) => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}
                   </SelectContent>
