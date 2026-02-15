@@ -88,6 +88,7 @@ export async function PUT(
         marginType: body.marginType !== undefined ? body.marginType : existingItem.marginType,
         minStock: body.minStock !== undefined ? body.minStock : existingItem.minStock,
         unit: body.unit || existingItem.unit,
+        imageUrl: body.imageUrl !== undefined ? body.imageUrl : existingItem.imageUrl,
         isActive: body.isActive !== undefined ? body.isActive : existingItem.isActive,
       },
       include: {

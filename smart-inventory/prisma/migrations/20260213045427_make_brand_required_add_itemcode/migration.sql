@@ -1,2 +1,1 @@
--- AlterTable
-ALTER TABLE `items` ALTER COLUMN `code` DROP DEFAULT;
+-- This migration was empty (referenced a non-existent column `code`).

@@ -113,6 +113,7 @@ export async function POST(request: Request) {
           discountPercent: body.discountPercent || null,
           minStock: body.minStock || 0,
           unit: body.unit || 'PCS',
+          imageUrl: body.imageUrl || null,
           isActive: body.isActive !== undefined ? body.isActive : true,
         },
       });

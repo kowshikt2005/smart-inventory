@@ -60,6 +60,7 @@ interface PurchaseInvoice {
   vendorId: string;
   vendorName: string;
   status: string;
+  effectiveStatus: string;
   amount: number;
   taxAmount: number;
   totalAmount: number;
@@ -181,12 +182,19 @@ export default function PurchaseInvoicesPage() {
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
   const stats = useMemo(() => {
+    if (data?.stats) {
+      return data.stats;
+    }
+    // Fallback to client-side calculation
     const invoices = data?.purchaseInvoices || [];
     return {
       total: totalCount,
-      pending: invoices.filter((i: PurchaseInvoice) => i.status === "PENDING").length,
-      paid: invoices.filter((i: PurchaseInvoice) => i.status === "PAID").length,
-      overdue: invoices.filter((i: PurchaseInvoice) => i.status === "OVERDUE").length,
+      pending: invoices.filter((i: PurchaseInvoice) => i.effectiveStatus === "PENDING").length,
+      paid: invoices.filter((i: PurchaseInvoice) => i.effectiveStatus === "PAID").length,
+      overdue: invoices.filter((i: PurchaseInvoice) => i.effectiveStatus === "OVERDUE").length,
+      totalPayable: invoices
+        .filter((i: PurchaseInvoice) => i.effectiveStatus !== "PAID" && i.effectiveStatus !== "CANCELLED")
+        .reduce((sum: number, i: PurchaseInvoice) => sum + Number(i.balanceAmount), 0),
     };
   }, [data, totalCount]);
 
@@ -239,8 +247,10 @@ export default function PurchaseInvoicesPage() {
                 <AlertCircle className="h-5 w-5 text-red-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Overdue</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.overdue}</p>
+                <p className="text-sm text-gray-600">Total Payable</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {formatCurrency(stats.totalPayable || 0)}
+                </p>
               </div>
             </div>
           </div>
@@ -435,7 +445,7 @@ export default function PurchaseInvoicesPage() {
                         {formatDate(invoice.dueDate)}
                       </TableCell>
                       <TableCell className="text-center">
-                        <PurchaseInvoiceStatusBadge status={invoice.status} />
+                        <PurchaseInvoiceStatusBadge status={invoice.effectiveStatus} />
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(Number(invoice.totalAmount))}
@@ -464,7 +474,7 @@ export default function PurchaseInvoicesPage() {
                               View Details
                             </DropdownMenuItem>
 
-                            {invoice.status === "PENDING" && (
+                            {invoice.effectiveStatus === "PENDING" && (
                               <DropdownMenuItem
                                 onClick={() => router.push(`/purchases/invoices/new?edit=${invoice.id}`)}
                               >
@@ -473,7 +483,7 @@ export default function PurchaseInvoicesPage() {
                               </DropdownMenuItem>
                             )}
 
-                            {invoice.status !== "PAID" && invoice.status !== "CANCELLED" && (
+                            {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
@@ -487,7 +497,7 @@ export default function PurchaseInvoicesPage() {
                               </>
                             )}
 
-                            {invoice.status === "PENDING" && (
+                            {invoice.effectiveStatus === "PENDING" && (
                               <DropdownMenuItem
                                 onClick={() => handleDelete(invoice.id)}
                                 className="text-red-600"

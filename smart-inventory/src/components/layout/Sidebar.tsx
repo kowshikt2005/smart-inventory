@@ -13,8 +13,6 @@ import {
   UserCircle,
   DollarSign,
   Package,
-  Tag,
-  Layers,
   ShoppingCart,
   FileText,
   Receipt,
@@ -107,9 +105,7 @@ export const Sidebar = memo(function Sidebar() {
   const [purchasesOpen, setPurchasesOpen] = useState(false);
   const [bankCashOpen, setBankCashOpen] = useState(false);
   const [mastersOpen, setMastersOpen] = useState(false);
-  const [itemsOpen, setItemsOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
-  const [reportsOpen, setReportsOpen] = useState(false);
 
   // Get user permissions
   const userRole = session?.user?.role || "SALESMAN";
@@ -142,24 +138,10 @@ export const Sidebar = memo(function Sidebar() {
     { icon: DollarSign, label: "Rate Sheets", href: "/masters/rate-sheets" },
   ], [permissions.employees]);
 
-  const itemSubMenu = useMemo(() => [
-    { icon: Tag, label: "Brands", href: "/masters/items/brands" },
-    { icon: Layers, label: "Sub-brands", href: "/masters/items/sub-brands" },
-    { icon: Package, label: "Items", href: "/masters/items" },
-  ], []);
-
   const ledgerItems = useMemo(() => [
     { icon: Users, label: "Customer Ledger", href: "/ledger/customers" },
     { icon: Package, label: "Stock Ledger", href: "/ledger/items" },
     { icon: ClipboardList, label: "Stock Journal", href: "/ledger/stock-journal" },
-  ], []);
-
-  const reportItems = useMemo(() => [
-    { icon: FileText, label: "Claim Report", href: "/reports/claim-report" },
-    { icon: BarChart3, label: "Sales Register", href: "/reports/sales-register" },
-    { icon: BarChart3, label: "Purchase Register", href: "/reports/purchase-register" },
-    { icon: ClipboardList, label: "Outstanding", href: "/reports/outstanding" },
-    { icon: FileText, label: "Billed & Unbilled", href: "/reports/billed-unbilled" },
   ], []);
 
   const navLinkClass = (isActive: boolean) =>
@@ -342,28 +324,10 @@ export const Sidebar = memo(function Sidebar() {
             </p>
 
             <div className="mb-0.5">
-              <button
-                onClick={() => setReportsOpen(!reportsOpen)}
-                className={sectionButtonClass(pathname.startsWith("/reports"))}
-              >
-                <div className="flex items-center gap-3">
-                  <BarChart3 className="h-5 w-5" strokeWidth={1.5} />
-                  <span>Reports</span>
-                </div>
-                <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", reportsOpen && "rotate-180")} />
-              </button>
-              <CollapsibleSection isOpen={reportsOpen}>
-                {reportItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                  return (
-                    <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
-                      <Icon className="h-4 w-4" strokeWidth={1.5} />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </CollapsibleSection>
+              <Link href="/reports" className={navLinkClass(pathname.startsWith("/reports"))}>
+                <BarChart3 className="h-5 w-5" strokeWidth={1.5} />
+                <span>Reports</span>
+              </Link>
             </div>
           </>
         )}
@@ -400,58 +364,14 @@ export const Sidebar = memo(function Sidebar() {
                   );
                 })}
 
-                {/* Items with Sub-dropdown */}
-                <div>
-                  <button
-                    onClick={() => setItemsOpen(!itemsOpen)}
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-all duration-150",
-                      pathname.startsWith("/masters/items")
-                        ? "bg-white/[0.14] text-white"
-                        : "text-white/70 hover:bg-white/[0.10] hover:text-white"
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Package className="h-4 w-4" strokeWidth={1.5} />
-                      <span>Items</span>
-                    </div>
-                    <ChevronDown className={cn("h-3 w-3 transition-transform duration-200", itemsOpen && "rotate-180")} />
-                  </button>
-
-                  <AnimatePresence initial={false}>
-                    {itemsOpen && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2, ease: "easeInOut" }}
-                        className="overflow-hidden"
-                      >
-                        <div className="ml-7 mt-1 space-y-0.5">
-                          {itemSubMenu.map((item) => {
-                            const Icon = item.icon;
-                            const isActive = pathname === item.href;
-                            return (
-                              <Link
-                                key={item.href}
-                                href={item.href}
-                                className={cn(
-                                  "flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-all duration-150",
-                                  isActive
-                                    ? "bg-white/[0.14] text-white font-medium"
-                                    : "text-white/60 hover:bg-white/[0.10] hover:text-white"
-                                )}
-                              >
-                                <Icon className="h-3 w-3" strokeWidth={1.5} />
-                                <span>{item.label}</span>
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                {/* Items - direct link */}
+                <Link
+                  href="/masters/items"
+                  className={subLinkClass(pathname.startsWith("/masters/items"))}
+                >
+                  <Package className="h-4 w-4" strokeWidth={1.5} />
+                  <span>Items</span>
+                </Link>
               </CollapsibleSection>
             </div>
           </>

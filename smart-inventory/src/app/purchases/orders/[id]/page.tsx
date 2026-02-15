@@ -2,7 +2,15 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { PurchaseOrderStatusBadge, PurchaseInvoiceStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
 import {
   ArrowLeft,
   Loader2,
@@ -191,7 +199,7 @@ export default function PurchaseOrderDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {(order.status === "OPEN" || order.status === "RECEIVED") && (
+              {order.status === "OPEN" && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -266,74 +274,86 @@ export default function PurchaseOrderDetailPage() {
             </div>
 
             {/* Items */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold mb-4">Order Items</h2>
+            <div className="bg-white rounded-lg border border-gray-200">
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="text-lg font-semibold">Order Items</h2>
+              </div>
               <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 px-2 text-sm font-medium text-gray-600">#</th>
-                      <th className="text-left py-2 px-2 text-sm font-medium text-gray-600">Item</th>
-                      <th className="text-left py-2 px-2 text-sm font-medium text-gray-600">HSN</th>
-                      <th className="text-right py-2 px-2 text-sm font-medium text-gray-600">Qty</th>
-                      <th className="text-right py-2 px-2 text-sm font-medium text-gray-600">Rate</th>
-                      <th className="text-right py-2 px-2 text-sm font-medium text-gray-600">Tax</th>
-                      <th className="text-right py-2 px-2 text-sm font-medium text-gray-600">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {order.items.map((item, index) => (
-                      <tr key={item.id} className="border-b last:border-b-0">
-                        <td className="py-3 px-2 text-sm text-gray-500">{index + 1}</td>
-                        <td className="py-3 px-2">
-                          <p className="font-medium">{item.item.name}</p>
-                          <p className="text-xs text-gray-500">{item.item.itemCode}</p>
-                        </td>
-                        <td className="py-3 px-2 text-sm text-gray-500">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gray-50">
+                      <TableHead className="font-semibold">Item</TableHead>
+                      <TableHead className="font-semibold">HSN</TableHead>
+                      <TableHead className="font-semibold text-right">Qty</TableHead>
+                      <TableHead className="font-semibold text-right">Rate</TableHead>
+                      <TableHead className="font-semibold text-right">Taxable Amt</TableHead>
+                      <TableHead className="font-semibold text-right">GST %</TableHead>
+                      <TableHead className="font-semibold text-right">Tax Amt</TableHead>
+                      <TableHead className="font-semibold text-right">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {order.items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{item.item.name}</p>
+                            <p className="text-xs text-gray-500">{item.item.itemCode}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">
                           {item.item.hsnCode || "-"}
-                        </td>
-                        <td className="py-3 px-2 text-right text-sm">
-                          {Number(item.quantity).toFixed(3)} {item.item.unit}
-                        </td>
-                        <td className="py-3 px-2 text-right text-sm">
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {Number(item.quantity)} {item.item.unit}
+                        </TableCell>
+                        <TableCell className="text-right">
                           {formatCurrency(Number(item.rate))}
-                        </td>
-                        <td className="py-3 px-2 text-right text-sm">
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(Number(item.amount))}
+                        </TableCell>
+                        <TableCell className="text-right">
                           {Number(item.taxRate)}%
-                        </td>
-                        <td className="py-3 px-2 text-right font-medium">
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(Number(item.taxAmount))}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
                           {formatCurrency(Number(item.amount) + Number(item.taxAmount))}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t">
-                      <td colSpan={6} className="py-3 px-2 text-right text-sm text-gray-600">
-                        Subtotal:
-                      </td>
-                      <td className="py-3 px-2 text-right font-medium">
-                        {formatCurrency(Number(order.amount))}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan={6} className="py-1 px-2 text-right text-sm text-gray-600">
-                        Tax:
-                      </td>
-                      <td className="py-1 px-2 text-right font-medium">
-                        {formatCurrency(Number(order.taxAmount))}
-                      </td>
-                    </tr>
-                    <tr className="bg-gray-50">
-                      <td colSpan={6} className="py-3 px-2 text-right text-sm font-semibold">
-                        Total:
-                      </td>
-                      <td className="py-3 px-2 text-right text-lg font-bold">
-                        {formatCurrency(Number(order.totalAmount))}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            {/* Order Summary */}
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <h2 className="text-lg font-semibold mb-4">Order Summary</h2>
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Subtotal (Taxable Amount)</span>
+                  <span className="font-medium">{formatCurrency(Number(order.amount))}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">CGST</span>
+                  <span className="font-medium">{formatCurrency(Number(order.taxAmount) / 2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">SGST</span>
+                  <span className="font-medium">{formatCurrency(Number(order.taxAmount) / 2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Total Tax</span>
+                  <span className="font-medium">{formatCurrency(Number(order.taxAmount))}</span>
+                </div>
+                <hr />
+                <div className="flex justify-between font-semibold text-lg">
+                  <span>Total Amount</span>
+                  <span>{formatCurrency(Number(order.totalAmount))}</span>
+                </div>
               </div>
             </div>
 
@@ -401,9 +421,7 @@ export default function PurchaseOrderDetailPage() {
                     >
                       <div className="flex items-center justify-between">
                         <p className="font-medium text-teal-600">{invoice.invoiceNumber}</p>
-                        <span className="text-xs px-2 py-1 bg-gray-100 rounded">
-                          {invoice.status}
-                        </span>
+                        <PurchaseInvoiceStatusBadge status={invoice.status} size="sm" />
                       </div>
                       <p className="text-sm text-gray-500">
                         {formatDate(invoice.date)} - {formatCurrency(Number(invoice.totalAmount))}

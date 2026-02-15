@@ -110,13 +110,71 @@ export async function GET(request: Request) {
       db.purchaseInvoice.count({ where }),
     ]);
 
+    // Check for overdue invoices and compute effectiveStatus
+    const now = new Date();
+    const invoicesWithStatus = purchaseInvoices.map((invoice) => {
+      let effectiveStatus = invoice.status;
+
+      // If pending and past due date with outstanding balance, mark as overdue
+      if (
+        invoice.status === 'PENDING' &&
+        invoice.dueDate &&
+        new Date(invoice.dueDate) < now &&
+        Number(invoice.balanceAmount) > 0
+      ) {
+        effectiveStatus = 'OVERDUE';
+      }
+
+      return {
+        ...invoice,
+        effectiveStatus,
+      };
+    });
+
+    // Calculate server-side stats using database aggregation
+    const [paidCount, overdueStats, pendingStats, totalInvoiceCount] = await Promise.all([
+      db.purchaseInvoice.count({ where: { status: 'PAID' } }),
+      db.purchaseInvoice.aggregate({
+        where: {
+          status: 'PENDING',
+          dueDate: { lt: now },
+          balanceAmount: { gt: 0 },
+        },
+        _count: true,
+        _sum: { balanceAmount: true },
+      }),
+      db.purchaseInvoice.aggregate({
+        where: {
+          status: 'PENDING',
+          OR: [
+            { dueDate: { gte: now } },
+            { balanceAmount: 0 },
+          ],
+        },
+        _count: true,
+        _sum: { balanceAmount: true },
+      }),
+      db.purchaseInvoice.count(),
+    ]);
+
+    const totalPayable =
+      Number(overdueStats._sum.balanceAmount || 0) +
+      Number(pendingStats._sum.balanceAmount || 0);
+
     return NextResponse.json({
-      purchaseInvoices,
+      purchaseInvoices: invoicesWithStatus,
       pagination: {
         page,
         limit,
         total,
         totalPages: Math.ceil(total / limit),
+      },
+      stats: {
+        total: totalInvoiceCount,
+        pending: pendingStats._count,
+        overdue: overdueStats._count,
+        paid: paidCount,
+        totalPayable,
       },
     });
   } catch (error) {

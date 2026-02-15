@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { X } from "lucide-react";
+import { X, Upload, Trash2 } from "lucide-react";
 import useSWR from "swr";
 
 interface Brand {
@@ -40,6 +40,7 @@ interface EditItem {
   gstRate: string | number;
   brand?: { id: string; name: string };
   subBrand?: { id: string; name: string };
+  imageUrl?: string | null;
   inventory?: {
     minStockLevel: string | number;
   };
@@ -62,6 +63,9 @@ export function AddItemModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -113,6 +117,7 @@ export function AddItemModal({
         minStock: "0",
         unit: "PCS",
       });
+      setImageUrl(null);
     }
   }, [editItem, isOpen]);
 
@@ -135,6 +140,7 @@ export function AddItemModal({
         minStock: String(editItem.inventory?.minStockLevel ?? 0),
         unit: editItem.unit || "PCS",
       });
+      setImageUrl(editItem.imageUrl || null);
     }
   }, [editItem, isOpen, brandsData, subBrandsData]);
 
@@ -185,6 +191,38 @@ export function AddItemModal({
 
   const hasMargin = formData.margin !== "" && parseFloat(formData.margin) > 0;
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setError(null);
+
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append("file", file);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formDataUpload,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to upload image");
+      }
+
+      setImageUrl(data.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload image");
+    } finally {
+      setIsUploading(false);
+      // Reset file input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -226,6 +264,7 @@ export function AddItemModal({
           marginType: formData.marginType,
           minStock: parseFloat(formData.minStock) || 0,
           unit: formData.unit,
+          imageUrl: imageUrl || null,
         }),
       });
 
@@ -256,6 +295,7 @@ export function AddItemModal({
         minStock: "0",
         unit: "PCS",
       });
+      setImageUrl(null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       setError(errorMessage);
@@ -382,6 +422,66 @@ export function AddItemModal({
                   onChange={handleChange}
                   placeholder="Enter item description (optional)"
                 />
+              </div>
+
+              {/* Image Upload */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Item Image
+                </label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+                {imageUrl ? (
+                  <div className="flex items-start gap-3">
+                    <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-200 shrink-0">
+                      <img
+                        src={imageUrl}
+                        alt="Item preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                      >
+                        <Upload className="h-3.5 w-3.5 mr-1.5" />
+                        Change
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setImageUrl(null)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-teal-400 hover:bg-teal-50/50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Upload className="h-6 w-6 mx-auto text-gray-400 mb-1" />
+                    <p className="text-sm text-gray-600">
+                      {isUploading ? "Uploading..." : "Click to upload image"}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">JPEG, PNG or WebP (max 5MB)</p>
+                  </button>
+                )}
               </div>
             </div>
           </div>

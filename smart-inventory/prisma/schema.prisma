@@ -147,6 +147,7 @@ model Item {
   discountPercent      Decimal?              @db.Decimal(5, 2)
   minStock             Decimal               @default(0.000) @db.Decimal(15, 3)
   unit                 String                @default("PCS")
+  imageUrl             String?
   isActive             Boolean               @default(true)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt

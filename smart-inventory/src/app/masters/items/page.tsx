@@ -18,9 +18,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, MoreHorizontal, Eye, Edit, Loader2, X, Package, Trash2 } from "lucide-react";
+import { Plus, MoreHorizontal, Eye, Edit, Loader2, X, Package, Trash2, Tag, Layers, ArrowRight } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import useSWR from "swr";
 import { useDebounce } from "@/hooks/useDebounce";
 import { AddItemModal } from "@/components/items/AddItemModal";
@@ -181,7 +182,37 @@ export default function ItemsPage() {
       <div className="p-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">All Items</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Items</h1>
+
+          {/* Quick Nav Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+            <Link
+              href="/masters/items/brands"
+              className="group flex items-center gap-4 rounded-xl border border-orange-200 hover:border-orange-300 bg-white p-4 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50 shrink-0">
+                <Tag className="h-5 w-5 text-orange-600" strokeWidth={1.8} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-semibold text-gray-900">Brands</h3>
+                <p className="text-xs text-gray-500">Manage product brands</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-gray-300 group-hover:text-gray-500 transition-all group-hover:translate-x-0.5 shrink-0" />
+            </Link>
+            <Link
+              href="/masters/items/sub-brands"
+              className="group flex items-center gap-4 rounded-xl border border-sky-200 hover:border-sky-300 bg-white p-4 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 shrink-0">
+                <Layers className="h-5 w-5 text-sky-600" strokeWidth={1.8} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-semibold text-gray-900">Sub-brands</h3>
+                <p className="text-xs text-gray-500">Manage sub-brand categories</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-gray-300 group-hover:text-gray-500 transition-all group-hover:translate-x-0.5 shrink-0" />
+            </Link>
+          </div>
 
           {/* Search and Add Button */}
           <div className="flex items-start justify-between gap-4 mb-6">

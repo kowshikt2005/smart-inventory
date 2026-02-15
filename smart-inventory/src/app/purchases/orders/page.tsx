@@ -499,7 +499,7 @@ export default function PurchaseOrdersPage() {
                               View Details
                             </DropdownMenuItem>
 
-                            {(order.status === "OPEN" || order.status === "RECEIVED") && (
+                            {order.status === "OPEN" && (
                               <DropdownMenuItem
                                 onClick={() => router.push(`/purchases/orders/new?edit=${order.id}`)}
                               >
