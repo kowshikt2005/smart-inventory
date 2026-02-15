@@ -37,8 +37,18 @@ export async function POST(request: Request) {
       );
     }
 
+    // Determine upload folder
+    const folder = (formData.get('folder') as string) || 'items';
+    const VALID_FOLDERS = ['items', 'brands'];
+    if (!VALID_FOLDERS.includes(folder)) {
+      return NextResponse.json(
+        { error: `Invalid folder. Allowed: ${VALID_FOLDERS.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
     // Ensure upload directory exists
-    const uploadDir = path.join(process.cwd(), 'uploads', 'items');
+    const uploadDir = path.join(process.cwd(), 'uploads', folder);
     await mkdir(uploadDir, { recursive: true });
 
     // Generate unique filename
@@ -50,7 +60,7 @@ export async function POST(request: Request) {
     await writeFile(filepath, buffer);
 
     // Return the URL path for serving the file
-    const url = `/api/uploads/items/${filename}`;
+    const url = `/api/uploads/${folder}/${filename}`;
 
     return NextResponse.json({ url });
   } catch (error) {

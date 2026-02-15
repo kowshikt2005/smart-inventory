@@ -67,12 +67,18 @@ export const Header = memo(function Header() {
             const isLast = i === segments.length - 1;
             // Skip UUID-like segments in display
             const isUuid = segment.length > 20;
+            // Parent-only routes that have no dedicated page
+            const nonClickableRoutes = ["/masters", "/ledger", "/bank-cash"];
+            const isNonClickable = nonClickableRoutes.includes(href);
 
             return (
               <Fragment key={i}>
                 <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
-                {isLast ? (
-                  <span className="font-medium text-foreground truncate">
+                {isLast || isNonClickable ? (
+                  <span className={cn(
+                    "truncate",
+                    isLast ? "font-medium text-foreground" : "text-muted-foreground"
+                  )}>
                     {isUuid ? "Details" : formatSegment(segment)}
                   </span>
                 ) : (

@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, MoreHorizontal, Eye, Edit, Loader2, X, Package, Trash2, Tag, Layers, ArrowRight } from "lucide-react";
+import { ImportButton } from "@/components/import/ImportButton";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -242,10 +243,13 @@ export default function ItemsPage() {
                 </p>
               )}
             </div>
-            <Button className="bg-teal-500 hover:bg-teal-600 text-white" onClick={() => setShowAddModal(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Item
-            </Button>
+            <div className="flex items-center gap-2">
+              <ImportButton entityType="ITEM" entityLabel="Items" onSuccess={() => mutate()} />
+              <Button className="bg-teal-500 hover:bg-teal-600 text-white" onClick={() => setShowAddModal(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Item
+              </Button>
+            </div>
           </div>
         </div>
 

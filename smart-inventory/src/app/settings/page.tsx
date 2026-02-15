@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Settings, Loader2, AlertTriangle, Trash2, X, ShieldAlert } from "lucide-react";
+import { Settings, Loader2, AlertTriangle, Trash2, X, ShieldAlert, Save } from "lucide-react";
 
 interface AppSetting {
   id: string;
@@ -12,6 +12,41 @@ interface AppSetting {
   label: string | null;
 }
 
+const COMPANY_FIELDS: {
+  key: string;
+  label: string;
+  type: "text" | "textarea";
+  placeholder: string;
+  maxLength?: number;
+  transform?: (v: string) => string;
+}[] = [
+  { key: "company_name", label: "Company Name", type: "text", placeholder: "e.g. Sri Balaji Enterprises" },
+  { key: "company_address", label: "Address", type: "textarea", placeholder: "Door No, Street, Area" },
+  { key: "company_city", label: "City", type: "text", placeholder: "e.g. Chennai" },
+  { key: "company_state", label: "State", type: "text", placeholder: "e.g. Tamil Nadu" },
+  { key: "company_pincode", label: "Pincode", type: "text", placeholder: "e.g. 600001", maxLength: 6 },
+  { key: "company_phone", label: "Phone", type: "text", placeholder: "e.g. 9876543210" },
+  { key: "company_email", label: "Email", type: "text", placeholder: "e.g. info@company.com" },
+  {
+    key: "company_gstin",
+    label: "GSTIN",
+    type: "text",
+    placeholder: "e.g. 27AABCT1234F1Z5",
+    maxLength: 15,
+    transform: (v: string) => v.toUpperCase().replace(/[^A-Z0-9]/g, ""),
+  },
+  {
+    key: "company_pan",
+    label: "PAN",
+    type: "text",
+    placeholder: "e.g. AABCT1234F",
+    maxLength: 10,
+    transform: (v: string) => v.toUpperCase().replace(/[^A-Z0-9]/g, ""),
+  },
+  { key: "company_msme", label: "MSME / Udyam No.", type: "text", placeholder: "e.g. UDYAM-XX-00-0000000" },
+  { key: "company_fssai", label: "FSSAI No.", type: "text", placeholder: "e.g. 10020041000123" },
+];
+
 export default function SettingsPage() {
   const { data: session } = useSession();
   const [settings, setSettings] = useState<AppSetting[]>([]);
@@ -19,6 +54,11 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Local edits for company fields (so we batch-save)
+  const [companyEdits, setCompanyEdits] = useState<Record<string, string>>({});
+  const [companyDirty, setCompanyDirty] = useState(false);
+  const [companySaving, setCompanySaving] = useState(false);
 
   // Reset data state
   const [showResetModal, setShowResetModal] = useState(false);
@@ -31,6 +71,19 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  // Sync company edits from loaded settings
+  useEffect(() => {
+    if (settings.length > 0) {
+      const edits: Record<string, string> = {};
+      for (const field of COMPANY_FIELDS) {
+        const existing = settings.find((s) => s.key === field.key);
+        edits[field.key] = existing?.value || "";
+      }
+      setCompanyEdits(edits);
+      setCompanyDirty(false);
+    }
+  }, [settings]);
 
   const fetchSettings = async () => {
     try {
@@ -61,15 +114,42 @@ export default function SettingsPage() {
       if (!response.ok) throw new Error("Failed to update setting");
 
       const updated = await response.json();
-      setSettings((prev) =>
-        prev.map((s) => (s.key === key ? updated : s))
-      );
-      setSuccessMessage(`Setting updated successfully`);
-      setTimeout(() => setSuccessMessage(null), 3000);
+      setSettings((prev) => {
+        const exists = prev.find((s) => s.key === key);
+        if (exists) return prev.map((s) => (s.key === key ? updated : s));
+        return [...prev, updated];
+      });
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update setting");
+      return false;
     } finally {
       setSaving(null);
+    }
+  };
+
+  const handleSaveCompanyDetails = async () => {
+    setCompanySaving(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      for (const field of COMPANY_FIELDS) {
+        const val = companyEdits[field.key] ?? "";
+        const existing = settings.find((s) => s.key === field.key);
+        // Only save if changed
+        if ((existing?.value || "") !== val) {
+          const ok = await updateSetting(field.key, val);
+          if (!ok) throw new Error(`Failed to save ${field.label}`);
+        }
+      }
+      setCompanyDirty(false);
+      setSuccessMessage("Company details saved successfully");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save company details");
+    } finally {
+      setCompanySaving(false);
     }
   };
 
@@ -161,6 +241,83 @@ export default function SettingsPage() {
           </div>
         ) : (
           <div className="space-y-6">
+            {/* Company Details */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Company Details
+                  </h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Used in invoices, PDF exports, and reports
+                  </p>
+                </div>
+                <button
+                  onClick={handleSaveCompanyDetails}
+                  disabled={!companyDirty || companySaving}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-teal-500 text-white text-sm font-medium rounded-lg hover:bg-teal-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {companySaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Save
+                </button>
+              </div>
+              <div className="px-6 py-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {COMPANY_FIELDS.map((field) => (
+                    <div
+                      key={field.key}
+                      className={field.type === "textarea" ? "md:col-span-2" : ""}
+                    >
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {field.label}
+                      </label>
+                      {field.type === "textarea" ? (
+                        <textarea
+                          value={companyEdits[field.key] || ""}
+                          onChange={(e) => {
+                            setCompanyEdits((prev) => ({
+                              ...prev,
+                              [field.key]: e.target.value,
+                            }));
+                            setCompanyDirty(true);
+                          }}
+                          placeholder={field.placeholder}
+                          rows={2}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 resize-none"
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={companyEdits[field.key] || ""}
+                          onChange={(e) => {
+                            let val = e.target.value;
+                            if (field.transform) val = field.transform(val);
+                            if (field.maxLength) val = val.slice(0, field.maxLength);
+                            setCompanyEdits((prev) => ({
+                              ...prev,
+                              [field.key]: val,
+                            }));
+                            setCompanyDirty(true);
+                          }}
+                          placeholder={field.placeholder}
+                          maxLength={field.maxLength}
+                          className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 ${
+                            field.key === "company_gstin" || field.key === "company_pan"
+                              ? "font-mono uppercase tracking-wider"
+                              : ""
+                          }`}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {/* Billing Settings */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
               <div className="px-6 py-4 border-b border-gray-100">
@@ -220,7 +377,8 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
-            {/* Danger Zone — Admin Only */}
+
+            {/* Danger Zone -- Admin Only */}
             {session?.user?.role === "ADMIN" && (
               <div className="bg-white rounded-xl border border-red-200 shadow-sm">
                 <div className="px-6 py-4 border-b border-red-100 bg-red-50/50 rounded-t-xl">

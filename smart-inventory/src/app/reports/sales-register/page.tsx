@@ -22,6 +22,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import { ExportButtons } from "@/components/ui/ExportButtons";
+import { exportToExcel, exportToPDF, fmtNum } from "@/lib/export-utils";
 
 // ── Indian fiscal year helpers ──────────────────────────────────
 function getCurrentFiscalYear(): number {
@@ -126,6 +128,27 @@ export default function SalesRegisterPage() {
   const now = new Date();
   const currentMonthName = now.toLocaleString("en-US", { month: "long" });
 
+  // ── Export handlers ────────────────────────────────────────
+  const handleExportExcel = () => {
+    const rows = months.map((r) => [r.month + " " + r.year, r.grossAmount, r.taxAmount, r.netAmount]);
+    rows.push(["Total", totals.grossAmount, totals.taxAmount, totals.netAmount]);
+    exportToExcel({
+      fileName: `Sales-Register_${fmtDate(startDate)}_to_${fmtDate(endDate)}.xlsx`,
+      sheets: [{ name: "Sales Register", headers: ["Month", "Gross Amount", "Tax Amount", "Net Amount"], rows }],
+    });
+  };
+
+  const handleExportPDF = () => {
+    const rows = months.map((r) => [r.month + " " + r.year, fmtNum(r.grossAmount), fmtNum(r.taxAmount), fmtNum(r.netAmount)]);
+    rows.push(["Total", fmtNum(totals.grossAmount), fmtNum(totals.taxAmount), fmtNum(totals.netAmount)]);
+    exportToPDF({
+      fileName: `Sales-Register_${fmtDate(startDate)}_to_${fmtDate(endDate)}.pdf`,
+      title: "Sales Register",
+      subtitle: `${fmtDate(startDate)} - ${fmtDate(endDate)} | ${selectedCustomerName}`,
+      sheets: [{ name: "Sales Register", headers: ["Month", "Gross Amount (₹)", "Tax Amount (₹)", "Net Amount (₹)"], rows }],
+    });
+  };
+
   // ── Handle month row click ─────────────────────────────────
   const handleMonthClick = (monthData: MonthData) => {
     const hasData = monthData.grossAmount > 0 || monthData.taxAmount > 0 || monthData.netAmount > 0;
@@ -145,6 +168,7 @@ export default function SalesRegisterPage() {
       <div className="p-6">
         {/* ── Top-right: fiscal year preset + date display ── */}
         <div className="flex items-center justify-end gap-3 mb-4">
+          <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={isLoading || months.length === 0} />
           <Select
             value={period}
             onValueChange={(v) => setPeriod(v as Period)}

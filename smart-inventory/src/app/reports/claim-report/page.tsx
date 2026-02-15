@@ -21,6 +21,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Loader2, FileText } from "lucide-react";
+import { ExportButtons } from "@/components/ui/ExportButtons";
+import { exportToExcel, exportToPDF, fmtNum, fmtDateExport } from "@/lib/export-utils";
 import { useState, useMemo } from "react";
 import useSWR from "swr";
 
@@ -125,14 +127,29 @@ export default function ClaimReportPage() {
     });
   };
 
+  const handleExportExcel = () => {
+    const headers = ["Date", "Invoice No", "Brand", "Sub-Brand", "Customer", "Product Name", "MRP", "Selling Price", "Sold Rate", "Qty", "Unit Claim", "Total Claim"];
+    const rows = claims.map((c) => [fmtDateExport(c.date), c.invoiceNumber, c.brand, c.subBrand, c.customer, c.productName, c.mrp, c.sellingPrice, c.soldRate, c.quantity, c.unitClaim, c.totalClaim]);
+    exportToExcel({ fileName: `Claim-Report_${fmtDateExport(filters.startDate)}_to_${fmtDateExport(filters.endDate)}.xlsx`, sheets: [{ name: "Claim Report", headers, rows }] });
+  };
+
+  const handleExportPDF = () => {
+    const headers = ["Date", "Invoice", "Brand", "Sub-Brand", "Customer", "Product", "MRP", "Sell Price", "Sold Rate", "Qty", "Unit Claim", "Total Claim"];
+    const rows = claims.map((c) => [fmtDateExport(c.date), c.invoiceNumber, c.brand, c.subBrand, c.customer, c.productName, fmtNum(c.mrp), fmtNum(c.sellingPrice), fmtNum(c.soldRate), c.quantity, fmtNum(c.unitClaim), fmtNum(c.totalClaim)]);
+    exportToPDF({ fileName: `Claim-Report_${fmtDateExport(filters.startDate)}_to_${fmtDateExport(filters.endDate)}.pdf`, title: "Claim Report", subtitle: `${fmtDateExport(filters.startDate)} to ${fmtDateExport(filters.endDate)}`, orientation: "landscape", sheets: [{ name: "Claims", headers, rows }] });
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
         {/* Header */}
         <div className="mb-6">
-          <div className="flex items-center gap-2 mb-2">
-            <FileText className="h-6 w-6 text-teal-600" />
-            <h1 className="text-2xl font-bold text-gray-900">Claim Report</h1>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <FileText className="h-6 w-6 text-teal-600" />
+              <h1 className="text-2xl font-bold text-gray-900">Claim Report</h1>
+            </div>
+            <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={isLoading || claims.length === 0} />
           </div>
           <p className="text-gray-600">
             Track product claims based on selling price vs sold rate differences

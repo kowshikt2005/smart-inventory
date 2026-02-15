@@ -14,6 +14,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, ChevronDown, X, Calendar, Eye } from "lucide-react";
+import { ExportButtons } from "@/components/ui/ExportButtons";
+import { exportToExcel, exportToPDF, fmtNum, fmtDateExport } from "@/lib/export-utils";
 
 interface OutstandingInvoice {
   invoiceId: string;
@@ -295,15 +297,35 @@ export default function OutstandingReportPage() {
     setShowPartyDrop(false);
   };
 
+  const handleExportExcel = () => {
+    const partyLabel = tab === "customer" ? "Customer" : "Vendor";
+    const headers = [partyLabel, "Invoice No", "Invoice Date", "Due Date", "Amount", "Paid", "Outstanding", "Days Overdue", "Status"];
+    const rows = invoices.map((inv) => [inv.partyName, inv.invoiceNumber, fmtDateExport(inv.invoiceDate), fmtDateExport(inv.dueDate), inv.totalAmount, inv.paidAmount, inv.balanceAmount, inv.daysOverdue, inv.status]);
+    const dateInfo = fromDate && toDate ? `_${fmtDateExport(fromDate)}_to_${fmtDateExport(toDate)}` : "";
+    exportToExcel({ fileName: `Outstanding-Report_${tab}${dateInfo}.xlsx`, sheets: [{ name: "Outstanding", headers, rows }] });
+  };
+
+  const handleExportPDF = () => {
+    const partyLabel = tab === "customer" ? "Customer" : "Vendor";
+    const headers = [partyLabel, "Invoice No", "Inv Date", "Due Date", "Amount", "Paid", "Outstanding", "Days Overdue", "Status"];
+    const rows = invoices.map((inv) => [inv.partyName, inv.invoiceNumber, fmtDateExport(inv.invoiceDate), fmtDateExport(inv.dueDate), fmtNum(inv.totalAmount), fmtNum(inv.paidAmount), fmtNum(inv.balanceAmount), inv.daysOverdue > 0 ? `${inv.daysOverdue} days` : "-", inv.daysOverdue > 0 ? "Overdue" : inv.status === "PARTIAL" ? "Partial" : "Pending"]);
+    const dateRange = fromDate && toDate ? ` | ${fmtDateExport(fromDate)} to ${fmtDateExport(toDate)}` : fromDate ? ` | From ${fmtDateExport(fromDate)}` : toDate ? ` | Up to ${fmtDateExport(toDate)}` : "";
+    const dateFile = fromDate && toDate ? `_${fmtDateExport(fromDate)}_to_${fmtDateExport(toDate)}` : "";
+    exportToPDF({ fileName: `Outstanding-Report_${tab}${dateFile}.pdf`, title: "Outstanding Report", subtitle: `${partyLabel}s | ${selectedPartyName}${dateRange}`, sheets: [{ name: "Outstanding", headers, rows }] });
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
         {/* Header */}
-        <div className="text-center mb-4">
+        <div className="text-center mb-4 relative">
           <h1 className="text-2xl font-bold text-gray-900">Outstanding Report</h1>
           <p className="text-sm text-gray-500">
             All unpaid invoices (excluding fully paid)
           </p>
+          <div className="absolute right-0 top-0">
+            <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={isLoading || invoices.length === 0} />
+          </div>
         </div>
 
         {/* Customer / Vendor Toggle */}

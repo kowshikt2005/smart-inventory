@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { AddCustomerModal } from "@/components/customers/AddCustomerModal";
 import { Plus, MoreHorizontal, Eye, FileText, Loader2, X } from "lucide-react";
+import { ImportButton } from "@/components/import/ImportButton";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -133,13 +134,16 @@ export default function CustomersPage() {
                 </p>
               )}
             </div>
-            <Button
-              onClick={() => setShowAddModal(true)}
-              className="bg-primary hover:bg-primary/90 text-white"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Customer
-            </Button>
+            <div className="flex items-center gap-2">
+              <ImportButton entityType="CUSTOMER" entityLabel="Customers" onSuccess={() => mutate()} />
+              <Button
+                onClick={() => setShowAddModal(true)}
+                className="bg-primary hover:bg-primary/90 text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Customer
+              </Button>
+            </div>
           </div>
         </div>
 

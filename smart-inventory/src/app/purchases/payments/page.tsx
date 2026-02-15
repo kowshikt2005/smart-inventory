@@ -25,6 +25,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, MoreHorizontal, Trash2, Loader2, X, Eye, CreditCard, Wallet, Filter } from "lucide-react";
+import { ImportButton } from "@/components/import/ImportButton";
+import { ExportButtons } from "@/components/ui/ExportButtons";
+import { exportToExcel, exportToPDF, fmtDateExport, fmtNum } from "@/lib/export-utils";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -231,13 +234,47 @@ export default function VendorPaymentsPage() {
                 Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
               </Button>
             </div>
-            <Button
-              onClick={() => router.push("/purchases/payments/new")}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              New Payment
-            </Button>
+            <div className="flex items-center gap-2">
+              <ExportButtons
+                onExportExcel={() => {
+                  const vpList = data?.vendorPayments || [];
+                  const headers = ["Date", "Payment #", "Vendor", "Type", "Invoice #", "Mode", "Amount"];
+                  const rows = vpList.map((p: VendorPayment) => [
+                    fmtDateExport(p.date),
+                    p.paymentNumber,
+                    p.vendor.name,
+                    p.purchaseInvoice ? "Invoice" : "Advance",
+                    p.purchaseInvoice?.invoiceNumber || "-",
+                    p.mode,
+                    Number(p.amount),
+                  ]);
+                  exportToExcel({ fileName: "Vendor-Payments.xlsx", sheets: [{ name: "Vendor Payments", headers, rows }] });
+                }}
+                onExportPDF={() => {
+                  const vpList = data?.vendorPayments || [];
+                  const headers = ["Date", "Payment #", "Vendor", "Type", "Invoice #", "Mode", "Amount"];
+                  const rows = vpList.map((p: VendorPayment) => [
+                    fmtDateExport(p.date),
+                    p.paymentNumber,
+                    p.vendor.name,
+                    p.purchaseInvoice ? "Invoice" : "Advance",
+                    p.purchaseInvoice?.invoiceNumber || "-",
+                    p.mode,
+                    fmtNum(Number(p.amount)),
+                  ]);
+                  exportToPDF({ fileName: "Vendor-Payments.pdf", title: "Vendor Payments", subtitle: `Generated on ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, sheets: [{ name: "Vendor Payments", headers, rows }] });
+                }}
+                disabled={isLoading || (data?.vendorPayments || []).length === 0}
+              />
+              <ImportButton entityType="VENDOR_PAYMENT" entityLabel="Vendor Payments" onSuccess={() => mutate()} />
+              <Button
+                onClick={() => router.push("/purchases/payments/new")}
+                className="bg-teal-500 hover:bg-teal-600 text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New Payment
+              </Button>
+            </div>
           </div>
 
           {showFilters && (

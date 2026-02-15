@@ -35,6 +35,9 @@ import {
   Trash2,
   Filter,
 } from "lucide-react";
+import { ImportButton } from "@/components/import/ImportButton";
+import { ExportButtons } from "@/components/ui/ExportButtons";
+import { exportToExcel, exportToPDF, fmtDateExport, fmtNum } from "@/lib/export-utils";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -246,13 +249,43 @@ export default function PaymentsPage() {
                 Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
               </Button>
             </div>
-            <Button
-              onClick={() => router.push("/sales/receipts/new")}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Record Payment
-            </Button>
+            <div className="flex items-center gap-2">
+              <ExportButtons
+                onExportExcel={() => {
+                  const headers = ["Date", "Payment #", "Customer", "Mode", "Reference", "Amount"];
+                  const rows = payments.map((p: Payment) => [
+                    fmtDateExport(p.paymentDate),
+                    p.paymentNumber,
+                    p.customer.name,
+                    MODE_LABELS[p.mode] || p.mode,
+                    p.referenceNumber || "-",
+                    Number(p.amount),
+                  ]);
+                  exportToExcel({ fileName: "Payment-Receipts.xlsx", sheets: [{ name: "Payments", headers, rows }] });
+                }}
+                onExportPDF={() => {
+                  const headers = ["Date", "Payment #", "Customer", "Mode", "Reference", "Amount"];
+                  const rows = payments.map((p: Payment) => [
+                    fmtDateExport(p.paymentDate),
+                    p.paymentNumber,
+                    p.customer.name,
+                    MODE_LABELS[p.mode] || p.mode,
+                    p.referenceNumber || "-",
+                    fmtNum(Number(p.amount)),
+                  ]);
+                  exportToPDF({ fileName: "Payment-Receipts.pdf", title: "Payment Receipts", subtitle: `Generated on ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, sheets: [{ name: "Payments", headers, rows }] });
+                }}
+                disabled={isLoading || payments.length === 0}
+              />
+              <ImportButton entityType="PAYMENT" entityLabel="Payments" onSuccess={() => mutate()} />
+              <Button
+                onClick={() => router.push("/sales/receipts/new")}
+                className="bg-teal-500 hover:bg-teal-600 text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Record Payment
+              </Button>
+            </div>
           </div>
 
           {showFilters && (

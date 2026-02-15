@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { AddVendorModal } from "@/components/vendors/AddVendorModal";
 import { Plus, MoreHorizontal, Eye, FileText, Loader2, X } from "lucide-react";
+import { ImportButton } from "@/components/import/ImportButton";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -128,13 +129,16 @@ export default function VendorsPage() {
                 </p>
               )}
             </div>
-            <Button
-              onClick={() => setShowAddModal(true)}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Vendor
-            </Button>
+            <div className="flex items-center gap-2">
+              <ImportButton entityType="VENDOR" entityLabel="Vendors" onSuccess={() => mutate()} />
+              <Button
+                onClick={() => setShowAddModal(true)}
+                className="bg-teal-500 hover:bg-teal-600 text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Vendor
+              </Button>
+            </div>
           </div>
         </div>
 

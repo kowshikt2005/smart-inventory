@@ -75,6 +75,7 @@ export async function POST(
         discountPercent: body.discountPercent !== undefined
           ? parseFloat(body.discountPercent)
           : null,
+        logoUrl: body.logoUrl || null,
       },
     });
 

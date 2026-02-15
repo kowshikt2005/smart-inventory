@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Search, BookOpen } from "lucide-react";
+import { ExportButtons } from "@/components/ui/ExportButtons";
+import { exportToExcel, exportToPDF, fmtNum, fmtDateExport } from "@/lib/export-utils";
 import { useState, useEffect, useCallback } from "react";
 
 interface BankAccount {
@@ -153,13 +155,37 @@ export default function BankLedgerPage() {
     });
   };
 
+  const handleExportExcel = () => {
+    if (!entries.length || !summary || !bankAccount) return;
+    const headers = ["Date", "Particulars", "Type", "Debit (Out)", "Credit (In)", "Balance"];
+    const rows: (string | number)[][] = [];
+    rows.push([fromDate ? fmtDateExport(fromDate) : "Opening", "Opening Balance", "-", "-", "-", Math.abs(summary.openingBalance)]);
+    entries.forEach((e) => rows.push([fmtDateExport(e.date), e.description, TYPE_LABELS[e.type] || e.type, Number(e.debit) > 0 ? Number(e.debit) : "-", Number(e.credit) > 0 ? Number(e.credit) : "-", Math.abs(e.runningBalance)]));
+    rows.push(["Closing", "Closing Balance", "-", summary.totalDebit, summary.totalCredit, Math.abs(summary.closingBalance)]);
+    exportToExcel({ fileName: `Bank-Ledger_${bankAccount.accountName}.xlsx`, sheets: [{ name: "Bank Ledger", headers, rows }] });
+  };
+
+  const handleExportPDF = () => {
+    if (!entries.length || !summary || !bankAccount) return;
+    const headers = ["Date", "Particulars", "Type", "Debit (Out)", "Credit (In)", "Balance"];
+    const rows: (string | number)[][] = [];
+    rows.push([fromDate ? fmtDateExport(fromDate) : "Opening", "Opening Balance", "-", "-", "-", fmtNum(Math.abs(summary.openingBalance))]);
+    entries.forEach((e) => rows.push([fmtDateExport(e.date), e.description, TYPE_LABELS[e.type] || e.type, Number(e.debit) > 0 ? fmtNum(Number(e.debit)) : "-", Number(e.credit) > 0 ? fmtNum(Number(e.credit)) : "-", fmtNum(Math.abs(e.runningBalance))]));
+    rows.push(["Closing", "Closing Balance", "-", fmtNum(summary.totalDebit), fmtNum(summary.totalCredit), fmtNum(Math.abs(summary.closingBalance))]);
+    const dateRange = fromDate && toDate ? `${fmtDateExport(fromDate)} to ${fmtDateExport(toDate)}` : "All dates";
+    exportToPDF({ fileName: `Bank-Ledger_${bankAccount.accountName}.pdf`, title: `Bank Ledger — ${bankAccount.accountName}`, subtitle: `${bankAccount.bankName} | ${dateRange}`, sheets: [{ name: "Bank Ledger", headers, rows }] });
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Bank Ledger</h1>
-          <p className="text-gray-600">View bank account transaction history</p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Bank Ledger</h1>
+            <p className="text-gray-600">View bank account transaction history</p>
+          </div>
+          <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={entries.length === 0} />
         </div>
 
         {/* Filters */}

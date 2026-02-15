@@ -24,8 +24,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Plus, MoreHorizontal, Edit, Loader2, X } from "lucide-react";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { Plus, MoreHorizontal, Edit, Loader2, X, Camera, Upload } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 
 interface Brand {
   id: string;
@@ -37,6 +37,7 @@ interface SubBrand {
   name: string;
   brandId: string;
   discountPercent: number | null;
+  logoUrl: string | null;
   brand?: { name: string };
   createdAt: string;
   updatedAt: string;
@@ -51,9 +52,11 @@ export default function SubBrandsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSubBrand, setEditingSubBrand] = useState<SubBrand | null>(null);
-  const [newSubBrand, setNewSubBrand] = useState({ name: "", brandId: "", discountPercent: "" });
+  const [newSubBrand, setNewSubBrand] = useState({ name: "", brandId: "", discountPercent: "", logoUrl: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const itemsPerPage = 10;
 
   const fetchBrands = useCallback(async () => {
@@ -110,6 +113,37 @@ export default function SubBrandsPage() {
     fetchAllData();
   }, [fetchAllData]);
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", "brands");
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setNewSubBrand((prev) => ({ ...prev, logoUrl: data.url }));
+      } else {
+        const data = await response.json();
+        setModalError(data.error || "Failed to upload logo");
+      }
+    } catch (err) {
+      console.error("Error uploading logo:", err);
+      setModalError("Failed to upload logo");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const handleAddSubBrand = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -118,6 +152,7 @@ export default function SubBrandsPage() {
       const payload = {
         name: newSubBrand.name,
         discountPercent: newSubBrand.discountPercent ? parseFloat(newSubBrand.discountPercent) : null,
+        logoUrl: newSubBrand.logoUrl || null,
       };
 
       const response = await fetch(`/api/brands/${newSubBrand.brandId}/sub-brands`, {
@@ -128,7 +163,7 @@ export default function SubBrandsPage() {
 
       if (response.ok) {
         setShowAddModal(false);
-        setNewSubBrand({ name: "", brandId: "", discountPercent: "" });
+        setNewSubBrand({ name: "", brandId: "", discountPercent: "", logoUrl: "" });
         setModalError(null);
         fetchSubBrands();
       } else {
@@ -152,6 +187,7 @@ export default function SubBrandsPage() {
       const payload = {
         name: newSubBrand.name,
         discountPercent: newSubBrand.discountPercent ? parseFloat(newSubBrand.discountPercent) : null,
+        logoUrl: newSubBrand.logoUrl || null,
       };
 
       const response = await fetch(`/api/sub-brands/${editingSubBrand.id}`, {
@@ -163,7 +199,7 @@ export default function SubBrandsPage() {
       if (response.ok) {
         setShowAddModal(false);
         setEditingSubBrand(null);
-        setNewSubBrand({ name: "", brandId: "", discountPercent: "" });
+        setNewSubBrand({ name: "", brandId: "", discountPercent: "", logoUrl: "" });
         setModalError(null);
         fetchSubBrands();
       } else {
@@ -211,8 +247,16 @@ export default function SubBrandsPage() {
       name: subBrand.name,
       brandId: subBrand.brandId,
       discountPercent: subBrand.discountPercent ? String(subBrand.discountPercent) : "",
+      logoUrl: subBrand.logoUrl || "",
     });
     setShowAddModal(true);
+  };
+
+  const closeModal = () => {
+    setShowAddModal(false);
+    setEditingSubBrand(null);
+    setNewSubBrand({ name: "", brandId: "", discountPercent: "", logoUrl: "" });
+    setModalError(null);
   };
 
   return (
@@ -265,6 +309,9 @@ export default function SubBrandsPage() {
           <Table aria-label="Sub-brands list">
             <TableHeader>
               <TableRow className="bg-gray-50">
+                <TableHead scope="col" className="font-semibold w-16">
+                  Logo
+                </TableHead>
                 <TableHead scope="col" className="font-semibold">
                   Name
                 </TableHead>
@@ -286,7 +333,7 @@ export default function SubBrandsPage() {
               {isLoading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     className="text-center text-gray-500 py-12"
                   >
                     <div className="flex items-center justify-center gap-2">
@@ -298,7 +345,7 @@ export default function SubBrandsPage() {
               ) : error ? (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     className="text-center text-red-600 py-8"
                   >
                     <div className="space-y-2">
@@ -312,7 +359,7 @@ export default function SubBrandsPage() {
               ) : paginatedSubBrands.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     className="text-center text-gray-500 py-8"
                   >
                     {searchQuery
@@ -323,6 +370,19 @@ export default function SubBrandsPage() {
               ) : (
                 paginatedSubBrands.map((subBrand) => (
                   <TableRow key={subBrand.id}>
+                    <TableCell>
+                      {subBrand.logoUrl ? (
+                        <img
+                          src={subBrand.logoUrl}
+                          alt={`${subBrand.name} logo`}
+                          className="w-8 h-8 rounded object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
+                          <Camera className="h-4 w-4 text-gray-400" />
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="font-medium">{subBrand.name}</TableCell>
                     <TableCell>{subBrand.brand?.name}</TableCell>
                     <TableCell className="text-center">
@@ -404,16 +464,7 @@ export default function SubBrandsPage() {
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold">{editingSubBrand ? "Edit Sub-brand" : "Add New Sub-brand"}</h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setEditingSubBrand(null);
-                    setNewSubBrand({ name: "", brandId: "", discountPercent: "" });
-                    setModalError(null);
-                  }}
-                >
+                <Button variant="ghost" size="sm" onClick={closeModal}>
                   <X className="h-4 w-4" />
                 </Button>
               </div>
@@ -422,12 +473,69 @@ export default function SubBrandsPage() {
               </p>
 
               {modalError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
+                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm mb-4">
                   {modalError}
                 </div>
               )}
 
               <div className="space-y-4">
+                {/* Logo Upload */}
+                <div>
+                  <label className="block text-sm font-medium mb-1">Logo</label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                  />
+                  {newSubBrand.logoUrl ? (
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={newSubBrand.logoUrl}
+                        alt="Sub-brand logo preview"
+                        className="w-16 h-16 rounded object-cover border"
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isUploading}
+                        >
+                          Change
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setNewSubBrand((prev) => ({ ...prev, logoUrl: "" }))}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center gap-2 hover:border-teal-400 hover:bg-teal-50/50 transition-colors cursor-pointer"
+                    >
+                      {isUploading ? (
+                        <Loader2 className="h-6 w-6 text-gray-400 animate-spin" />
+                      ) : (
+                        <Upload className="h-6 w-6 text-gray-400" />
+                      )}
+                      <span className="text-sm text-gray-500">
+                        {isUploading ? "Uploading..." : "Click to upload logo"}
+                      </span>
+                    </button>
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium mb-1">Name <span className="text-red-500">*</span></label>
                   <Input
@@ -490,21 +598,13 @@ export default function SubBrandsPage() {
               </div>
 
               <div className="flex justify-end gap-2 mt-6">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setEditingSubBrand(null);
-                    setNewSubBrand({ name: "", brandId: "", discountPercent: "" });
-                    setModalError(null);
-                  }}
-                >
+                <Button variant="outline" onClick={closeModal}>
                   Cancel
                 </Button>
                 <Button
                   onClick={editingSubBrand ? handleUpdateSubBrand : handleAddSubBrand}
                   className="bg-teal-500 hover:bg-teal-600"
-                  disabled={!newSubBrand.name.trim() || (!editingSubBrand && !newSubBrand.brandId) || isSubmitting}
+                  disabled={!newSubBrand.name.trim() || (!editingSubBrand && !newSubBrand.brandId) || isSubmitting || isUploading}
                 >
                   {isSubmitting ? (editingSubBrand ? "Updating..." : "Saving...") : (editingSubBrand ? "Update Sub-brand" : "Save Sub-brand")}
                 </Button>

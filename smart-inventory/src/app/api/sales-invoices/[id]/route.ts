@@ -38,6 +38,7 @@ export async function GET(
                 hsnCode: true,
                 gstRate: true,
                 sellingPrice: true,
+                mrp: true,
               },
             },
           },

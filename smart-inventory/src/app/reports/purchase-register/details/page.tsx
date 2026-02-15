@@ -6,6 +6,8 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Loader2, ArrowLeft, ExternalLink } from "lucide-react";
+import { ExportButtons } from "@/components/ui/ExportButtons";
+import { exportToExcel, exportToPDF, fmtNum, fmtDateExport } from "@/lib/export-utils";
 
 interface Invoice {
   id: string;
@@ -121,6 +123,64 @@ function PurchaseRegisterDetailsContent() {
     return `${d}/${m}/${y}`;
   };
 
+  const handleExportExcel = () => {
+    if (!data) return;
+    const sheets = [];
+    if (data.invoices.length > 0) {
+      sheets.push({
+        name: "Invoices",
+        headers: ["Date", "Trans No", "Contact", "Taxable Amt", "Tax Amt", "RoundOff", "Total Amt", "Status"],
+        rows: data.invoices.map((inv) => [fmtDateExport(inv.date), inv.number, inv.vendorName, inv.taxableAmount, inv.taxAmount, inv.roundOff, inv.amount, inv.status]),
+      });
+    }
+    if (data.payments.length > 0) {
+      sheets.push({
+        name: "Vendor Payments",
+        headers: ["Date", "Payment No", "Vendor", "Mode", "Reference", "Amount"],
+        rows: data.payments.map((p) => [fmtDateExport(p.date), p.number, p.vendorName, p.mode, p.reference || "-", p.amount]),
+      });
+    }
+    if (data.returns.length > 0) {
+      sheets.push({
+        name: "Returns",
+        headers: ["Date", "Return No", "Vendor", "Amount", "Status"],
+        rows: data.returns.map((r) => [fmtDateExport(r.date), r.number, r.vendorName, r.amount, r.status]),
+      });
+    }
+    if (sheets.length > 0) {
+      exportToExcel({ fileName: `Purchase-Register-Details_${monthName}-${year}.xlsx`, sheets });
+    }
+  };
+
+  const handleExportPDF = () => {
+    if (!data) return;
+    const sheets = [];
+    if (data.invoices.length > 0) {
+      sheets.push({
+        name: "Invoices",
+        headers: ["Date", "Trans No", "Contact", "Taxable Amt", "Tax Amt", "RoundOff", "Total Amt", "Status"],
+        rows: data.invoices.map((inv) => [fmtDateExport(inv.date), inv.number, inv.vendorName, fmtNum(inv.taxableAmount), fmtNum(inv.taxAmount), fmtNum(inv.roundOff), fmtNum(inv.amount), inv.status]),
+      });
+    }
+    if (data.payments.length > 0) {
+      sheets.push({
+        name: "Vendor Payments",
+        headers: ["Date", "Payment No", "Vendor", "Mode", "Reference", "Amount"],
+        rows: data.payments.map((p) => [fmtDateExport(p.date), p.number, p.vendorName, p.mode, p.reference || "-", fmtNum(p.amount)]),
+      });
+    }
+    if (data.returns.length > 0) {
+      sheets.push({
+        name: "Returns",
+        headers: ["Date", "Return No", "Vendor", "Amount", "Status"],
+        rows: data.returns.map((r) => [fmtDateExport(r.date), r.number, r.vendorName, fmtNum(r.amount), r.status]),
+      });
+    }
+    if (sheets.length > 0) {
+      exportToPDF({ fileName: `Purchase-Register-Details_${monthName}-${year}.pdf`, title: "Purchase Register - Detailed View", subtitle: `${monthName} ${year}`, sheets });
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
@@ -130,12 +190,13 @@ function PurchaseRegisterDetailsContent() {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-bold text-gray-900">Purchase Register</h1>
             <p className="text-sm text-gray-500">
               {monthName} {year} - Detailed View
             </p>
           </div>
+          <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={!data} />
         </div>
 
         {isLoading ? (

@@ -77,6 +77,7 @@ export async function POST(request: Request) {
       data: {
         name: body.name,
         discountPercent: body.discountPercent !== undefined ? parseFloat(body.discountPercent) : null,
+        logoUrl: body.logoUrl || null,
       },
     });
 

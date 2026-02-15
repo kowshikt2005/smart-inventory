@@ -30,6 +30,8 @@ import {
   Eye,
   ChevronRight,
 } from "lucide-react";
+import { ExportButtons } from "@/components/ui/ExportButtons";
+import { exportToExcel, exportToPDF, fmtNum, fmtDateExport } from "@/lib/export-utils";
 
 interface OrderItem {
   id: string;
@@ -152,17 +154,49 @@ export default function BilledUnbilledReportPage() {
     setExpandedOrder(expandedOrder === orderId ? null : orderId);
   };
 
+  const handleExportExcel = () => {
+    const headers = type === "billed"
+      ? ["Order No", "Order Date", "Customer", "Items", "Order Amt", "Invoiced", "Pending", "Status"]
+      : ["Order No", "Order Date", "Customer", "Items", "Order Amt", "Status"];
+    const rows = orders.map((o) => {
+      const base = [o.orderNumber, fmtDateExport(o.orderDate), o.customer.name, o.itemCount, o.totalAmount];
+      if (type === "billed") base.push(o.invoicedAmount, o.pendingAmount);
+      base.push(o.status);
+      return base;
+    });
+    const dateInfo = fromDate && toDate ? `_${fmtDateExport(fromDate)}_to_${fmtDateExport(toDate)}` : "";
+    exportToExcel({ fileName: `Billed-Unbilled_${type}${dateInfo}.xlsx`, sheets: [{ name: type === "billed" ? "Billed Orders" : "Unbilled Orders", headers, rows }] });
+  };
+
+  const handleExportPDF = () => {
+    const headers = type === "billed"
+      ? ["Order No", "Date", "Customer", "Items", "Amount", "Invoiced", "Pending", "Status"]
+      : ["Order No", "Date", "Customer", "Items", "Amount", "Status"];
+    const rows = orders.map((o) => {
+      const base: (string | number)[] = [o.orderNumber, fmtDateExport(o.orderDate), o.customer.name, o.itemCount, fmtNum(o.totalAmount)];
+      if (type === "billed") { base.push(fmtNum(o.invoicedAmount)); base.push(fmtNum(o.pendingAmount)); }
+      base.push(o.status);
+      return base;
+    });
+    const dateRange = fromDate && toDate ? `${fmtDateExport(fromDate)} to ${fmtDateExport(toDate)}` : fromDate ? `From ${fmtDateExport(fromDate)}` : toDate ? `Up to ${fmtDateExport(toDate)}` : `As of ${new Date().toLocaleDateString("en-IN")}`;
+    const dateFile = fromDate && toDate ? `_${fmtDateExport(fromDate)}_to_${fmtDateExport(toDate)}` : "";
+    exportToPDF({ fileName: `Billed-Unbilled_${type}${dateFile}.pdf`, title: `${type === "billed" ? "Billed" : "Unbilled"} Orders Report`, subtitle: dateRange, sheets: [{ name: type === "billed" ? "Billed" : "Unbilled", headers, rows }] });
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
         {/* Header */}
-        <div className="text-center mb-4">
+        <div className="text-center mb-4 relative">
           <h1 className="text-2xl font-bold text-gray-900">
             Billed & Unbilled Report
           </h1>
           <p className="text-sm text-gray-500">
             Track sales orders that are billed (invoiced) or pending billing
           </p>
+          <div className="absolute right-0 top-0">
+            <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={isLoading || orders.length === 0} />
+          </div>
         </div>
 
         {/* Summary Cards */}

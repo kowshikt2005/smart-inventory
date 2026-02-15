@@ -84,6 +84,7 @@ export async function PUT(
         discountPercent: body.discountPercent !== undefined
           ? (body.discountPercent === null ? null : parseFloat(body.discountPercent))
           : existingSubBrand.discountPercent,
+        logoUrl: body.logoUrl !== undefined ? (body.logoUrl || null) : existingSubBrand.logoUrl,
       },
     });
 
