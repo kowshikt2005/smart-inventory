@@ -13,6 +13,7 @@ model User {
   email              String               @unique
   name               String
   password           String
+  phone              String?              @unique
   googleId           String?              @unique
   role               UserRole             @default(SALESMAN)
   isActive           Boolean              @default(true)

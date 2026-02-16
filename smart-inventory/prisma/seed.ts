@@ -63,6 +63,7 @@ async function main() {
       email: 'admin@example.com',
       name: 'Admin User',
       password: hashedPassword,
+      phone: '+918639347263',
       role: 'ADMIN',
     },
   });
@@ -72,6 +73,7 @@ async function main() {
       email: 'salesman@example.com',
       name: 'John Sales',
       password: hashedPassword,
+      phone: '+919030437915',
       role: 'SALESMAN',
     },
   });
@@ -2619,8 +2621,8 @@ async function main() {
   console.log('  - Ledger Entries: All synced');
   console.log('\n🔐 Test Login Credentials:');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('Admin: admin@example.com / password123');
-  console.log('Salesman: salesman@example.com / password123');
+  console.log('Admin:    admin@example.com / password123    | Phone OTP: +918639347263');
+  console.log('Salesman: salesman@example.com / password123 | Phone OTP: +919030437915');
 }
 
 main()

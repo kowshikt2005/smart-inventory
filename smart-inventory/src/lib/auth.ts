@@ -3,10 +3,12 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { db } from "@/lib/db";
 import { verifyPassword } from "@/lib/auth-utils";
+import { verifyOTP } from "@/lib/otp";
 
 export const authConfig: NextAuthConfig = {
   providers: [
     CredentialsProvider({
+      id: "credentials",
       name: "credentials",
       credentials: {
         email: { label: "Email", type: "email" },
@@ -39,6 +41,54 @@ export const authConfig: NextAuthConfig = {
           };
         } catch (error) {
           console.error("Auth error:", error);
+          return null;
+        }
+      }
+    }),
+    CredentialsProvider({
+      id: "phone-otp",
+      name: "Phone OTP",
+      credentials: {
+        phone: { label: "Phone", type: "tel" },
+        otp: { label: "OTP", type: "text" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.phone || !credentials?.otp) {
+          return null;
+        }
+
+        try {
+          const isValid = await verifyOTP(
+            credentials.phone as string,
+            credentials.otp as string
+          );
+
+          if (!isValid) {
+            return null;
+          }
+
+          // Normalize phone for lookup
+          let normalizedPhone = (credentials.phone as string).replace(/[\s-]/g, "");
+          if (!normalizedPhone.startsWith("+")) {
+            normalizedPhone = "+91" + normalizedPhone;
+          }
+
+          const user = await db.user.findUnique({
+            where: { phone: normalizedPhone },
+          });
+
+          if (!user || !user.isActive) {
+            return null;
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+          };
+        } catch (error) {
+          console.error("Phone OTP auth error:", error);
           return null;
         }
       }
