@@ -17,6 +17,10 @@ interface Item {
   hsnCode: string | null;
   gstRate: number;
   sellingPrice: number;
+  brandId?: string | null;
+  subBrandId?: string | null;
+  brand?: { id: string; name: string } | null;
+  subBrand?: { id: string; name: string } | null;
 }
 
 interface InvoiceItemData {
@@ -45,6 +49,9 @@ function EditSalesInvoiceContent() {
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItemData[]>([]);
   const [, setIsLoadingItems] = useState(false);
   const [isLoadingInvoice, setIsLoadingInvoice] = useState(true);
+
+  const [filterBrandId, setFilterBrandId] = useState("");
+  const [filterSubBrandId, setFilterSubBrandId] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -232,6 +239,41 @@ function EditSalesInvoiceContent() {
 
   const usedItemIds = useMemo(() => new Set(invoiceItems.map((item) => item.itemId).filter(Boolean)), [invoiceItems]);
 
+  // Derive unique brands from items
+  const uniqueBrands = useMemo(() => {
+    const seen = new Set<string>();
+    const brands: { id: string; name: string }[] = [];
+    for (const item of items) {
+      if (item.brand && !seen.has(item.brand.id)) {
+        seen.add(item.brand.id);
+        brands.push(item.brand);
+      }
+    }
+    return brands.sort((a, b) => a.name.localeCompare(b.name));
+  }, [items]);
+
+  // Sub-brands for selected brand
+  const filteredSubBrands = useMemo(() => {
+    const seen = new Set<string>();
+    const subBrands: { id: string; name: string }[] = [];
+    for (const item of items) {
+      if (filterBrandId && item.brandId !== filterBrandId) continue;
+      if (item.subBrand && !seen.has(item.subBrand.id)) {
+        seen.add(item.subBrand.id);
+        subBrands.push(item.subBrand);
+      }
+    }
+    return subBrands.sort((a, b) => a.name.localeCompare(b.name));
+  }, [items, filterBrandId]);
+
+  // Items filtered by brand/sub-brand selection
+  const filteredItems = useMemo(() => {
+    let result = items;
+    if (filterBrandId) result = result.filter((i) => i.brandId === filterBrandId);
+    if (filterSubBrandId) result = result.filter((i) => i.subBrandId === filterSubBrandId);
+    return result;
+  }, [items, filterBrandId, filterSubBrandId]);
+
   if (!editId) {
     return null;
   }
@@ -300,8 +342,45 @@ function EditSalesInvoiceContent() {
               </Button>
             </div>
 
+            {/* Brand / Sub-brand filter */}
+            {uniqueBrands.length > 0 && (
+              <div className="flex gap-3 mb-4">
+                <select
+                  value={filterBrandId}
+                  onChange={(e) => { setFilterBrandId(e.target.value); setFilterSubBrandId(""); }}
+                  className="flex-1 h-9 rounded-md border border-gray-200 px-3 text-sm bg-white"
+                >
+                  <option value="">All Brands</option>
+                  {uniqueBrands.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={filterSubBrandId}
+                  onChange={(e) => setFilterSubBrandId(e.target.value)}
+                  disabled={filteredSubBrands.length === 0}
+                  className="flex-1 h-9 rounded-md border border-gray-200 px-3 text-sm bg-white disabled:opacity-50"
+                >
+                  <option value="">All Sub-brands</option>
+                  {filteredSubBrands.map((sb) => (
+                    <option key={sb.id} value={sb.id}>{sb.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="space-y-3">
-              {invoiceItems.map((invoiceItem, index) => (
+              {invoiceItems.map((invoiceItem, index) => {
+                // Show filtered items but always include the currently selected item
+                const rowItems = filterBrandId || filterSubBrandId
+                  ? [
+                      ...filteredItems,
+                      ...(invoiceItem.itemId && !filteredItems.find(i => i.id === invoiceItem.itemId)
+                        ? items.filter(i => i.id === invoiceItem.itemId)
+                        : []),
+                    ]
+                  : items;
+                return (
                 <div key={invoiceItem.id} className="grid grid-cols-12 gap-2 items-end">
                   <div className="col-span-4">
                     {index === 0 && (
@@ -313,7 +392,7 @@ function EditSalesInvoiceContent() {
                       className="w-full h-10 rounded-md border border-gray-200 px-3 text-sm"
                     >
                       <option value="">Select item...</option>
-                      {items.map((item) => (
+                      {rowItems.map((item) => (
                         <option
                           key={item.id}
                           value={item.id}
@@ -385,7 +464,8 @@ function EditSalesInvoiceContent() {
                     </Button>
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
 
             {/* Totals */}

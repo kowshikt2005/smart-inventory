@@ -9,7 +9,7 @@ import {
 import { formatINR } from "@/lib/gst-report-utils";
 import { CalendarDays, Loader2, AlertCircle } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
 
 interface GSTR9Data {
   financialYear: string;
@@ -75,25 +75,27 @@ export default function GSTR9Page() {
     fetchData();
   }, [period.fy]);
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!data) return;
+    const { company } = await fetchCompanySettings();
     const sheets = [
       { name: "Part II - Outward", headers: ["Description", "Count", "Value", "Taxable Value", "CGST", "SGST"], rows: [["Total Sales", data.partII.totalSales.count, data.partII.totalSales.value, data.partII.totalSales.taxableValue, data.partII.totalSales.cgst, data.partII.totalSales.sgst], ["B2B Sales", data.partII.b2b.count, data.partII.b2b.value, "", "", ""], ["B2C Sales", data.partII.b2c.count, data.partII.b2c.value, "", "", ""], ["Credit Notes", data.partII.creditNotes.count, data.partII.creditNotes.value, "", "", data.partII.creditNotes.tax], ["Net Outward", "", data.partII.netOutward.value, "", "", data.partII.netOutward.tax]] },
       { name: "Part III - ITC", headers: ["Description", "Count", "Value", "Taxable Value", "CGST", "SGST"], rows: [["Total Purchases", data.partIII.totalPurchases.count, data.partIII.totalPurchases.value, data.partIII.totalPurchases.taxableValue, data.partIII.totalPurchases.cgst, data.partIII.totalPurchases.sgst], ["Debit Notes", data.partIII.debitNotes.count, data.partIII.debitNotes.value, "", "", data.partIII.debitNotes.tax], ["Net ITC", "", "", "", data.partIII.netITC.cgst, data.partIII.netITC.sgst]] },
       { name: "Part IV - Tax Payable", headers: ["Description", "CGST", "SGST", "Total"], rows: [["Output Tax", data.partIV.output.cgst, data.partIV.output.sgst, data.partIV.output.cgst + data.partIV.output.sgst], ["Less: ITC", data.partIV.input.cgst, data.partIV.input.sgst, data.partIV.input.cgst + data.partIV.input.sgst], ["Net Tax Payable", data.partIV.net.cgst, data.partIV.net.sgst, data.partIV.net.total]] },
       { name: "Monthly Breakdown", headers: ["Month", "Sales Value", "Sales Tax", "Purchase Value", "Purchase Tax", "Net Tax"], rows: data.monthly.map((r) => [r.month, r.salesValue, r.salesTax, r.purchaseValue, r.purchaseTax, r.netTax]) },
     ];
-    exportToExcel({ fileName: `GSTR-9_FY-${period.fy}.xlsx`, sheets });
+    exportToExcel({ fileName: `GSTR-9_FY-${period.fy}.xlsx`, sheets, company });
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!data) return;
+    const { company } = await fetchCompanySettings();
     const sheets = [
       { name: "Part II — Outward Supplies", headers: ["Description", "Count", "Value", "Taxable", "CGST", "SGST"], rows: [["Total Sales", data.partII.totalSales.count, fmtNum(data.partII.totalSales.value), fmtNum(data.partII.totalSales.taxableValue), fmtNum(data.partII.totalSales.cgst), fmtNum(data.partII.totalSales.sgst)], ["B2B Sales", data.partII.b2b.count, fmtNum(data.partII.b2b.value), "", "", ""], ["B2C Sales", data.partII.b2c.count, fmtNum(data.partII.b2c.value), "", "", ""], ["Credit Notes", data.partII.creditNotes.count, fmtNum(data.partII.creditNotes.value), "", "", fmtNum(data.partII.creditNotes.tax)], ["Net Outward", "", fmtNum(data.partII.netOutward.value), "", "", fmtNum(data.partII.netOutward.tax)]] },
       { name: "Part IV — Tax Payable", headers: ["Description", "CGST", "SGST", "Total"], rows: [["Output Tax", fmtNum(data.partIV.output.cgst), fmtNum(data.partIV.output.sgst), fmtNum(data.partIV.output.cgst + data.partIV.output.sgst)], ["Less: ITC", fmtNum(data.partIV.input.cgst), fmtNum(data.partIV.input.sgst), fmtNum(data.partIV.input.cgst + data.partIV.input.sgst)], ["Net Tax", fmtNum(data.partIV.net.cgst), fmtNum(data.partIV.net.sgst), fmtNum(data.partIV.net.total)]] },
       { name: "Monthly Breakdown", headers: ["Month", "Sales Value", "Sales Tax", "Purchase Value", "Purchase Tax", "Net Tax"], rows: data.monthly.map((r) => [r.month, fmtNum(r.salesValue), fmtNum(r.salesTax), fmtNum(r.purchaseValue), fmtNum(r.purchaseTax), fmtNum(r.netTax)]) },
     ];
-    exportToPDF({ fileName: `GSTR-9_FY-${period.fy}.pdf`, title: "GSTR-9 — Annual Return", subtitle: `Financial Year ${period.fy}`, sheets });
+    exportToPDF({ fileName: `GSTR-9_FY-${period.fy}.pdf`, title: "GSTR-9 — Annual Return", subtitle: `Financial Year ${period.fy}`, sheets, company });
   };
 
   return (

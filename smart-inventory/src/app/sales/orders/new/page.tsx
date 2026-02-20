@@ -63,6 +63,8 @@ interface Item {
   discountPercent?: number | null;
   brandId?: string | null;
   subBrandId?: string | null;
+  brand?: { id: string; name: string } | null;
+  subBrand?: { id: string; name: string } | null;
   inventory?: {
     physicalStock: number;
     reservedQuantity: number;
@@ -192,8 +194,14 @@ function NewSalesOrderPageContent() {
           try {
             const customerResponse = await fetch(`/api/customers/${order.customer.id}`);
             if (customerResponse.ok) {
-              const fullCustomer = await customerResponse.json();
-              setSelectedCustomer(fullCustomer);
+              const raw = await customerResponse.json();
+              const entries: Array<{ rateSheet: Customer["rateSheet"] & { createdAt?: string } }> = raw.rateSheets || [];
+              const sorted = [...entries].sort((a, b) => {
+                const aDate = new Date(a.rateSheet?.createdAt || 0).getTime();
+                const bDate = new Date(b.rateSheet?.createdAt || 0).getTime();
+                return bDate - aDate;
+              });
+              setSelectedCustomer({ ...raw, rateSheet: sorted.length > 0 ? sorted[0].rateSheet : null });
             } else {
               setSelectedCustomer(order.customer);
             }
@@ -395,12 +403,23 @@ function NewSalesOrderPageContent() {
 
   // Handle customer selection
   const handleCustomerSelect = async (customer: Customer) => {
-    // Fetch customer with rate sheet
+    // Fetch customer with rate sheet and normalize the shape
     let fullCustomer = customer;
     try {
       const response = await fetch(`/api/customers/${customer.id}`);
       if (response.ok) {
-        fullCustomer = await response.json();
+        const raw = await response.json();
+        // API returns rateSheets[] (join table), but pricing logic expects rateSheet (singular)
+        const entries: Array<{ rateSheet: Customer["rateSheet"] & { createdAt?: string } }> = raw.rateSheets || [];
+        const sorted = [...entries].sort((a, b) => {
+          const aDate = new Date(a.rateSheet?.createdAt || 0).getTime();
+          const bDate = new Date(b.rateSheet?.createdAt || 0).getTime();
+          return bDate - aDate;
+        });
+        fullCustomer = {
+          ...raw,
+          rateSheet: sorted.length > 0 ? sorted[0].rateSheet : null,
+        };
       }
     } catch {
       // Use the customer as-is if fetch fails

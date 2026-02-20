@@ -1,22 +1,25 @@
-import { redis } from "@/lib/redis";
+import { timingSafeEqual } from "crypto";
+import { cache } from "@/lib/cache";
 import twilio from "twilio";
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 
-const OTP_EXPIRY_SECONDS = 300; // 5 minutes
+const OTP_EXPIRY_SECONDS = 300;     // 5 minutes
+const OTP_ATTEMPTS_EXPIRY = 900;    // 15 minutes (send rate limit window)
+const MAX_OTP_SEND_ATTEMPTS = 5;    // max OTP sends per window
+const MAX_OTP_VERIFY_ATTEMPTS = 5;  // max wrong guesses before OTP is burned
+
 const OTP_PREFIX = "otp:";
-const OTP_ATTEMPTS_PREFIX = "otp_attempts:";
-const MAX_OTP_ATTEMPTS = 5;
+const OTP_SEND_ATTEMPTS_PREFIX = "otp_send_attempts:";
+const OTP_VERIFY_ATTEMPTS_PREFIX = "otp_verify_attempts:";
 
 // SMS Provider: "dev" (console log), "twilio", or "sns" (AWS SNS)
 const SMS_PROVIDER = process.env.SMS_PROVIDER || "dev";
 
-// Twilio client (only initialized if using twilio)
 const twilioClient =
   SMS_PROVIDER === "twilio"
     ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
     : null;
 
-// AWS SNS client (only initialized if using sns)
 const snsClient =
   SMS_PROVIDER === "sns"
     ? new SNSClient({
@@ -33,12 +36,14 @@ function generateOTP(): string {
 }
 
 function normalizePhone(phone: string): string {
-  // Remove spaces and dashes, ensure +91 prefix for Indian numbers
-  let cleaned = phone.replace(/[\s-]/g, "");
-  if (!cleaned.startsWith("+")) {
-    cleaned = "+91" + cleaned;
+  if (typeof phone !== "string" || phone.length > 20) {
+    throw new Error("Invalid phone number");
   }
-  return cleaned;
+  const cleaned = phone.replace(/[\s\-().]/g, "");
+  if (!/^\+?\d{7,15}$/.test(cleaned)) {
+    throw new Error("Invalid phone number format");
+  }
+  return cleaned.startsWith("+") ? cleaned : "+91" + cleaned;
 }
 
 async function sendSMS(phone: string, message: string): Promise<void> {
@@ -87,49 +92,72 @@ async function sendSMS(phone: string, message: string): Promise<void> {
 }
 
 export async function sendOTP(phone: string): Promise<{ success: boolean; error?: string }> {
-  const normalizedPhone = normalizePhone(phone);
+  let normalizedPhone: string;
+  try {
+    normalizedPhone = normalizePhone(phone);
+  } catch {
+    return { success: false, error: "Invalid phone number format" };
+  }
 
-  // Check rate limiting
-  const attemptsKey = `${OTP_ATTEMPTS_PREFIX}${normalizedPhone}`;
-  const attempts = await redis.get(attemptsKey);
-  if (attempts && parseInt(attempts) >= MAX_OTP_ATTEMPTS) {
+  // Check send rate limit
+  const sendAttemptsKey = `${OTP_SEND_ATTEMPTS_PREFIX}${normalizedPhone}`;
+  const attempts = cache.get<number>(sendAttemptsKey) ?? 0;
+  if (attempts >= MAX_OTP_SEND_ATTEMPTS) {
     return { success: false, error: "Too many OTP requests. Please try again later." };
   }
 
   const otp = generateOTP();
   const otpKey = `${OTP_PREFIX}${normalizedPhone}`;
+  const verifyAttemptsKey = `${OTP_VERIFY_ATTEMPTS_PREFIX}${normalizedPhone}`;
 
-  // Store OTP in Redis with expiry
-  await redis.set(otpKey, otp, "EX", OTP_EXPIRY_SECONDS);
-
-  // Increment attempt counter (expires in 15 minutes)
-  await redis.incr(attemptsKey);
-  await redis.expire(attemptsKey, 900);
+  // Store OTP and reset verify-attempt counter for the new OTP
+  cache.set(otpKey, otp, OTP_EXPIRY_SECONDS);
+  cache.set(sendAttemptsKey, attempts + 1, OTP_ATTEMPTS_EXPIRY);
+  cache.delete(verifyAttemptsKey); // reset on new OTP issue
 
   try {
-    await sendSMS(
-      normalizedPhone,
-      `Your Smart Inventory login OTP is: ${otp}. Valid for 5 minutes.`
-    );
+    await sendSMS(normalizedPhone, `Your Smart Inventory login OTP is: ${otp}. Valid for 5 minutes.`);
     return { success: true };
   } catch (error) {
-    console.error(`${SMS_PROVIDER} SMS error:`, error);
-    // Remove the stored OTP if SMS fails
-    await redis.del(otpKey);
+    console.error(`${SMS_PROVIDER} SMS error:`, error instanceof Error ? error.message : error);
+    cache.delete(otpKey);
     return { success: false, error: "Failed to send OTP. Please try again." };
   }
 }
 
 export async function verifyOTP(phone: string, otp: string): Promise<boolean> {
-  const normalizedPhone = normalizePhone(phone);
-  const otpKey = `${OTP_PREFIX}${normalizedPhone}`;
-
-  const storedOTP = await redis.get(otpKey);
-  if (!storedOTP || storedOTP !== otp) {
+  let normalizedPhone: string;
+  try {
+    normalizedPhone = normalizePhone(phone);
+  } catch {
     return false;
   }
 
-  // OTP is valid - delete it so it can't be reused
-  await redis.del(otpKey);
+  const otpKey = `${OTP_PREFIX}${normalizedPhone}`;
+  const sendAttemptsKey = `${OTP_SEND_ATTEMPTS_PREFIX}${normalizedPhone}`;
+  const verifyAttemptsKey = `${OTP_VERIFY_ATTEMPTS_PREFIX}${normalizedPhone}`;
+
+  const storedOTP = cache.get<string>(otpKey);
+  if (!storedOTP) return false;
+
+  // Constant-time comparison to prevent timing attacks
+  const match =
+    storedOTP.length === otp.length &&
+    timingSafeEqual(Buffer.from(storedOTP), Buffer.from(otp));
+
+  if (!match) {
+    // Increment verify-attempt counter; burn OTP after max failures
+    const verifyAttempts = (cache.get<number>(verifyAttemptsKey) ?? 0) + 1;
+    cache.set(verifyAttemptsKey, verifyAttempts, OTP_EXPIRY_SECONDS);
+    if (verifyAttempts >= MAX_OTP_VERIFY_ATTEMPTS) {
+      cache.delete(otpKey); // burn the OTP after too many wrong guesses
+    }
+    return false;
+  }
+
+  // Consume OTP and clear all rate-limit counters on success
+  cache.delete(otpKey);
+  cache.delete(sendAttemptsKey);
+  cache.delete(verifyAttemptsKey);
   return true;
 }

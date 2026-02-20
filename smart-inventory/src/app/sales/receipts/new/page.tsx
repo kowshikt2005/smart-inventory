@@ -124,7 +124,7 @@ function NewPaymentContent() {
   useEffect(() => {
     const fetchCustomers = async () => {
       try {
-        const response = await fetch("/api/customers?limit=1000");
+        const response = await fetch("/api/customers?limit=1000&activeOnly=true");
         if (!response.ok) throw new Error("Failed to fetch customers");
         const data = await response.json();
         setCustomers(data.customers || []);

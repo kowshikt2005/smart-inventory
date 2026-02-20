@@ -39,11 +39,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      verified: true,
-      userId: user.id,
-    });
+    return NextResponse.json({ success: true, verified: true });
   } catch (error) {
     console.error("Verify OTP error:", error);
     return NextResponse.json(

@@ -22,7 +22,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Search, BookOpen, Users, Truck } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fmtDateExport } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
@@ -99,7 +99,7 @@ export default function LedgerPage() {
     const fetchParties = async () => {
       setIsLoadingParties(true);
       try {
-        const endpoint = mode === "customer" ? "/api/customers?limit=1000" : "/api/vendors?limit=1000";
+        const endpoint = mode === "customer" ? "/api/customers?limit=1000&activeOnly=true" : "/api/vendors?limit=1000&activeOnly=true";
         const response = await fetch(endpoint);
         if (response.ok) {
           const data = await response.json();
@@ -219,25 +219,27 @@ export default function LedgerPage() {
     return balance >= 0 ? "text-red-600" : "text-green-600";
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!entries.length || !summary || !party) return;
+    const { company } = await fetchCompanySettings();
     const headers = ["Date", "Particulars", "Type", "Reference", "Mode / Bank", "Debit", "Credit", "Balance"];
     const rows: (string | number)[][] = [];
     rows.push([fromDate ? fmtDateExport(fromDate) : "Opening", "Opening Balance", "-", "-", "-", "-", "-", `${Math.abs(summary.openingBalance).toFixed(2)} ${summary.openingBalance >= 0 ? (mode === "customer" ? "Dr" : "Cr") : (mode === "customer" ? "Cr" : "Dr")}`]);
     entries.forEach((e) => rows.push([fmtDateExport(e.date), e.description, typeLabels[e.type] || e.type, e.referenceNumber || "-", e.bankDetails || "-", Number(e.debit) > 0 ? Number(e.debit) : "-", Number(e.credit) > 0 ? Number(e.credit) : "-", `${Math.abs(e.runningBalance).toFixed(2)} ${e.runningBalance >= 0 ? (mode === "customer" ? "Dr" : "Cr") : (mode === "customer" ? "Cr" : "Dr")}`]));
     rows.push(["Closing", "Closing Balance", "-", "-", "-", summary.totalDebit, summary.totalCredit, `${Math.abs(summary.closingBalance).toFixed(2)} ${summary.closingBalance >= 0 ? (mode === "customer" ? "Dr" : "Cr") : (mode === "customer" ? "Cr" : "Dr")}`]);
-    exportToExcel({ fileName: `Ledger_${party.name}.xlsx`, sheets: [{ name: `${mode === "customer" ? "Customer" : "Vendor"} Ledger`, headers, rows }] });
+    exportToExcel({ fileName: `Ledger_${party.name}.xlsx`, sheets: [{ name: `${mode === "customer" ? "Customer" : "Vendor"} Ledger`, headers, rows }], company });
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!entries.length || !summary || !party) return;
+    const { company } = await fetchCompanySettings();
     const headers = ["Date", "Particulars", "Type", "Reference", "Mode/Bank", "Debit", "Credit", "Balance"];
     const rows: (string | number)[][] = [];
     rows.push([fromDate ? fmtDateExport(fromDate) : "Opening", "Opening Balance", "-", "-", "-", "-", "-", `${fmtNum(Math.abs(summary.openingBalance))} ${summary.openingBalance >= 0 ? (mode === "customer" ? "Dr" : "Cr") : (mode === "customer" ? "Cr" : "Dr")}`]);
     entries.forEach((e) => rows.push([fmtDateExport(e.date), e.description, typeLabels[e.type] || e.type, e.referenceNumber || "-", e.bankDetails || "-", Number(e.debit) > 0 ? fmtNum(Number(e.debit)) : "-", Number(e.credit) > 0 ? fmtNum(Number(e.credit)) : "-", `${fmtNum(Math.abs(e.runningBalance))} ${e.runningBalance >= 0 ? (mode === "customer" ? "Dr" : "Cr") : (mode === "customer" ? "Cr" : "Dr")}`]));
     rows.push(["Closing", "Closing Balance", "-", "-", "-", fmtNum(summary.totalDebit), fmtNum(summary.totalCredit), `${fmtNum(Math.abs(summary.closingBalance))} ${summary.closingBalance >= 0 ? (mode === "customer" ? "Dr" : "Cr") : (mode === "customer" ? "Cr" : "Dr")}`]);
     const dateRange = fromDate && toDate ? `${fmtDateExport(fromDate)} to ${fmtDateExport(toDate)}` : "All dates";
-    exportToPDF({ fileName: `Ledger_${party.name}.pdf`, title: `${mode === "customer" ? "Customer" : "Vendor"} Ledger — ${party.name}`, subtitle: dateRange, orientation: "landscape", sheets: [{ name: "Ledger", headers, rows }] });
+    exportToPDF({ fileName: `Ledger_${party.name}.pdf`, title: `${mode === "customer" ? "Customer" : "Vendor"} Ledger — ${party.name}`, subtitle: dateRange, orientation: "landscape", sheets: [{ name: "Ledger", headers, rows }], company });
   };
 
   return (

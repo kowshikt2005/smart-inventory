@@ -31,7 +31,7 @@ import {
 import { Plus, MoreHorizontal, Trash2, Loader2, X, FileText } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtDateExport } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
 import { useState, useMemo } from "react";
 import useSWR from "swr";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -187,15 +187,17 @@ export default function StockJournalPage() {
           </div>
           <div className="flex items-center gap-2">
             <ExportButtons
-              onExportExcel={() => {
+              onExportExcel={async () => {
+                const { company } = await fetchCompanySettings();
                 const headers = ["Journal No", "Date", "Item", "Item Code", "Type", "Quantity", "Reason"];
                 const rows = filteredJournals.map((j) => [j.journalNumber, fmtDateExport(j.date), j.item?.name || "Unknown", j.item?.itemCode || "", j.type, Number(j.quantity), j.reason || "-"]);
-                exportToExcel({ fileName: `Stock-Journal.xlsx`, sheets: [{ name: "Stock Journal", headers, rows }] });
+                exportToExcel({ fileName: `Stock-Journal.xlsx`, sheets: [{ name: "Stock Journal", headers, rows }], company });
               }}
-              onExportPDF={() => {
+              onExportPDF={async () => {
+                const { company } = await fetchCompanySettings();
                 const headers = ["Journal No", "Date", "Item", "Item Code", "Type", "Quantity", "Reason"];
                 const rows = filteredJournals.map((j) => [j.journalNumber, fmtDateExport(j.date), j.item?.name || "Unknown", j.item?.itemCode || "", j.type === "ADJUSTMENT_IN" ? "Stock In" : "Stock Out", `${Number(j.quantity).toFixed(3)} ${j.item?.unit || ""}`, j.reason || "-"]);
-                exportToPDF({ fileName: `Stock-Journal.pdf`, title: "Stock Journal", subtitle: `Generated on ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, sheets: [{ name: "Stock Journal", headers, rows }] });
+                exportToPDF({ fileName: `Stock-Journal.pdf`, title: "Stock Journal", subtitle: `Generated on ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, sheets: [{ name: "Stock Journal", headers, rows }], company });
               }}
               disabled={isLoading || filteredJournals.length === 0}
             />

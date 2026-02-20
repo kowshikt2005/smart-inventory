@@ -17,6 +17,10 @@ interface Item {
   mrp: number; // Maximum Retail Price
   sellingPrice: number; // Actual selling price (used as base rate)
   discountPercent?: number | null;
+  brandId?: string | null;
+  subBrandId?: string | null;
+  brand?: { id: string; name: string } | null;
+  subBrand?: { id: string; name: string } | null;
   inventory?: {
     physicalStock: number;
     reservedQuantity: number;

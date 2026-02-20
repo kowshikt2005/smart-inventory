@@ -67,6 +67,13 @@ class SimpleCache {
   }
 
   /**
+   * Delete a single cache entry by exact key
+   */
+  delete(key: string): void {
+    this.cache.delete(key);
+  }
+
+  /**
    * Invalidate cache entries matching a pattern
    */
   invalidate(pattern: string | RegExp): void {

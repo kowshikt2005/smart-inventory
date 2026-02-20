@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import { Loader2, FileText } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fmtDateExport } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
 import { useState, useMemo } from "react";
 import useSWR from "swr";
 
@@ -127,16 +127,18 @@ export default function ClaimReportPage() {
     });
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
+    const { company } = await fetchCompanySettings();
     const headers = ["Date", "Invoice No", "Brand", "Sub-Brand", "Customer", "Product Name", "MRP", "Selling Price", "Sold Rate", "Qty", "Unit Claim", "Total Claim"];
     const rows = claims.map((c) => [fmtDateExport(c.date), c.invoiceNumber, c.brand, c.subBrand, c.customer, c.productName, c.mrp, c.sellingPrice, c.soldRate, c.quantity, c.unitClaim, c.totalClaim]);
-    exportToExcel({ fileName: `Claim-Report_${fmtDateExport(filters.startDate)}_to_${fmtDateExport(filters.endDate)}.xlsx`, sheets: [{ name: "Claim Report", headers, rows }] });
+    exportToExcel({ fileName: `Claim-Report_${fmtDateExport(filters.startDate)}_to_${fmtDateExport(filters.endDate)}.xlsx`, sheets: [{ name: "Claim Report", headers, rows }], company });
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    const { company } = await fetchCompanySettings();
     const headers = ["Date", "Invoice", "Brand", "Sub-Brand", "Customer", "Product", "MRP", "Sell Price", "Sold Rate", "Qty", "Unit Claim", "Total Claim"];
     const rows = claims.map((c) => [fmtDateExport(c.date), c.invoiceNumber, c.brand, c.subBrand, c.customer, c.productName, fmtNum(c.mrp), fmtNum(c.sellingPrice), fmtNum(c.soldRate), c.quantity, fmtNum(c.unitClaim), fmtNum(c.totalClaim)]);
-    exportToPDF({ fileName: `Claim-Report_${fmtDateExport(filters.startDate)}_to_${fmtDateExport(filters.endDate)}.pdf`, title: "Claim Report", subtitle: `${fmtDateExport(filters.startDate)} to ${fmtDateExport(filters.endDate)}`, orientation: "landscape", sheets: [{ name: "Claims", headers, rows }] });
+    exportToPDF({ fileName: `Claim-Report_${fmtDateExport(filters.startDate)}_to_${fmtDateExport(filters.endDate)}.pdf`, title: "Claim Report", subtitle: `${fmtDateExport(filters.startDate)} to ${fmtDateExport(filters.endDate)}`, orientation: "landscape", sheets: [{ name: "Claims", headers, rows }], company });
   };
 
   return (

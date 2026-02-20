@@ -107,7 +107,7 @@ export default function NewDummyInvoicePage() {
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/customers?search=${encodeURIComponent(customerSearch)}&limit=10`);
+        const res = await fetch(`/api/customers?search=${encodeURIComponent(customerSearch)}&limit=10&activeOnly=true`);
         const data = await res.json();
         if (!cancelled) setCustomerResults(data.customers || []);
       } catch { /* ignore */ }

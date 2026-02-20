@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
 
 // ── Indian fiscal year helpers ──────────────────────────────────
 function getCurrentFiscalYear(): number {
@@ -129,16 +129,19 @@ export default function SalesRegisterPage() {
   const currentMonthName = now.toLocaleString("en-US", { month: "long" });
 
   // ── Export handlers ────────────────────────────────────────
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
+    const { company } = await fetchCompanySettings();
     const rows = months.map((r) => [r.month + " " + r.year, r.grossAmount, r.taxAmount, r.netAmount]);
     rows.push(["Total", totals.grossAmount, totals.taxAmount, totals.netAmount]);
     exportToExcel({
       fileName: `Sales-Register_${fmtDate(startDate)}_to_${fmtDate(endDate)}.xlsx`,
       sheets: [{ name: "Sales Register", headers: ["Month", "Gross Amount", "Tax Amount", "Net Amount"], rows }],
+      company,
     });
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    const { company } = await fetchCompanySettings();
     const rows = months.map((r) => [r.month + " " + r.year, fmtNum(r.grossAmount), fmtNum(r.taxAmount), fmtNum(r.netAmount)]);
     rows.push(["Total", fmtNum(totals.grossAmount), fmtNum(totals.taxAmount), fmtNum(totals.netAmount)]);
     exportToPDF({
@@ -146,6 +149,7 @@ export default function SalesRegisterPage() {
       title: "Sales Register",
       subtitle: `${fmtDate(startDate)} - ${fmtDate(endDate)} | ${selectedCustomerName}`,
       sheets: [{ name: "Sales Register", headers: ["Month", "Gross Amount (₹)", "Tax Amount (₹)", "Net Amount (₹)"], rows }],
+      company,
     });
   };
 

@@ -31,7 +31,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fmtDateExport } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
 
 interface OrderItem {
   id: string;
@@ -154,7 +154,8 @@ export default function BilledUnbilledReportPage() {
     setExpandedOrder(expandedOrder === orderId ? null : orderId);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
+    const { company } = await fetchCompanySettings();
     const headers = type === "billed"
       ? ["Order No", "Order Date", "Customer", "Items", "Order Amt", "Invoiced", "Pending", "Status"]
       : ["Order No", "Order Date", "Customer", "Items", "Order Amt", "Status"];
@@ -165,10 +166,11 @@ export default function BilledUnbilledReportPage() {
       return base;
     });
     const dateInfo = fromDate && toDate ? `_${fmtDateExport(fromDate)}_to_${fmtDateExport(toDate)}` : "";
-    exportToExcel({ fileName: `Billed-Unbilled_${type}${dateInfo}.xlsx`, sheets: [{ name: type === "billed" ? "Billed Orders" : "Unbilled Orders", headers, rows }] });
+    exportToExcel({ fileName: `Billed-Unbilled_${type}${dateInfo}.xlsx`, sheets: [{ name: type === "billed" ? "Billed Orders" : "Unbilled Orders", headers, rows }], company });
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    const { company } = await fetchCompanySettings();
     const headers = type === "billed"
       ? ["Order No", "Date", "Customer", "Items", "Amount", "Invoiced", "Pending", "Status"]
       : ["Order No", "Date", "Customer", "Items", "Amount", "Status"];
@@ -180,7 +182,7 @@ export default function BilledUnbilledReportPage() {
     });
     const dateRange = fromDate && toDate ? `${fmtDateExport(fromDate)} to ${fmtDateExport(toDate)}` : fromDate ? `From ${fmtDateExport(fromDate)}` : toDate ? `Up to ${fmtDateExport(toDate)}` : `As of ${new Date().toLocaleDateString("en-IN")}`;
     const dateFile = fromDate && toDate ? `_${fmtDateExport(fromDate)}_to_${fmtDateExport(toDate)}` : "";
-    exportToPDF({ fileName: `Billed-Unbilled_${type}${dateFile}.pdf`, title: `${type === "billed" ? "Billed" : "Unbilled"} Orders Report`, subtitle: dateRange, sheets: [{ name: type === "billed" ? "Billed" : "Unbilled", headers, rows }] });
+    exportToPDF({ fileName: `Billed-Unbilled_${type}${dateFile}.pdf`, title: `${type === "billed" ? "Billed" : "Unbilled"} Orders Report`, subtitle: dateRange, sheets: [{ name: type === "billed" ? "Billed" : "Unbilled", headers, rows }], company });
   };
 
   return (

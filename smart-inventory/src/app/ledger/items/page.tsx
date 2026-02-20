@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import { Loader2, Search, Package } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtDateExport } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
 import { useState, useCallback } from "react";
 import useSWR from "swr";
 
@@ -84,7 +84,7 @@ export default function StockLedgerPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Fetch items
-  const { data: itemsData, isLoading: isLoadingItems } = useSWR("/api/items?limit=1000");
+  const { data: itemsData, isLoading: isLoadingItems } = useSWR("/api/items?limit=1000&isActive=true");
   const items: Item[] = itemsData?.items || [];
 
   // Fetch ledger
@@ -155,19 +155,21 @@ export default function StockLedgerPage() {
     return `${qty.toFixed(3)} ${unit}`.trim();
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!movements.length || !summary || !itemInfo) return;
+    const { company } = await fetchCompanySettings();
     const unit = itemInfo.unit || "";
     const headers = ["Date", "Particulars", "Type", "In Qty", "Out Qty", "Balance"];
     const rows: (string | number)[][] = [];
     rows.push([fromDate ? fmtDateExport(fromDate) : "Opening", "Opening Balance", "-", "-", "-", `${summary.openingBalance.toFixed(3)} ${unit}`]);
     movements.forEach((m) => rows.push([fmtDateExport(m.date), m.particulars, m.type, m.inQty > 0 ? m.inQty : "-", m.outQty > 0 ? m.outQty : "-", `${m.runningBalance.toFixed(3)} ${unit}`]));
     rows.push(["Closing", "Closing Balance", "-", summary.totalIn, summary.totalOut, `${summary.closingBalance.toFixed(3)} ${unit}`]);
-    exportToExcel({ fileName: `Stock-Ledger_${itemInfo.name}.xlsx`, sheets: [{ name: "Stock Ledger", headers, rows }] });
+    exportToExcel({ fileName: `Stock-Ledger_${itemInfo.name}.xlsx`, sheets: [{ name: "Stock Ledger", headers, rows }], company });
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!movements.length || !summary || !itemInfo) return;
+    const { company } = await fetchCompanySettings();
     const unit = itemInfo.unit || "";
     const headers = ["Date", "Particulars", "Type", "In Qty", "Out Qty", "Balance"];
     const rows: (string | number)[][] = [];
@@ -175,7 +177,7 @@ export default function StockLedgerPage() {
     movements.forEach((m) => rows.push([fmtDateExport(m.date), m.particulars, m.type, m.inQty > 0 ? `${m.inQty.toFixed(3)} ${unit}` : "-", m.outQty > 0 ? `${m.outQty.toFixed(3)} ${unit}` : "-", `${m.runningBalance.toFixed(3)} ${unit}`]));
     rows.push(["Closing", "Closing Balance", "-", `${summary.totalIn.toFixed(3)} ${unit}`, `${summary.totalOut.toFixed(3)} ${unit}`, `${summary.closingBalance.toFixed(3)} ${unit}`]);
     const dateRange = fromDate && toDate ? `${fmtDateExport(fromDate)} to ${fmtDateExport(toDate)}` : "All dates";
-    exportToPDF({ fileName: `Stock-Ledger_${itemInfo.name}.pdf`, title: `Stock Ledger — ${itemInfo.name} (${itemInfo.itemCode})`, subtitle: dateRange, sheets: [{ name: "Stock Ledger", headers, rows }] });
+    exportToPDF({ fileName: `Stock-Ledger_${itemInfo.name}.pdf`, title: `Stock Ledger — ${itemInfo.name} (${itemInfo.itemCode})`, subtitle: dateRange, sheets: [{ name: "Stock Ledger", headers, rows }], company });
   };
 
   return (

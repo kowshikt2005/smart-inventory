@@ -43,7 +43,7 @@ import {
 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtDateExport, fmtNum } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtDateExport, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -304,7 +304,8 @@ export default function PurchaseInvoicesPage() {
                 Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
               </Button>
               <ExportButtons
-                onExportExcel={() => {
+                onExportExcel={async () => {
+                  const { company } = await fetchCompanySettings();
                   const piList = data?.purchaseInvoices || [];
                   const headers = ["Date", "Invoice #", "Vendor", "Due Date", "Status", "Amount", "Tax", "Total", "Paid", "Balance"];
                   const rows = piList.map((i: PurchaseInvoice) => [
@@ -319,9 +320,10 @@ export default function PurchaseInvoicesPage() {
                     Number(i.paidAmount),
                     Number(i.balanceAmount),
                   ]);
-                  exportToExcel({ fileName: "Purchase-Invoices.xlsx", sheets: [{ name: "Purchase Invoices", headers, rows }] });
+                  exportToExcel({ fileName: "Purchase-Invoices.xlsx", sheets: [{ name: "Purchase Invoices", headers, rows }], company });
                 }}
-                onExportPDF={() => {
+                onExportPDF={async () => {
+                  const { company } = await fetchCompanySettings();
                   const piList = data?.purchaseInvoices || [];
                   const headers = ["Date", "Invoice #", "Vendor", "Status", "Total", "Balance"];
                   const rows = piList.map((i: PurchaseInvoice) => [
@@ -332,7 +334,7 @@ export default function PurchaseInvoicesPage() {
                     fmtNum(Number(i.totalAmount)),
                     fmtNum(Number(i.balanceAmount)),
                   ]);
-                  exportToPDF({ fileName: "Purchase-Invoices.pdf", title: "Purchase Invoices", subtitle: `Generated on ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, orientation: "landscape", sheets: [{ name: "Purchase Invoices", headers, rows }] });
+                  exportToPDF({ fileName: "Purchase-Invoices.pdf", title: "Purchase Invoices", subtitle: `Generated on ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, orientation: "landscape", sheets: [{ name: "Purchase Invoices", headers, rows }], company });
                 }}
                 disabled={isLoading || (data?.purchaseInvoices || []).length === 0}
               />

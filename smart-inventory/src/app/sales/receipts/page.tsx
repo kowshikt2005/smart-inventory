@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtDateExport, fmtNum } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtDateExport, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -251,7 +251,8 @@ export default function PaymentsPage() {
             </div>
             <div className="flex items-center gap-2">
               <ExportButtons
-                onExportExcel={() => {
+                onExportExcel={async () => {
+                  const { company } = await fetchCompanySettings();
                   const headers = ["Date", "Payment #", "Customer", "Mode", "Reference", "Amount"];
                   const rows = payments.map((p: Payment) => [
                     fmtDateExport(p.paymentDate),
@@ -261,9 +262,10 @@ export default function PaymentsPage() {
                     p.referenceNumber || "-",
                     Number(p.amount),
                   ]);
-                  exportToExcel({ fileName: "Payment-Receipts.xlsx", sheets: [{ name: "Payments", headers, rows }] });
+                  exportToExcel({ fileName: "Payment-Receipts.xlsx", sheets: [{ name: "Payments", headers, rows }], company });
                 }}
-                onExportPDF={() => {
+                onExportPDF={async () => {
+                  const { company } = await fetchCompanySettings();
                   const headers = ["Date", "Payment #", "Customer", "Mode", "Reference", "Amount"];
                   const rows = payments.map((p: Payment) => [
                     fmtDateExport(p.paymentDate),
@@ -273,7 +275,7 @@ export default function PaymentsPage() {
                     p.referenceNumber || "-",
                     fmtNum(Number(p.amount)),
                   ]);
-                  exportToPDF({ fileName: "Payment-Receipts.pdf", title: "Payment Receipts", subtitle: `Generated on ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, sheets: [{ name: "Payments", headers, rows }] });
+                  exportToPDF({ fileName: "Payment-Receipts.pdf", title: "Payment Receipts", subtitle: `Generated on ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, sheets: [{ name: "Payments", headers, rows }], company });
                 }}
                 disabled={isLoading || payments.length === 0}
               />

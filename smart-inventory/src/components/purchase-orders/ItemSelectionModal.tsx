@@ -14,6 +14,10 @@ interface Item {
   hsnCode: string | null;
   gstRate: number;
   purchasePrice: number;
+  brandId?: string | null;
+  subBrandId?: string | null;
+  brand?: { id: string; name: string } | null;
+  subBrand?: { id: string; name: string } | null;
 }
 
 interface ItemSelectionModalProps {
@@ -32,6 +36,8 @@ export function ItemSelectionModal({
   onSelect,
 }: ItemSelectionModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedBrandId, setSelectedBrandId] = useState("");
+  const [selectedSubBrandId, setSelectedSubBrandId] = useState("");
 
   // Filter available items (not already selected)
   const availableItems = useMemo(
@@ -39,18 +45,60 @@ export function ItemSelectionModal({
     [items, selectedItemIds]
   );
 
-  // Filter items based on search
-  const filteredItems = useMemo(() => {
-    if (!searchQuery) return availableItems;
+  // Unique brands derived from available items
+  const uniqueBrands = useMemo(() => {
+    const seen = new Set<string>();
+    const brands: { id: string; name: string }[] = [];
+    for (const item of availableItems) {
+      if (item.brand && !seen.has(item.brand.id)) {
+        seen.add(item.brand.id);
+        brands.push(item.brand);
+      }
+    }
+    return brands.sort((a, b) => a.name.localeCompare(b.name));
+  }, [availableItems]);
 
-    const query = searchQuery.toLowerCase();
-    return availableItems.filter(
-      (item) =>
-        item.name.toLowerCase().includes(query) ||
-        item.itemCode.toLowerCase().includes(query) ||
-        item.hsnCode?.toLowerCase().includes(query)
-    );
-  }, [availableItems, searchQuery]);
+  // Sub-brands filtered by selected brand
+  const filteredSubBrands = useMemo(() => {
+    const seen = new Set<string>();
+    const subBrands: { id: string; name: string }[] = [];
+    for (const item of availableItems) {
+      if (selectedBrandId && item.brandId !== selectedBrandId) continue;
+      if (item.subBrand && !seen.has(item.subBrand.id)) {
+        seen.add(item.subBrand.id);
+        subBrands.push(item.subBrand);
+      }
+    }
+    return subBrands.sort((a, b) => a.name.localeCompare(b.name));
+  }, [availableItems, selectedBrandId]);
+
+  // Reset sub-brand when brand changes
+  useEffect(() => {
+    setSelectedSubBrandId("");
+  }, [selectedBrandId]);
+
+  // Filter items based on search + brand + sub-brand
+  const filteredItems = useMemo(() => {
+    let result = availableItems;
+
+    if (selectedBrandId) {
+      result = result.filter((item) => item.brandId === selectedBrandId);
+    }
+    if (selectedSubBrandId) {
+      result = result.filter((item) => item.subBrandId === selectedSubBrandId);
+    }
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (item) =>
+          item.name.toLowerCase().includes(query) ||
+          item.itemCode.toLowerCase().includes(query) ||
+          item.hsnCode?.toLowerCase().includes(query)
+      );
+    }
+
+    return result;
+  }, [availableItems, selectedBrandId, selectedSubBrandId, searchQuery]);
 
   // Handle item selection
   const handleSelectItem = (item: Item) => {
@@ -59,10 +107,12 @@ export function ItemSelectionModal({
     setSearchQuery("");
   };
 
-  // Reset search when modal closes
+  // Reset filters when modal closes
   useEffect(() => {
     if (!isOpen) {
       setSearchQuery("");
+      setSelectedBrandId("");
+      setSelectedSubBrandId("");
     }
   }, [isOpen]);
 
@@ -116,6 +166,37 @@ export function ItemSelectionModal({
             />
           </div>
 
+          {/* Brand / Sub-brand filters */}
+          {uniqueBrands.length > 0 && (
+            <div className="flex gap-3 mt-3">
+              <select
+                value={selectedBrandId}
+                onChange={(e) => setSelectedBrandId(e.target.value)}
+                className="flex-1 h-9 rounded-md border border-gray-200 px-3 text-sm bg-white"
+              >
+                <option value="">All Brands</option>
+                {uniqueBrands.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={selectedSubBrandId}
+                onChange={(e) => setSelectedSubBrandId(e.target.value)}
+                disabled={filteredSubBrands.length === 0}
+                className="flex-1 h-9 rounded-md border border-gray-200 px-3 text-sm bg-white disabled:opacity-50"
+              >
+                <option value="">All Sub-brands</option>
+                {filteredSubBrands.map((sb) => (
+                  <option key={sb.id} value={sb.id}>
+                    {sb.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Summary */}
           <div className="mt-3 text-sm text-gray-600">
             Showing {filteredItems.length} of {availableItems.length} available
@@ -129,11 +210,11 @@ export function ItemSelectionModal({
             <div className="flex flex-col items-center justify-center h-full py-12 text-center">
               <Package className="h-12 w-12 text-gray-300 mb-3" />
               <p className="text-gray-500 font-medium">
-                {searchQuery ? "No items found" : "No available items"}
+                {searchQuery || selectedBrandId || selectedSubBrandId ? "No items found" : "No available items"}
               </p>
               <p className="text-sm text-gray-400 mt-1">
-                {searchQuery
-                  ? "Try adjusting your search terms"
+                {searchQuery || selectedBrandId || selectedSubBrandId
+                  ? "Try adjusting your search or filters"
                   : "All items are already added to the order"}
               </p>
             </div>
@@ -169,9 +250,15 @@ export function ItemSelectionModal({
                     className="hover:bg-blue-50 cursor-pointer transition-colors"
                   >
                     <td className="px-6 py-4">
-                      <span className="font-medium text-gray-900">
-                        {item.name}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-gray-900">
+                          {item.name}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {item.brand?.name}
+                          {item.subBrand && ` › ${item.subBrand.name}`}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {item.itemCode}

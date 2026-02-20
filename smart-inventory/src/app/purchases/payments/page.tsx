@@ -27,7 +27,7 @@ import {
 import { Plus, MoreHorizontal, Trash2, Loader2, X, Eye, CreditCard, Wallet, Filter } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtDateExport, fmtNum } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtDateExport, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -236,7 +236,8 @@ export default function VendorPaymentsPage() {
             </div>
             <div className="flex items-center gap-2">
               <ExportButtons
-                onExportExcel={() => {
+                onExportExcel={async () => {
+                  const { company } = await fetchCompanySettings();
                   const vpList = data?.vendorPayments || [];
                   const headers = ["Date", "Payment #", "Vendor", "Type", "Invoice #", "Mode", "Amount"];
                   const rows = vpList.map((p: VendorPayment) => [
@@ -248,9 +249,10 @@ export default function VendorPaymentsPage() {
                     p.mode,
                     Number(p.amount),
                   ]);
-                  exportToExcel({ fileName: "Vendor-Payments.xlsx", sheets: [{ name: "Vendor Payments", headers, rows }] });
+                  exportToExcel({ fileName: "Vendor-Payments.xlsx", sheets: [{ name: "Vendor Payments", headers, rows }], company });
                 }}
-                onExportPDF={() => {
+                onExportPDF={async () => {
+                  const { company } = await fetchCompanySettings();
                   const vpList = data?.vendorPayments || [];
                   const headers = ["Date", "Payment #", "Vendor", "Type", "Invoice #", "Mode", "Amount"];
                   const rows = vpList.map((p: VendorPayment) => [
@@ -262,7 +264,7 @@ export default function VendorPaymentsPage() {
                     p.mode,
                     fmtNum(Number(p.amount)),
                   ]);
-                  exportToPDF({ fileName: "Vendor-Payments.pdf", title: "Vendor Payments", subtitle: `Generated on ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, sheets: [{ name: "Vendor Payments", headers, rows }] });
+                  exportToPDF({ fileName: "Vendor-Payments.pdf", title: "Vendor Payments", subtitle: `Generated on ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, sheets: [{ name: "Vendor Payments", headers, rows }], company });
                 }}
                 disabled={isLoading || (data?.vendorPayments || []).length === 0}
               />

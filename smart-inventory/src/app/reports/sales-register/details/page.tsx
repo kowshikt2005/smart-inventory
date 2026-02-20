@@ -7,7 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Loader2, ArrowLeft, ExternalLink } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fmtDateExport } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
 
 interface Invoice {
   id: string;
@@ -125,8 +125,9 @@ function SalesRegisterDetailsContent() {
     return `${d}/${m}/${y}`;
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!data) return;
+    const { company } = await fetchCompanySettings();
     const sheets = [];
     if (data.invoices.length > 0) {
       sheets.push({
@@ -150,12 +151,13 @@ function SalesRegisterDetailsContent() {
       });
     }
     if (sheets.length > 0) {
-      exportToExcel({ fileName: `Sales-Register-Details_${monthName}-${year}.xlsx`, sheets });
+      exportToExcel({ fileName: `Sales-Register-Details_${monthName}-${year}.xlsx`, sheets, company });
     }
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!data) return;
+    const { company } = await fetchCompanySettings();
     const sheets = [];
     if (data.invoices.length > 0) {
       sheets.push({
@@ -179,7 +181,7 @@ function SalesRegisterDetailsContent() {
       });
     }
     if (sheets.length > 0) {
-      exportToPDF({ fileName: `Sales-Register-Details_${monthName}-${year}.pdf`, title: "Sales Register - Detailed View", subtitle: `${monthName} ${year}`, sheets });
+      exportToPDF({ fileName: `Sales-Register-Details_${monthName}-${year}.pdf`, title: "Sales Register - Detailed View", subtitle: `${monthName} ${year}`, sheets, company });
     }
   };
 

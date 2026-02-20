@@ -2,6 +2,7 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -14,11 +15,21 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { AddVendorModal } from "@/components/vendors/AddVendorModal";
-import { Plus, MoreHorizontal, Eye, FileText, Loader2, X } from "lucide-react";
+import {
+  Plus,
+  MoreHorizontal,
+  Eye,
+  FileText,
+  Loader2,
+  X,
+  PowerOff,
+  Power,
+} from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -43,33 +54,56 @@ interface Vendor {
   updatedAt: Date;
 }
 
+type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
+
 export default function VendorsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const itemsPerPage = 10;
 
   // Debounce search
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   // Use SWR for caching
-  const { data, error, isLoading, mutate } = useSWR("/api/vendors");
+  const { data, error, isLoading, mutate } = useSWR("/api/vendors?limit=1000");
 
-  // Filter vendors based on search query
+  // Counts for filter tabs
+  const counts = useMemo(() => {
+    const vendors: Vendor[] = data?.vendors || [];
+    return {
+      all: vendors.length,
+      active: vendors.filter((v) => v.isActive).length,
+      inactive: vendors.filter((v) => !v.isActive).length,
+    };
+  }, [data]);
+
+  // Filter vendors based on search query and status filter
   const filteredVendors = useMemo(() => {
-    const vendors = data?.vendors || [];
-    if (!debouncedSearch.trim()) return vendors;
+    const vendors: Vendor[] = data?.vendors || [];
+
+    let result = vendors;
+
+    if (statusFilter !== "ALL") {
+      result = result.filter(
+        (vendor) => vendor.isActive === (statusFilter === "ACTIVE")
+      );
+    }
+
+    if (!debouncedSearch.trim()) return result;
 
     const query = debouncedSearch.toLowerCase();
-    return vendors.filter(
-      (vendor: Vendor) =>
+    return result.filter(
+      (vendor) =>
         vendor.name.toLowerCase().includes(query) ||
         (vendor.gstin && vendor.gstin.toLowerCase().includes(query)) ||
         (vendor.city && vendor.city.toLowerCase().includes(query)) ||
         (vendor.state && vendor.state.toLowerCase().includes(query))
     );
-  }, [debouncedSearch, data]);
+  }, [debouncedSearch, data, statusFilter]);
 
   // Paginate vendors
   const paginatedVendors = useMemo(() => {
@@ -94,6 +128,23 @@ export default function VendorsPage() {
     router.push(`/ledger/vendors?vendorId=${vendorId}`);
   };
 
+  const handleToggleStatus = async (vendor: Vendor) => {
+    setTogglingId(vendor.id);
+    try {
+      const res = await fetch(`/api/vendors/${vendor.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !vendor.isActive }),
+      });
+      if (!res.ok) throw new Error();
+      mutate();
+    } catch {
+      alert("Failed to update vendor status.");
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
@@ -102,7 +153,7 @@ export default function VendorsPage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-6">All Vendors</h1>
 
           {/* Search and Add Button */}
-          <div className="flex items-start justify-between gap-4 mb-6">
+          <div className="flex items-start justify-between gap-4 mb-4">
             <div className="flex-1 max-w-md">
               <div className="relative">
                 <Input
@@ -140,6 +191,29 @@ export default function VendorsPage() {
               </Button>
             </div>
           </div>
+
+          {/* Status Filter Tabs */}
+          <div className="flex gap-1 border-b border-border mb-0">
+            {(["ALL", "ACTIVE", "INACTIVE"] as StatusFilter[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => {
+                  setStatusFilter(f);
+                  setCurrentPage(1);
+                }}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  statusFilter === f
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {f === "ALL" ? "All" : f === "ACTIVE" ? "Active" : "Inactive"}
+                <span className="ml-1.5 text-xs bg-muted rounded-full px-1.5 py-0.5">
+                  {f === "ALL" ? counts.all : f === "ACTIVE" ? counts.active : counts.inactive}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Vendors Table */}
@@ -166,6 +240,9 @@ export default function VendorsPage() {
                   Credit Limit
                 </TableHead>
                 <TableHead scope="col" className="font-semibold">
+                  Status
+                </TableHead>
+                <TableHead scope="col" className="font-semibold">
                   Actions
                 </TableHead>
               </TableRow>
@@ -174,7 +251,7 @@ export default function VendorsPage() {
               {isLoading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center text-gray-500 py-12"
                   >
                     <div className="flex items-center justify-center gap-2">
@@ -186,7 +263,7 @@ export default function VendorsPage() {
               ) : error ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center text-red-600 py-8"
                   >
                     <div className="space-y-2">
@@ -204,7 +281,7 @@ export default function VendorsPage() {
               ) : paginatedVendors.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center text-gray-500 py-8"
                   >
                     {searchQuery
@@ -214,7 +291,10 @@ export default function VendorsPage() {
                 </TableRow>
               ) : (
                 paginatedVendors.map((vendor: Vendor) => (
-                  <TableRow key={vendor.id}>
+                  <TableRow
+                    key={vendor.id}
+                    className={!vendor.isActive ? "opacity-50 bg-muted/20" : undefined}
+                  >
                     <TableCell className="font-medium">{vendor.name}</TableCell>
                     <TableCell>{vendor.gstin || "N/A"}</TableCell>
                     <TableCell>{vendor.city || "N/A"}</TableCell>
@@ -222,6 +302,15 @@ export default function VendorsPage() {
                     <TableCell>{vendor.creditDays}</TableCell>
                     <TableCell>
                       {vendor.openingBalance.toLocaleString("en-US")}
+                    </TableCell>
+                    <TableCell>
+                      {vendor.isActive ? (
+                        <Badge className="bg-green-100 text-green-700 border-green-200">
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">Inactive</Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -232,7 +321,11 @@ export default function VendorsPage() {
                             className="h-8 w-8 p-0"
                             aria-label={`Actions for ${vendor.name}`}
                           >
-                            <MoreHorizontal className="h-4 w-4" />
+                            {togglingId === vendor.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <MoreHorizontal className="h-4 w-4" />
+                            )}
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -247,6 +340,23 @@ export default function VendorsPage() {
                           >
                             <FileText className="h-4 w-4 mr-2" />
                             View Transactions
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleToggleStatus(vendor)}
+                            className={!vendor.isActive ? "text-green-600" : "text-orange-600"}
+                          >
+                            {!vendor.isActive ? (
+                              <>
+                                <Power className="h-4 w-4 mr-2" />
+                                Activate
+                              </>
+                            ) : (
+                              <>
+                                <PowerOff className="h-4 w-4 mr-2" />
+                                Deactivate
+                              </>
+                            )}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

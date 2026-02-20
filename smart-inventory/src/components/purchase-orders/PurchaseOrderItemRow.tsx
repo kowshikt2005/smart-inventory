@@ -14,6 +14,10 @@ interface Item {
   hsnCode: string | null;
   gstRate: number;
   purchasePrice: number;
+  brandId?: string | null;
+  subBrandId?: string | null;
+  brand?: { id: string; name: string } | null;
+  subBrand?: { id: string; name: string } | null;
 }
 
 interface OrderItemData {

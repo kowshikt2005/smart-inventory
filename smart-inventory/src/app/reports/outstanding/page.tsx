@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, ChevronDown, X, Calendar, Eye } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fmtDateExport } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
 
 interface OutstandingInvoice {
   invoiceId: string;
@@ -297,21 +297,23 @@ export default function OutstandingReportPage() {
     setShowPartyDrop(false);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
+    const { company } = await fetchCompanySettings();
     const partyLabel = tab === "customer" ? "Customer" : "Vendor";
     const headers = [partyLabel, "Invoice No", "Invoice Date", "Due Date", "Amount", "Paid", "Outstanding", "Days Overdue", "Status"];
     const rows = invoices.map((inv) => [inv.partyName, inv.invoiceNumber, fmtDateExport(inv.invoiceDate), fmtDateExport(inv.dueDate), inv.totalAmount, inv.paidAmount, inv.balanceAmount, inv.daysOverdue, inv.status]);
     const dateInfo = fromDate && toDate ? `_${fmtDateExport(fromDate)}_to_${fmtDateExport(toDate)}` : "";
-    exportToExcel({ fileName: `Outstanding-Report_${tab}${dateInfo}.xlsx`, sheets: [{ name: "Outstanding", headers, rows }] });
+    exportToExcel({ fileName: `Outstanding-Report_${tab}${dateInfo}.xlsx`, sheets: [{ name: "Outstanding", headers, rows }], company });
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    const { company } = await fetchCompanySettings();
     const partyLabel = tab === "customer" ? "Customer" : "Vendor";
     const headers = [partyLabel, "Invoice No", "Inv Date", "Due Date", "Amount", "Paid", "Outstanding", "Days Overdue", "Status"];
     const rows = invoices.map((inv) => [inv.partyName, inv.invoiceNumber, fmtDateExport(inv.invoiceDate), fmtDateExport(inv.dueDate), fmtNum(inv.totalAmount), fmtNum(inv.paidAmount), fmtNum(inv.balanceAmount), inv.daysOverdue > 0 ? `${inv.daysOverdue} days` : "-", inv.daysOverdue > 0 ? "Overdue" : inv.status === "PARTIAL" ? "Partial" : "Pending"]);
     const dateRange = fromDate && toDate ? ` | ${fmtDateExport(fromDate)} to ${fmtDateExport(toDate)}` : fromDate ? ` | From ${fmtDateExport(fromDate)}` : toDate ? ` | Up to ${fmtDateExport(toDate)}` : "";
     const dateFile = fromDate && toDate ? `_${fmtDateExport(fromDate)}_to_${fmtDateExport(toDate)}` : "";
-    exportToPDF({ fileName: `Outstanding-Report_${tab}${dateFile}.pdf`, title: "Outstanding Report", subtitle: `${partyLabel}s | ${selectedPartyName}${dateRange}`, sheets: [{ name: "Outstanding", headers, rows }] });
+    exportToPDF({ fileName: `Outstanding-Report_${tab}${dateFile}.pdf`, title: "Outstanding Report", subtitle: `${partyLabel}s | ${selectedPartyName}${dateRange}`, sheets: [{ name: "Outstanding", headers, rows }], company });
   };
 
   return (

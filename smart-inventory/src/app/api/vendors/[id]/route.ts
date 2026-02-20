@@ -72,7 +72,12 @@ export async function PUT(
     if (body.pincode !== undefined) updateData.pincode = body.pincode || null;
     if (body.creditDays !== undefined) updateData.creditDays = body.creditDays;
     if (body.openingBalance !== undefined) updateData.openingBalance = body.openingBalance;
-    if (body.isActive !== undefined) updateData.isActive = body.isActive;
+    if (body.isActive !== undefined) {
+      if (typeof body.isActive !== 'boolean') {
+        return NextResponse.json({ error: 'isActive must be a boolean' }, { status: 400 });
+      }
+      updateData.isActive = body.isActive;
+    }
 
     // Update vendor
     const vendor = await db.vendor.update({

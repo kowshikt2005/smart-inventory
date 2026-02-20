@@ -6,15 +6,15 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1);
+    const limit = Math.min(1000, Math.max(1, parseInt(searchParams.get('limit') || '10') || 10));
     const brandId = searchParams.get('brandId') || '';
     const subBrandId = searchParams.get('subBrandId') || '';
-    const isActive = searchParams.get('isActive');
+    const isActiveParam = searchParams.get('isActive') ?? searchParams.get('activeOnly');
     const skip = (page - 1) * limit;
 
     // Build where clause for search and filters
-    const where: any = {};
+    const where: Record<string, unknown> = {};
 
     if (search) {
       where.OR = [
@@ -34,8 +34,8 @@ export async function GET(request: Request) {
       where.subBrandId = subBrandId;
     }
 
-    if (isActive !== null && isActive !== undefined) {
-      where.isActive = isActive === 'true';
+    if (isActiveParam !== null && isActiveParam !== undefined) {
+      where.isActive = isActiveParam === 'true';
     }
 
     const [items, total] = await Promise.all([
@@ -142,11 +142,11 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(item, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating item:', error);
 
     // Handle unique constraint violation
-    if (error.code === 'P2002') {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
       return NextResponse.json(
         { error: 'Item code already exists' },
         { status: 409 }

@@ -89,7 +89,7 @@ export async function PUT(
         minStock: body.minStock !== undefined ? body.minStock : existingItem.minStock,
         unit: body.unit || existingItem.unit,
         imageUrl: body.imageUrl !== undefined ? body.imageUrl : existingItem.imageUrl,
-        isActive: body.isActive !== undefined ? body.isActive : existingItem.isActive,
+        isActive: body.isActive !== undefined ? (typeof body.isActive === 'boolean' ? body.isActive : existingItem.isActive) : existingItem.isActive,
       },
       include: {
         brand: true,

@@ -43,12 +43,8 @@ import {
 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtDateExport, fmtNum } from "@/lib/export-utils";
-import {
-  generateInvoicePDF,
-  type CompanySettings,
-  type BankAccountInfo,
-} from "@/lib/invoice-pdf";
+import { exportToExcel, exportToPDF, fmtDateExport, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
+import { generateInvoicePDF } from "@/lib/invoice-pdf";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -95,43 +91,6 @@ interface Brand {
   name: string;
 }
 
-// Helper to fetch settings + bank account for PDF generation
-async function fetchPdfDeps(): Promise<{
-  company: CompanySettings;
-  bank: BankAccountInfo | null;
-}> {
-  const [settingsRes, bankRes] = await Promise.all([
-    fetch("/api/settings"),
-    fetch("/api/bank-accounts"),
-  ]);
-  const settingsArr = await settingsRes.json();
-  const bankData = await bankRes.json();
-
-  const settingsMap: Record<string, string> = {};
-  for (const s of settingsArr) settingsMap[s.key] = s.value;
-
-  const company: CompanySettings = {
-    company_name: settingsMap.company_name || "",
-    company_address: settingsMap.company_address || "",
-    company_city: settingsMap.company_city || "",
-    company_state: settingsMap.company_state || "",
-    company_pincode: settingsMap.company_pincode || "",
-    company_phone: settingsMap.company_phone || "",
-    company_email: settingsMap.company_email || "",
-    company_gstin: settingsMap.company_gstin || "",
-    company_pan: settingsMap.company_pan || "",
-    company_msme: settingsMap.company_msme || "",
-    company_fssai: settingsMap.company_fssai || "",
-  };
-
-  const bankAccounts = bankData.bankAccounts || bankData || [];
-  const bank: BankAccountInfo | null =
-    (Array.isArray(bankAccounts)
-      ? bankAccounts.find((b: { isDefault?: boolean }) => b.isDefault) || bankAccounts[0]
-      : null) || null;
-
-  return { company, bank };
-}
 
 export default function SalesInvoicesPage() {
   const router = useRouter();
@@ -250,7 +209,7 @@ export default function SalesInvoicesPage() {
     try {
       const [invoiceRes, deps] = await Promise.all([
         fetch(`/api/sales-invoices/${invoiceId}`),
-        fetchPdfDeps(),
+        fetchCompanySettings(),
       ]);
       if (!invoiceRes.ok) throw new Error("Failed to fetch invoice");
       const fullInvoice = await invoiceRes.json();
@@ -268,7 +227,7 @@ export default function SalesInvoicesPage() {
     if (selectedIds.size === 0) return;
     setBulkPdfLoading(true);
     try {
-      const deps = await fetchPdfDeps();
+      const deps = await fetchCompanySettings();
       const ids = Array.from(selectedIds);
       for (const id of ids) {
         const res = await fetch(`/api/sales-invoices/${id}`);
@@ -440,7 +399,8 @@ export default function SalesInvoicesPage() {
                 Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
               </Button>
               <ExportButtons
-                onExportExcel={() => {
+                onExportExcel={async () => {
+                  const { company } = await fetchCompanySettings();
                   const headers = ["Invoice Date", "Invoice #", "Order #", "Customer", "Due Date", "Status", "Subtotal", "Tax", "Total", "Paid", "Balance"];
                   const rows = invoices.map((i) => [
                     fmtDateExport(i.invoiceDate),
@@ -455,9 +415,10 @@ export default function SalesInvoicesPage() {
                     Number(i.paidAmount),
                     Number(i.balanceAmount),
                   ]);
-                  exportToExcel({ fileName: "Sales-Invoices.xlsx", sheets: [{ name: "Sales Invoices", headers, rows }] });
+                  exportToExcel({ fileName: "Sales-Invoices.xlsx", sheets: [{ name: "Sales Invoices", headers, rows }], company });
                 }}
-                onExportPDF={() => {
+                onExportPDF={async () => {
+                  const { company } = await fetchCompanySettings();
                   const headers = ["Date", "Invoice #", "Customer", "Status", "Total", "Balance"];
                   const rows = invoices.map((i) => [
                     fmtDateExport(i.invoiceDate),
@@ -467,7 +428,7 @@ export default function SalesInvoicesPage() {
                     fmtNum(Number(i.totalAmount)),
                     fmtNum(Number(i.balanceAmount)),
                   ]);
-                  exportToPDF({ fileName: "Sales-Invoices.pdf", title: "Sales Invoices", subtitle: `Generated on ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, orientation: "landscape", sheets: [{ name: "Sales Invoices", headers, rows }] });
+                  exportToPDF({ fileName: "Sales-Invoices.pdf", title: "Sales Invoices", subtitle: `Generated on ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, orientation: "landscape", sheets: [{ name: "Sales Invoices", headers, rows }], company });
                 }}
                 disabled={isLoading || invoices.length === 0}
               />

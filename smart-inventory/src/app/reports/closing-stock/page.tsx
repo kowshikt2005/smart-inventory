@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/table";
 import { Loader2, Package } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
 import { useState, useMemo } from "react";
 import useSWR from "swr";
 
@@ -101,18 +101,20 @@ export default function ClosingStockPage() {
     setCurrentPage(1);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
+    const { company } = await fetchCompanySettings();
     const headers = ["Item Code", "Name", "Brand", "Sub-Brand", "HSN", "Unit", "Purchase Price", "Avail. Stock", "Stock Value"];
     const rows = items.map((i) => [i.itemCode, i.name, i.brand, i.subBrand, i.hsnCode, i.unit, i.purchasePrice, i.availableStock, i.stockValue]);
     rows.push(["", "", "", "", "", "", "Total", summary.totalQuantity, summary.totalValue]);
-    exportToExcel({ fileName: `Closing-Stock.xlsx`, sheets: [{ name: "Closing Stock", headers, rows }] });
+    exportToExcel({ fileName: `Closing-Stock.xlsx`, sheets: [{ name: "Closing Stock", headers, rows }], company });
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    const { company } = await fetchCompanySettings();
     const headers = ["Code", "Name", "Brand", "Sub-Brand", "HSN", "Unit", "Price", "Stock", "Value"];
     const rows = items.map((i) => [i.itemCode, i.name, i.brand, i.subBrand, i.hsnCode, i.unit, fmtNum(i.purchasePrice), i.availableStock, fmtNum(i.stockValue)]);
     rows.push(["", "", "", "", "", "", "Total", summary.totalQuantity, fmtNum(summary.totalValue)]);
-    exportToPDF({ fileName: `Closing-Stock.pdf`, title: "Closing Stock Report", subtitle: `As of ${new Date().toLocaleDateString("en-IN")}`, orientation: "landscape", sheets: [{ name: "Closing Stock", headers, rows }] });
+    exportToPDF({ fileName: `Closing-Stock.pdf`, title: "Closing Stock Report", subtitle: `As of ${new Date().toLocaleDateString("en-IN")}`, orientation: "landscape", sheets: [{ name: "Closing Stock", headers, rows }], company });
   };
 
   return (

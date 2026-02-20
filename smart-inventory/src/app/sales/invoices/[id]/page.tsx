@@ -14,11 +14,8 @@ import {
 import { ArrowLeft, Loader2, Save, Ban, Edit, FileDown } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import {
-  generateInvoicePDF,
-  type CompanySettings,
-  type BankAccountInfo,
-} from "@/lib/invoice-pdf";
+import { generateInvoicePDF } from "@/lib/invoice-pdf";
+import { fetchCompanySettings } from "@/lib/export-utils";
 
 interface Customer {
   id: string;
@@ -172,42 +169,8 @@ export default function InvoiceDetailPage() {
 
     setIsPdfLoading(true);
     try {
-      // Fetch settings and default bank account in parallel
-      const [settingsRes, bankRes] = await Promise.all([
-        fetch("/api/settings"),
-        fetch("/api/bank-accounts"),
-      ]);
-
-      const settingsArr = await settingsRes.json();
-      const bankData = await bankRes.json();
-
-      // Build company settings from key-value pairs
-      const settingsMap: Record<string, string> = {};
-      for (const s of settingsArr) {
-        settingsMap[s.key] = s.value;
-      }
-      const company: CompanySettings = {
-        company_name: settingsMap.company_name || "",
-        company_address: settingsMap.company_address || "",
-        company_city: settingsMap.company_city || "",
-        company_state: settingsMap.company_state || "",
-        company_pincode: settingsMap.company_pincode || "",
-        company_phone: settingsMap.company_phone || "",
-        company_email: settingsMap.company_email || "",
-        company_gstin: settingsMap.company_gstin || "",
-        company_pan: settingsMap.company_pan || "",
-        company_msme: settingsMap.company_msme || "",
-        company_fssai: settingsMap.company_fssai || "",
-      };
-
-      // Find default bank account
-      const bankAccounts = bankData.bankAccounts || bankData || [];
-      const defaultBank: BankAccountInfo | null =
-        (Array.isArray(bankAccounts)
-          ? bankAccounts.find((b: { isDefault?: boolean }) => b.isDefault) || bankAccounts[0]
-          : null) || null;
-
-      generateInvoicePDF(invoice, company, defaultBank);
+      const { company, bank } = await fetchCompanySettings();
+      generateInvoicePDF(invoice, company, bank);
     } catch (err) {
       console.error("Error generating PDF:", err);
       alert("Failed to generate PDF. Please try again.");

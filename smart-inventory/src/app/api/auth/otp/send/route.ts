@@ -24,23 +24,15 @@ export async function POST(request: NextRequest) {
       where: { phone: normalizedPhone },
     });
 
-    if (!user || !user.isActive) {
-      return NextResponse.json(
-        { error: "No active account found with this phone number" },
-        { status: 404 }
-      );
+    // Send OTP only if user exists — but always return generic 200 to prevent phone enumeration
+    if (user?.isActive) {
+      const result = await sendOTP(phone);
+      if (!result.success) {
+        return NextResponse.json({ error: result.error }, { status: 429 });
+      }
     }
 
-    const result = await sendOTP(phone);
-
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: 429 }
-      );
-    }
-
-    return NextResponse.json({ success: true, message: "OTP sent successfully" });
+    return NextResponse.json({ success: true, message: "If this number is registered, an OTP was sent" });
   } catch (error) {
     console.error("Send OTP error:", error);
     return NextResponse.json(

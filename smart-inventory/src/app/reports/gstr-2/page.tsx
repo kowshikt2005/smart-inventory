@@ -9,7 +9,7 @@ import {
 import { formatINR } from "@/lib/gst-report-utils";
 import { GitCompareArrows, Loader2, AlertCircle } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, monthLabel } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, monthLabel, fetchCompanySettings } from "@/lib/export-utils";
 
 interface GSTR2Data {
   period: { month: string; year: number };
@@ -74,20 +74,22 @@ export default function GSTR2Page() {
     fetchData();
   }, [period.month, period.year]);
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!data) return;
+    const { company } = await fetchCompanySettings();
     const sheets = [];
     if (data.invoices.length) sheets.push({ name: "Invoices", headers: ["Vendor GSTIN", "Vendor Name", "Invoice No", "Date", "Place of Supply", "Taxable Value", "CGST", "SGST", "Total"], rows: data.invoices.map((r) => [r.vendorGstin, r.vendorName, r.invoiceNumber, fmtDateExport(r.date), r.placeOfSupply, r.taxableValue, r.cgst, r.sgst, r.total]) });
     if (data.hsn.length) sheets.push({ name: "HSN Summary", headers: ["HSN Code", "Description", "UQC", "Qty", "Taxable Value", "CGST", "SGST", "Rate %"], rows: data.hsn.map((r) => [r.hsnCode, r.description, r.uqc, r.qty, r.taxableValue, r.cgst, r.sgst, r.rate]) });
-    if (sheets.length) exportToExcel({ fileName: `GSTR-2_${monthLabel(period.month - 1, period.year)}.xlsx`, sheets });
+    if (sheets.length) exportToExcel({ fileName: `GSTR-2_${monthLabel(period.month - 1, period.year)}.xlsx`, sheets, company });
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!data) return;
+    const { company } = await fetchCompanySettings();
     const sheets = [];
     if (data.invoices.length) sheets.push({ name: "Invoices", headers: ["GSTIN", "Vendor", "Invoice", "Date", "POS", "Taxable", "CGST", "SGST", "Total"], rows: data.invoices.map((r) => [r.vendorGstin, r.vendorName, r.invoiceNumber, fmtDateExport(r.date), r.placeOfSupply, fmtNum(r.taxableValue), fmtNum(r.cgst), fmtNum(r.sgst), fmtNum(r.total)]) });
     if (data.hsn.length) sheets.push({ name: "HSN Summary", headers: ["HSN", "Description", "UQC", "Qty", "Taxable", "CGST", "SGST", "Rate"], rows: data.hsn.map((r) => [r.hsnCode, r.description, r.uqc, r.qty, fmtNum(r.taxableValue), fmtNum(r.cgst), fmtNum(r.sgst), `${r.rate}%`]) });
-    if (sheets.length) exportToPDF({ fileName: `GSTR-2_${monthLabel(period.month - 1, period.year)}.pdf`, title: "GSTR-2 — Purchase Reconciliation", subtitle: monthLabel(period.month - 1, period.year), orientation: "landscape", sheets });
+    if (sheets.length) exportToPDF({ fileName: `GSTR-2_${monthLabel(period.month - 1, period.year)}.pdf`, title: "GSTR-2 — Purchase Reconciliation", subtitle: monthLabel(period.month - 1, period.year), orientation: "landscape", sheets, company });
   };
 
   return (

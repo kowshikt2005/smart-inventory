@@ -14,11 +14,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, MoreHorizontal, Eye, Edit, Loader2, X, Package, Trash2, Tag, Layers, ArrowRight } from "lucide-react";
+import { Plus, MoreHorizontal, Eye, Edit, Loader2, X, Package, Trash2, Tag, Layers, ArrowRight, PowerOff, Power } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -58,28 +60,42 @@ export default function ItemsPage() {
   const [newStockValue, setNewStockValue] = useState("");
   const [stockNotes, setStockNotes] = useState("");
   const [isAdjustingStock, setIsAdjustingStock] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const itemsPerPage = 10;
 
   // Debounce search
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   // Use SWR for caching
-  const { data, error, isLoading, mutate } = useSWR("/api/items?limit=100");
+  const { data, error, isLoading, mutate } = useSWR("/api/items?limit=1000");
 
-  // Filter items based on search query
+  // Filter items based on search query and status filter
   const filteredItems = useMemo(() => {
-    const items = data?.items || [];
-    if (!debouncedSearch.trim()) return items;
+    let items: Item[] = data?.items || [];
 
-    const query = debouncedSearch.toLowerCase();
-    return items.filter(
-      (item: Item) =>
-        item.name.toLowerCase().includes(query) ||
-        item.itemCode.toLowerCase().includes(query) ||
-        (item.brand?.name.toLowerCase().includes(query)) ||
-        (item.hsnCode?.toLowerCase().includes(query))
-    );
-  }, [debouncedSearch, data]);
+    if (debouncedSearch.trim()) {
+      const query = debouncedSearch.toLowerCase();
+      items = items.filter(
+        (item: Item) =>
+          item.name.toLowerCase().includes(query) ||
+          item.itemCode.toLowerCase().includes(query) ||
+          (item.brand?.name.toLowerCase().includes(query)) ||
+          (item.hsnCode?.toLowerCase().includes(query))
+      );
+    }
+
+    if (statusFilter !== "ALL") {
+      items = items.filter(i => statusFilter === "ACTIVE" ? i.isActive : !i.isActive);
+    }
+
+    return items;
+  }, [debouncedSearch, data, statusFilter]);
+
+  const counts = useMemo(() => {
+    const all: Item[] = data?.items || [];
+    return { all: all.length, active: all.filter(i => i.isActive).length, inactive: all.filter(i => !i.isActive).length };
+  }, [data]);
 
   // Paginate items
   const paginatedItems = useMemo(() => {
@@ -127,6 +143,23 @@ export default function ItemsPage() {
     } catch (err) {
       console.error("Error deleting item:", err);
       alert(err instanceof Error ? err.message : "Failed to delete item");
+    }
+  };
+
+  const handleToggleStatus = async (item: Item) => {
+    setTogglingId(item.id);
+    try {
+      const res = await fetch(`/api/items/${item.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !item.isActive }),
+      });
+      if (!res.ok) throw new Error();
+      mutate();
+    } catch {
+      alert("Failed to update item status.");
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -253,6 +286,19 @@ export default function ItemsPage() {
           </div>
         </div>
 
+        {/* Status Filter Tabs */}
+        <div className="flex gap-1 border-b border-border mb-0 mt-2">
+          {(["ALL", "ACTIVE", "INACTIVE"] as const).map((f) => (
+            <button key={f} onClick={() => { setStatusFilter(f); setCurrentPage(1); }}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${statusFilter === f ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+              {f === "ALL" ? "All" : f === "ACTIVE" ? "Active" : "Inactive"}
+              <span className="ml-1.5 text-xs bg-muted rounded-full px-1.5 py-0.5">
+                {f === "ALL" ? counts.all : f === "ACTIVE" ? counts.active : counts.inactive}
+              </span>
+            </button>
+          ))}
+        </div>
+
         {/* Items Table */}
         <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
           <Table aria-label="Items list">
@@ -269,13 +315,14 @@ export default function ItemsPage() {
                 <TableHead scope="col" className="font-semibold">MRP</TableHead>
                 <TableHead scope="col" className="font-semibold">Selling</TableHead>
                 <TableHead scope="col" className="font-semibold">Available</TableHead>
+                <TableHead scope="col" className="font-semibold">Status</TableHead>
                 <TableHead scope="col" className="font-semibold">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center text-gray-500 py-12">
+                  <TableCell colSpan={13} className="text-center text-gray-500 py-12">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Loading items...</span>
@@ -284,7 +331,7 @@ export default function ItemsPage() {
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center text-red-600 py-8">
+                  <TableCell colSpan={13} className="text-center text-red-600 py-8">
                     <div className="space-y-2">
                       <p>Error: {error.message || "Failed to load items"}</p>
                       <Button onClick={() => mutate()} variant="outline" size="sm">
@@ -295,7 +342,7 @@ export default function ItemsPage() {
                 </TableRow>
               ) : paginatedItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center text-gray-500 py-8">
+                  <TableCell colSpan={13} className="text-center text-gray-500 py-8">
                     {searchQuery
                       ? "No items found matching your search"
                       : "No items yet. Click 'Add Item' to get started."}
@@ -303,7 +350,7 @@ export default function ItemsPage() {
                 </TableRow>
               ) : (
                 paginatedItems.map((item: Item) => (
-                  <TableRow key={item.id}>
+                  <TableRow key={item.id} className={!item.isActive ? "opacity-50 bg-muted/20" : undefined}>
                     <TableCell className="font-mono">{item.itemCode}</TableCell>
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell>{item.brand?.name || "N/A"}</TableCell>
@@ -317,13 +364,20 @@ export default function ItemsPage() {
                     <TableCell>
                       <div className="text-sm">
                         <div className={`font-medium ${
-                          Number(item.inventory?.physicalStock || 0) - Number(item.inventory?.reservedQuantity || 0) > 0 
-                            ? 'text-green-600' 
+                          Number(item.inventory?.physicalStock || 0) - Number(item.inventory?.reservedQuantity || 0) > 0
+                            ? 'text-green-600'
                             : 'text-red-600'
                         }`}>
                           {Number(item.inventory?.physicalStock || 0) - Number(item.inventory?.reservedQuantity || 0)} available
                         </div>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {item.isActive ? (
+                        <Badge variant="default" className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">Active</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-gray-100 text-gray-500 border-gray-200">Inactive</Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -333,8 +387,13 @@ export default function ItemsPage() {
                             size="sm"
                             className="h-8 w-8 p-0"
                             aria-label={`Actions for ${item.name}`}
+                            disabled={togglingId === item.id}
                           >
-                            <MoreHorizontal className="h-4 w-4" />
+                            {togglingId === item.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <MoreHorizontal className="h-4 w-4" />
+                            )}
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -350,6 +409,21 @@ export default function ItemsPage() {
                             <Package className="h-4 w-4 mr-2" />
                             Adjust Stock
                           </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleToggleStatus(item)} className={item.isActive ? "text-amber-600 focus:text-amber-600" : "text-green-600 focus:text-green-600"}>
+                            {item.isActive ? (
+                              <>
+                                <PowerOff className="h-4 w-4 mr-2" />
+                                Deactivate
+                              </>
+                            ) : (
+                              <>
+                                <Power className="h-4 w-4 mr-2" />
+                                Activate
+                              </>
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => handleDeleteItem(item)} className="text-red-600 focus:text-red-600">
                             <Trash2 className="h-4 w-4 mr-2" />
                             Delete Item

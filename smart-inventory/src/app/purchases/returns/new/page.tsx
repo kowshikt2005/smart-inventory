@@ -66,7 +66,7 @@ function NewPurchaseReturnPageContent() {
   const fetchVendors = useCallback(async () => {
     try {
       setIsLoadingVendors(true);
-      const response = await fetch("/api/vendors?limit=500");
+      const response = await fetch("/api/vendors?limit=500&activeOnly=true");
       if (response.ok) {
         const data = await response.json();
         setVendors(data.vendors || []);

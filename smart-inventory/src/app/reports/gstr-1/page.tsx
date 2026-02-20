@@ -9,7 +9,7 @@ import {
 import { formatINR } from "@/lib/gst-report-utils";
 import { FileSpreadsheet, Loader2, AlertCircle } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, monthLabel } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, monthLabel, fetchCompanySettings } from "@/lib/export-utils";
 
 interface GSTR1Data {
   period: { month: string; year: number };
@@ -124,8 +124,9 @@ export default function GSTR1Page() {
     }
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!data) return;
+    const { company } = await fetchCompanySettings();
     const sheets = [];
     if (data.b2b.length) sheets.push({ name: "B2B", headers: ["GSTIN", "Receiver", "Invoice No", "Date", "Place of Supply", "Taxable Value", "CGST", "SGST", "Total"], rows: data.b2b.map((r) => [r.customerGstin, r.customerName, r.invoiceNumber, fmtDateExport(r.date), r.placeOfSupply, r.taxableValue, r.cgst, r.sgst, r.total]) });
     if (data.b2cLarge.length) sheets.push({ name: "B2C Large", headers: ["Place of Supply", "Rate %", "Taxable Value", "CGST", "SGST", "Invoice Count"], rows: data.b2cLarge.map((r) => [r.placeOfSupply, r.rate, r.taxableValue, r.cgst, r.sgst, r.count]) });
@@ -133,18 +134,19 @@ export default function GSTR1Page() {
     if (data.cdnr.length) sheets.push({ name: "CDNR", headers: ["Note No", "Date", "Type", "Original Invoice", "GSTIN", "Receiver", "Taxable Value", "CGST", "SGST"], rows: data.cdnr.map((r) => [r.noteNumber, fmtDateExport(r.noteDate), r.noteType, r.originalInvoice, r.customerGstin, r.customerName, r.taxableValue, r.cgst, r.sgst]) });
     if (data.hsn.length) sheets.push({ name: "HSN", headers: ["HSN Code", "Description", "UQC", "Qty", "Taxable Value", "CGST", "SGST", "Rate %"], rows: data.hsn.map((r) => [r.hsnCode, r.description, r.uqc, r.qty, r.taxableValue, r.cgst, r.sgst, r.rate]) });
     sheets.push({ name: "Documents", headers: ["From", "To", "Total", "Cancelled", "Net Issued"], rows: [[data.documents.from, data.documents.to, data.documents.total, data.documents.cancelled, data.documents.netIssued]] });
-    exportToExcel({ fileName: `GSTR-1_${monthLabel(period.month - 1, period.year)}.xlsx`, sheets });
+    exportToExcel({ fileName: `GSTR-1_${monthLabel(period.month - 1, period.year)}.xlsx`, sheets, company });
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!data) return;
+    const { company } = await fetchCompanySettings();
     const sheets = [];
     if (data.b2b.length) sheets.push({ name: "B2B Invoices", headers: ["GSTIN", "Receiver", "Invoice No", "Date", "POS", "Taxable", "CGST", "SGST", "Total"], rows: data.b2b.map((r) => [r.customerGstin, r.customerName, r.invoiceNumber, fmtDateExport(r.date), r.placeOfSupply, fmtNum(r.taxableValue), fmtNum(r.cgst), fmtNum(r.sgst), fmtNum(r.total)]) });
     if (data.b2cLarge.length) sheets.push({ name: "B2C Large", headers: ["Place of Supply", "Rate %", "Taxable Value", "CGST", "SGST", "Count"], rows: data.b2cLarge.map((r) => [r.placeOfSupply, `${r.rate}%`, fmtNum(r.taxableValue), fmtNum(r.cgst), fmtNum(r.sgst), r.count]) });
     if (data.b2cSmall.length) sheets.push({ name: "B2C Small", headers: ["Rate %", "Taxable Value", "CGST", "SGST"], rows: data.b2cSmall.map((r) => [`${r.rate}%`, fmtNum(r.taxableValue), fmtNum(r.cgst), fmtNum(r.sgst)]) });
     if (data.cdnr.length) sheets.push({ name: "Credit/Debit Notes", headers: ["Note No", "Date", "Orig Invoice", "GSTIN", "Receiver", "Taxable", "CGST", "SGST"], rows: data.cdnr.map((r) => [r.noteNumber, fmtDateExport(r.noteDate), r.originalInvoice, r.customerGstin, r.customerName, fmtNum(r.taxableValue), fmtNum(r.cgst), fmtNum(r.sgst)]) });
     if (data.hsn.length) sheets.push({ name: "HSN Summary", headers: ["HSN", "Description", "UQC", "Qty", "Taxable", "CGST", "SGST", "Rate"], rows: data.hsn.map((r) => [r.hsnCode, r.description, r.uqc, r.qty, fmtNum(r.taxableValue), fmtNum(r.cgst), fmtNum(r.sgst), `${r.rate}%`]) });
-    exportToPDF({ fileName: `GSTR-1_${monthLabel(period.month - 1, period.year)}.pdf`, title: "GSTR-1 — Outward Supplies", subtitle: monthLabel(period.month - 1, period.year), orientation: "landscape", sheets });
+    exportToPDF({ fileName: `GSTR-1_${monthLabel(period.month - 1, period.year)}.pdf`, title: "GSTR-1 — Outward Supplies", subtitle: monthLabel(period.month - 1, period.year), orientation: "landscape", sheets, company });
   };
 
   return (

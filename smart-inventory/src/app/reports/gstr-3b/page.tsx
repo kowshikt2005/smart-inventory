@@ -9,7 +9,7 @@ import {
 import { formatINR } from "@/lib/gst-report-utils";
 import { Calculator, Loader2, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, monthLabel } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, fmtNum, monthLabel, fetchCompanySettings } from "@/lib/export-utils";
 
 interface GSTR3BData {
   period: { month: string; year: number };
@@ -62,24 +62,26 @@ export default function GSTR3BPage() {
     fetchData();
   }, [period.month, period.year]);
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!data) return;
+    const { company } = await fetchCompanySettings();
     const sheets = [
       { name: "Outward Supplies", headers: ["Description", "Taxable Value", "CGST", "SGST"], rows: [["Outward taxable supplies", data.outwardSupplies.taxableValue, data.outwardSupplies.cgst, data.outwardSupplies.sgst], ...data.outwardSupplies.rateWise.map((r) => [`Rate ${r.rate}%`, r.taxableValue, r.cgst, r.sgst])] },
       { name: "Eligible ITC", headers: ["Details", "CGST", "SGST"], rows: [["ITC Available", data.inputTaxCredit.available.cgst, data.inputTaxCredit.available.sgst], ["ITC Reversed", data.inputTaxCredit.reversed.cgst, data.inputTaxCredit.reversed.sgst], ["Net ITC", data.inputTaxCredit.net.cgst, data.inputTaxCredit.net.sgst]] },
       { name: "Tax Payable", headers: ["Description", "CGST", "SGST", "Total"], rows: [["Output Tax", data.taxPayable.output.cgst, data.taxPayable.output.sgst, data.taxPayable.output.cgst + data.taxPayable.output.sgst], ["Less: ITC", data.taxPayable.input.cgst, data.taxPayable.input.sgst, data.taxPayable.input.cgst + data.taxPayable.input.sgst], ["Net Tax Payable", data.taxPayable.net.cgst, data.taxPayable.net.sgst, data.taxPayable.net.total]] },
     ];
-    exportToExcel({ fileName: `GSTR-3B_${monthLabel(period.month - 1, period.year)}.xlsx`, sheets });
+    exportToExcel({ fileName: `GSTR-3B_${monthLabel(period.month - 1, period.year)}.xlsx`, sheets, company });
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!data) return;
+    const { company } = await fetchCompanySettings();
     const sheets = [
       { name: "3.1 — Outward Supplies", headers: ["Description", "Taxable Value", "CGST", "SGST"], rows: [["Outward taxable supplies", fmtNum(data.outwardSupplies.taxableValue), fmtNum(data.outwardSupplies.cgst), fmtNum(data.outwardSupplies.sgst)], ...data.outwardSupplies.rateWise.map((r) => [`Rate ${r.rate}%`, fmtNum(r.taxableValue), fmtNum(r.cgst), fmtNum(r.sgst)])] },
       { name: "4 — Eligible ITC", headers: ["Details", "CGST", "SGST"], rows: [["ITC Available", fmtNum(data.inputTaxCredit.available.cgst), fmtNum(data.inputTaxCredit.available.sgst)], ["ITC Reversed", fmtNum(data.inputTaxCredit.reversed.cgst), fmtNum(data.inputTaxCredit.reversed.sgst)], ["Net ITC", fmtNum(data.inputTaxCredit.net.cgst), fmtNum(data.inputTaxCredit.net.sgst)]] },
       { name: "5 — Tax Payable", headers: ["Description", "CGST", "SGST", "Total"], rows: [["Output Tax", fmtNum(data.taxPayable.output.cgst), fmtNum(data.taxPayable.output.sgst), fmtNum(data.taxPayable.output.cgst + data.taxPayable.output.sgst)], ["Less: ITC", fmtNum(data.taxPayable.input.cgst), fmtNum(data.taxPayable.input.sgst), fmtNum(data.taxPayable.input.cgst + data.taxPayable.input.sgst)], ["Net Tax Payable", fmtNum(data.taxPayable.net.cgst), fmtNum(data.taxPayable.net.sgst), fmtNum(data.taxPayable.net.total)]] },
     ];
-    exportToPDF({ fileName: `GSTR-3B_${monthLabel(period.month - 1, period.year)}.pdf`, title: "GSTR-3B — Monthly Summary Return", subtitle: monthLabel(period.month - 1, period.year), sheets });
+    exportToPDF({ fileName: `GSTR-3B_${monthLabel(period.month - 1, period.year)}.pdf`, title: "GSTR-3B — Monthly Summary Return", subtitle: monthLabel(period.month - 1, period.year), sheets, company });
   };
 
   return (

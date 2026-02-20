@@ -112,7 +112,7 @@ export default function NewSalesReturnPage() {
   useEffect(() => {
     const fetchCustomers = async () => {
       try {
-        const response = await fetch("/api/customers?limit=1000");
+        const response = await fetch("/api/customers?limit=1000&activeOnly=true");
         if (response.ok) {
           const data = await response.json();
           setCustomers(data.customers || []);

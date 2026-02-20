@@ -80,7 +80,12 @@ export async function PUT(
     if (body.creditLimit !== undefined) updateData.creditLimit = body.creditLimit;
     if (body.creditDays !== undefined) updateData.creditDays = body.creditDays;
     if (body.openingBalance !== undefined) updateData.openingBalance = body.openingBalance;
-    if (body.status !== undefined) updateData.status = body.status;
+    if (body.status !== undefined) {
+      if (!['ACTIVE', 'INACTIVE'].includes(body.status)) {
+        return NextResponse.json({ error: 'Invalid status value' }, { status: 400 });
+      }
+      updateData.status = body.status;
+    }
 
     // Update customer
     const customer = await db.customer.update({
