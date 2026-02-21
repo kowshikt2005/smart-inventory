@@ -173,7 +173,7 @@ export default function VendorDetailPage() {
                 </>
               ) : (
                 <>
-                  <Button variant="outline" onClick={() => router.push(`/ledger/vendors?vendorId=${id}`)}>
+                  <Button variant="outline" onClick={() => router.push(`/ledger/customers`)}>
                     <FileText className="h-4 w-4 mr-2" />
                     View Transactions
                   </Button>

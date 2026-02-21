@@ -68,7 +68,7 @@ export const Header = memo(function Header() {
             // Skip UUID-like segments in display
             const isUuid = segment.length > 20;
             // Parent-only routes that have no dedicated page
-            const nonClickableRoutes = ["/masters", "/ledger", "/bank-cash"];
+            const nonClickableRoutes = ["/masters", "/ledger", "/bank-cash", "/sales", "/purchases"];
             const isNonClickable = nonClickableRoutes.includes(href);
 
             return (

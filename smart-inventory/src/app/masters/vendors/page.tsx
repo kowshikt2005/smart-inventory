@@ -124,8 +124,8 @@ export default function VendorsPage() {
     router.push(`/masters/vendors/${vendorId}`);
   };
 
-  const handleViewTransactions = (vendorId: string) => {
-    router.push(`/ledger/vendors?vendorId=${vendorId}`);
+  const handleViewTransactions = (_vendorId: string) => {
+    router.push(`/ledger/customers`);
   };
 
   const handleToggleStatus = async (vendor: Vendor) => {
