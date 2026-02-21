@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, Loader2, Save, Ban, Edit, FileDown } from "lucide-react";
+import { ArrowLeft, Loader2, Ban, FileDown } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { generateInvoicePDF } from "@/lib/invoice-pdf";
@@ -95,7 +95,6 @@ export default function InvoiceDetailPage() {
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -133,34 +132,6 @@ export default function InvoiceDetailPage() {
     } catch (err) {
       console.error("Error cancelling invoice:", err);
       alert(err instanceof Error ? err.message : "Failed to cancel invoice");
-    }
-  };
-
-  const handleSaveInvoice = async () => {
-    if (!invoice) return;
-
-    setIsSaving(true);
-    try {
-      const response = await fetch(`/api/sales-invoices/${id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(invoice),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to save invoice");
-      }
-
-      alert("Invoice saved successfully!");
-      router.push("/sales/invoices");
-    } catch (err) {
-      console.error("Error saving invoice:", err);
-      alert(err instanceof Error ? err.message : "Failed to save invoice");
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -265,39 +236,16 @@ export default function InvoiceDetailPage() {
                 )}
                 Download PDF
               </Button>
-              {invoice.effectiveStatus === "PENDING" && (
-                <Button
-                  onClick={() => router.push(`/sales/invoices/new?edit=${invoice.id}`)}
-                  variant="outline"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Invoice
-                </Button>
-              )}
               {invoice.effectiveStatus !== "PAID" &&
                 invoice.effectiveStatus !== "CANCELLED" && (
-                  <>
-                    <Button
-                      onClick={handleSaveInvoice}
-                      disabled={isSaving}
-                      className="bg-teal-500 hover:bg-teal-600"
-                    >
-                      {isSaving ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Save className="h-4 w-4 mr-2" />
-                      )}
-                      Save Invoice
-                    </Button>
-                    <Button
-                      onClick={handleCancel}
-                      variant="outline"
-                      className="text-red-600 border-red-600 hover:bg-red-50"
-                    >
-                      <Ban className="h-4 w-4 mr-2" />
-                      Cancel Invoice
-                    </Button>
-                  </>
+                  <Button
+                    onClick={handleCancel}
+                    variant="outline"
+                    className="text-red-600 border-red-600 hover:bg-red-50"
+                  >
+                    <Ban className="h-4 w-4 mr-2" />
+                    Cancel Invoice
+                  </Button>
                 )}
             </div>
           </div>
@@ -392,7 +340,9 @@ export default function InvoiceDetailPage() {
                           </p>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm">{item.item.hsnCode || "-"}</TableCell>
+                      <TableCell className="text-sm">
+                        {item.item.hsnCode || "-"}
+                      </TableCell>
                       <TableCell className="text-right">
                         {Number(item.quantity)} {item.item.unit}
                       </TableCell>
@@ -401,7 +351,9 @@ export default function InvoiceDetailPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         {Number(item.discountPercent) > 0 ? (
-                          <span className="text-orange-600">{Number(item.discountPercent)}%</span>
+                          <span className="text-orange-600">
+                            {Number(item.discountPercent)}%
+                          </span>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}

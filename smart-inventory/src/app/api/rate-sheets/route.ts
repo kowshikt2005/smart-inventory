@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
+import { cache, cacheKeys } from '@/lib/cache';
 
 // GET /api/rate-sheets - Get all rate sheets
 export async function GET(request: Request) {
@@ -156,6 +157,11 @@ export async function POST(request: Request) {
         },
       });
     });
+
+    // Invalidate rate sheet cache for all affected customers
+    for (const customerId of body.customerIds) {
+      cache.delete(cacheKeys.rateSheet(customerId));
+    }
 
     return NextResponse.json(rateSheet, { status: 201 });
   } catch (error: any) {

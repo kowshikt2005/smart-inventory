@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
+import { calculateLineItemV2, calculateInclusiveTaxRate } from '@/lib/order-utils';
 
 // GET /api/sales-invoices/[id] - Get single invoice
 export async function GET(
@@ -163,28 +164,27 @@ export async function PUT(
         });
 
         // Calculate new items
-        const newItems = body.items.map((item: any) => {
-          const amount = Number(item.quantity) * Number(item.rate);
+        const newItems = body.items.map((item: { itemId: string; quantity: number; rate: number; taxRate: number; discountPercent?: number }) => {
+          const quantity = Number(item.quantity);
+          const rate = Number(item.rate);
           const taxRate = Number(item.taxRate);
-          const taxAmount = amount * (taxRate / 100);
-          const cgst = taxAmount / 2;
-          const sgst = taxAmount / 2;
+          const discountPercent = Number(item.discountPercent || 0);
+
+          const lineItem = calculateLineItemV2(quantity, rate, taxRate, discountPercent);
+
           return {
             itemId: item.itemId,
-            quantity: Number(item.quantity),
-            rate: Number(item.rate),
+            quantity,
+            rate,
+            discountPercent,
             taxRate,
-            taxAmount: Math.round(taxAmount * 100) / 100,
-            cgst: Math.round(cgst * 100) / 100,
-            sgst: Math.round(sgst * 100) / 100,
-            amount: Math.round(amount * 100) / 100,
+            taxAmount: lineItem.taxAmount,
+            amount: lineItem.amount,
           };
         });
 
-        const subtotal = newItems.reduce((sum: number, item: any) => sum + item.amount, 0);
-        const totalCgst = newItems.reduce((sum: number, item: any) => sum + item.cgst, 0);
-        const totalSgst = newItems.reduce((sum: number, item: any) => sum + item.sgst, 0);
-        const totalTax = totalCgst + totalSgst;
+        const subtotal = newItems.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0);
+        const totalTax = newItems.reduce((sum: number, item: { taxAmount: number }) => sum + item.taxAmount, 0);
         const rawTotal = subtotal + totalTax;
         const roundOff = Math.round(rawTotal) - rawTotal;
         const totalAmount = Math.round(rawTotal);
@@ -196,8 +196,8 @@ export async function PUT(
             notes: body.notes !== undefined ? body.notes : invoice.notes,
             dueDate: body.dueDate ? new Date(body.dueDate) : invoice.dueDate,
             subtotal: Math.round(subtotal * 100) / 100,
-            cgst: Math.round(totalCgst * 100) / 100,
-            sgst: Math.round(totalSgst * 100) / 100,
+            cgst: Math.round(totalTax / 2 * 100) / 100,
+            sgst: Math.round(totalTax / 2 * 100) / 100,
             taxAmount: Math.round(totalTax * 100) / 100,
             roundOff: Math.round(roundOff * 100) / 100,
             totalAmount,

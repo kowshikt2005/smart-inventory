@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
+import { cache, cacheKeys } from '@/lib/cache';
 
 // GET /api/rate-sheets/[id] - Get a single rate sheet
 export async function GET(
@@ -55,10 +56,11 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    // Check if rate sheet exists
-    const existingRateSheet = await db.rateSheet.findUnique({
-      where: { id },
-    });
+    // Check if rate sheet exists and get current customers for cache invalidation
+    const [existingRateSheet, existingCustomers] = await Promise.all([
+      db.rateSheet.findUnique({ where: { id } }),
+      db.rateSheetCustomer.findMany({ where: { rateSheetId: id }, select: { customerId: true } }),
+    ]);
 
     if (!existingRateSheet) {
       return NextResponse.json(
@@ -136,6 +138,17 @@ export async function PUT(
       });
     });
 
+    // Invalidate rate sheet cache for old customers
+    for (const entry of existingCustomers) {
+      cache.delete(cacheKeys.rateSheet(entry.customerId));
+    }
+    // Invalidate cache for new customers (if customer list was updated)
+    if (Array.isArray(body.customerIds)) {
+      for (const customerId of body.customerIds) {
+        cache.delete(cacheKeys.rateSheet(customerId));
+      }
+    }
+
     return NextResponse.json(rateSheet);
   } catch (error: any) {
     console.error('Error updating rate sheet:', error);
@@ -162,9 +175,10 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    const existingRateSheet = await db.rateSheet.findUnique({
-      where: { id },
-    });
+    const [existingRateSheet, affectedCustomers] = await Promise.all([
+      db.rateSheet.findUnique({ where: { id } }),
+      db.rateSheetCustomer.findMany({ where: { rateSheetId: id }, select: { customerId: true } }),
+    ]);
 
     if (!existingRateSheet) {
       return NextResponse.json(
@@ -175,6 +189,11 @@ export async function DELETE(
 
     // Cascade delete handles join table entries automatically
     await db.rateSheet.delete({ where: { id } });
+
+    // Invalidate rate sheet cache for all affected customers
+    for (const entry of affectedCustomers) {
+      cache.delete(cacheKeys.rateSheet(entry.customerId));
+    }
 
     return NextResponse.json({ message: 'Rate sheet deleted successfully' });
   } catch (error) {

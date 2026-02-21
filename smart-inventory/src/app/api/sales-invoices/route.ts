@@ -291,30 +291,30 @@ export async function POST(request: Request) {
       // Generate invoice number
       const invoiceNumber = await generateInvoiceNumber(tx as any);
 
-      // Calculate GST breakdown
-      const items = salesOrder.items.map((item) => ({
+      // Use order items as-is (discounts are already baked into the order)
+      const invoiceItems = salesOrder.items.map((orderItem) => ({
+        itemId: orderItem.itemId,
+        quantity: orderItem.quantity,
+        rate: orderItem.rate,
+        discountPercent: orderItem.discountPercent,
+        taxRate: orderItem.taxRate,
+        taxAmount: orderItem.taxAmount,
+        amount: orderItem.amount,
+      }));
+
+      // Calculate GST breakdown from (possibly overridden) invoice items
+      const itemTotals = invoiceItems.map((item) => ({
         amount: Number(item.amount),
         taxAmount: Number(item.taxAmount),
       }));
       const { subtotal, totalTax, cgst, sgst, totalAmount } = calculateOrderTotals(
-        items,
+        itemTotals,
         body.roundOff || 0
       );
 
       // Calculate due date
       const invoiceDate = body.invoiceDate ? new Date(body.invoiceDate) : new Date();
       const dueDate = calculateDueDate(invoiceDate, salesOrder.customer.creditDays);
-
-      // Prepare invoice items from sales order items
-      const invoiceItems = salesOrder.items.map((item) => ({
-        itemId: item.itemId,
-        quantity: item.quantity,
-        rate: item.rate,
-        discountPercent: item.discountPercent,
-        taxRate: item.taxRate,
-        taxAmount: item.taxAmount,
-        amount: item.amount,
-      }));
 
       // Create the invoice with items
       const newInvoice = await tx.invoice.create({

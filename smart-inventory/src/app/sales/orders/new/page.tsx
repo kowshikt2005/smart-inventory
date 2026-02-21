@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { OrderItemRow } from "@/components/sales-orders/OrderItemRow";
+import { ConfigureDiscountsModal, InclusionDiscounts as ModalInclusionDiscounts } from "@/components/sales-orders/ConfigureDiscountsModal";
 import {
   ArrowLeft,
   Loader2,
@@ -13,6 +14,7 @@ import {
   Search,
   X,
   Calculator,
+  Settings2,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -69,6 +71,17 @@ interface Item {
     physicalStock: number;
     reservedQuantity: number;
   } | null;
+}
+
+interface Brand {
+  id: string;
+  name: string;
+}
+
+interface SubBrand {
+  id: string;
+  name: string;
+  brandId: string;
 }
 
 interface InsufficientStockItem {
@@ -133,6 +146,12 @@ function NewSalesOrderPageContent() {
   ]);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
 
+  // Local discount overrides
+  const [localDiscounts, setLocalDiscounts] = useState<ModalInclusionDiscounts | null>(null);
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [subBrands, setSubBrands] = useState<SubBrand[]>([]);
+
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,6 +185,25 @@ function NewSalesOrderPageContent() {
       console.error("Error fetching items:", err);
     } finally {
       setIsLoadingItems(false);
+    }
+  }, []);
+
+  const fetchBrandsAndSubBrands = useCallback(async () => {
+    try {
+      const [brandsRes, subBrandsRes] = await Promise.all([
+        fetch("/api/brands?limit=500"),
+        fetch("/api/sub-brands?limit=500"),
+      ]);
+      if (brandsRes.ok) {
+        const data = await brandsRes.json();
+        setBrands(data.brands || []);
+      }
+      if (subBrandsRes.ok) {
+        const data = await subBrandsRes.json();
+        setSubBrands(data.subBrands || []);
+      }
+    } catch (err) {
+      console.error("Error fetching brands/sub-brands:", err);
     }
   }, []);
 
@@ -261,7 +299,8 @@ function NewSalesOrderPageContent() {
   useEffect(() => {
     fetchCustomers();
     fetchItems();
-  }, [fetchCustomers, fetchItems]);
+    fetchBrandsAndSubBrands();
+  }, [fetchCustomers, fetchItems, fetchBrandsAndSubBrands]);
 
   // Load order for editing OR fetch next order number for new order
   useEffect(() => {
@@ -348,13 +387,16 @@ function NewSalesOrderPageContent() {
       const useInclusionModel = rateSheet.useInclusionModel !== false;
       let discountPercent = 0;
 
-      if (useInclusionModel && rateSheet.inclusionDiscounts) {
+      // Use local overrides if configured, otherwise fall back to rate sheet
+      const effectiveDiscounts = localDiscounts || rateSheet.inclusionDiscounts;
+
+      if (useInclusionModel && effectiveDiscounts) {
         // Inclusion model: Get cascade discount (item > sub-brand > brand)
         discountPercent = resolveInclusionDiscount(
           item.id,
           item.brandId,
           item.subBrandId,
-          rateSheet.inclusionDiscounts
+          effectiveDiscounts
         );
       } else {
         // Legacy model
@@ -390,7 +432,7 @@ function NewSalesOrderPageContent() {
         discountApplied: discountPercent,
       };
     },
-    [selectedCustomer, resolveInclusionDiscount]
+    [selectedCustomer, localDiscounts, resolveInclusionDiscount]
   );
 
   // Backward compatible getEffectiveRate function
@@ -426,6 +468,7 @@ function NewSalesOrderPageContent() {
     }
 
     setSelectedCustomer(fullCustomer);
+    setLocalDiscounts(null); // Reset local discount overrides for new customer
     setCustomerSearch("");
 
     // Recalculate item rates if rate sheet changes
@@ -852,13 +895,29 @@ function NewSalesOrderPageContent() {
                               </p>
                             )}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedCustomer(null)}
-                            className="text-teal-600 hover:text-teal-800"
-                          >
-                            <X className="h-5 w-5" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {selectedCustomer.rateSheet?.isActive && selectedCustomer.rateSheet?.useInclusionModel !== false && (
+                              <button
+                                type="button"
+                                onClick={() => setShowDiscountModal(true)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                                  localDiscounts
+                                    ? "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100"
+                                    : "bg-white border-teal-300 text-teal-700 hover:bg-teal-50"
+                                }`}
+                              >
+                                <Settings2 className="h-4 w-4" />
+                                {localDiscounts ? "Custom Discounts" : "Configure Discounts"}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => { setSelectedCustomer(null); setLocalDiscounts(null); }}
+                              className="text-teal-600 hover:text-teal-800"
+                            >
+                              <X className="h-5 w-5" />
+                            </button>
+                          </div>
                         </div>
                         {/* Billing Address Section */}
                         {(selectedCustomer.address || selectedCustomer.city || selectedCustomer.state || selectedCustomer.pincode) && (
@@ -1054,6 +1113,85 @@ function NewSalesOrderPageContent() {
           </div>
         </div>
       </div>
+
+      {/* Configure Discounts Modal */}
+      {selectedCustomer && (
+        <ConfigureDiscountsModal
+          open={showDiscountModal}
+          onClose={() => setShowDiscountModal(false)}
+          discounts={
+            localDiscounts || {
+              brands: selectedCustomer.rateSheet?.inclusionDiscounts?.brands || [],
+              subBrands: selectedCustomer.rateSheet?.inclusionDiscounts?.subBrands || [],
+              items: selectedCustomer.rateSheet?.inclusionDiscounts?.items || [],
+            }
+          }
+          onSave={(newDiscounts) => {
+            setLocalDiscounts(newDiscounts);
+            // Recalculate all existing order items with new discounts
+            setOrderItems((prev) =>
+              prev.map((orderItem) => {
+                if (!orderItem.itemId) return orderItem;
+                const item = items.find((i) => i.id === orderItem.itemId);
+                if (!item) return orderItem;
+
+                // Resolve discount using the new local discounts
+                let discountPercent = 0;
+                if (newDiscounts.items?.length) {
+                  const itemDiscount = newDiscounts.items.find(i => i.id === item.id);
+                  if (itemDiscount) discountPercent = Number(itemDiscount.discountPercent);
+                }
+                if (discountPercent === 0 && item.subBrandId && newDiscounts.subBrands?.length) {
+                  const sbDiscount = newDiscounts.subBrands.find(sb => sb.id === item.subBrandId);
+                  if (sbDiscount) discountPercent = Number(sbDiscount.discountPercent);
+                }
+                if (discountPercent === 0 && item.brandId && newDiscounts.brands?.length) {
+                  const bDiscount = newDiscounts.brands.find(b => b.id === item.brandId);
+                  if (bDiscount) discountPercent = Number(bDiscount.discountPercent);
+                }
+
+                const mrp = Number(item.mrp) || Number(item.sellingPrice);
+                const sellingPrice = Number(item.sellingPrice);
+                const taxRate = orderItem.taxRate;
+                const quantity = orderItem.quantity;
+
+                let rate: number;
+                let isGstInclusive: boolean;
+                if (discountPercent > 0) {
+                  rate = Math.round(mrp * (1 - discountPercent / 100) * 100) / 100;
+                  isGstInclusive = true;
+                } else {
+                  rate = sellingPrice;
+                  isGstInclusive = false;
+                }
+
+                let baseAmount: number;
+                let taxAmount: number;
+                if (isGstInclusive) {
+                  const totalInclusive = quantity * rate;
+                  baseAmount = totalInclusive / (1 + taxRate / 100);
+                  taxAmount = totalInclusive - baseAmount;
+                } else {
+                  baseAmount = quantity * rate;
+                  taxAmount = baseAmount * (taxRate / 100);
+                }
+
+                return {
+                  ...orderItem,
+                  rate,
+                  discountPercent,
+                  amount: Math.round(baseAmount * 100) / 100,
+                  taxAmount: Math.round(taxAmount * 100) / 100,
+                  isGstInclusive,
+                };
+              })
+            );
+          }}
+          brands={brands}
+          subBrands={subBrands}
+          items={items}
+        />
+      )}
     </DashboardLayout>
   );
 }

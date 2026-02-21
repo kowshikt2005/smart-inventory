@@ -2534,10 +2534,11 @@ async function main() {
 
   await prisma.rateSheet.create({
     data: {
-      name: 'Premium Customer Rate - Q1 2027',
-      validFrom: new Date('2027-01-01'),
-      validTo: new Date('2027-03-31'),
+      name: 'Premium Customer Rate - H1 2026',
+      validFrom: new Date('2026-01-01'),
+      validTo: new Date('2026-06-30'),
       discountPercent: 8,
+      isActive: true,
       useInclusionModel: true,
       inclusionDiscounts: {
         brands: [
@@ -2560,10 +2561,11 @@ async function main() {
 
   await prisma.rateSheet.create({
     data: {
-      name: 'Standard Rate - Q1 2027',
-      validFrom: new Date('2027-01-01'),
-      validTo: new Date('2027-03-31'),
+      name: 'Standard Rate - H1 2026',
+      validFrom: new Date('2026-01-01'),
+      validTo: new Date('2026-06-30'),
       discountPercent: 5,
+      isActive: true,
       useInclusionModel: false,
       excludedBrandIds: [appleBrand.id],
       customers: {
@@ -2573,6 +2575,265 @@ async function main() {
         ],
       },
     },
+  });
+
+  // ============================================
+  // OPEN SALES ORDERS (with inventory reservations)
+  // ============================================
+  console.log('\n📋 Creating open sales orders with reservations...');
+
+  // SO-0005: Tech Solutions - Samsung items (OPEN, reserved)
+  // Current stock: S24 Ultra=3, A54=5
+  const so5 = await prisma.salesOrder.create({
+    data: {
+      orderNumber: 'SO-0005',
+      orderDate: new Date('2026-02-10'),
+      customerId: customers[0].id,
+      expectedDelivery: new Date('2026-02-20'),
+      status: 'OPEN',
+      subtotal: 204146,
+      discountAmount: 0,
+      taxAmount: 36746,
+      totalAmount: 240892,
+      createdBy: salesman.id,
+      notes: 'Office refresh - Samsung phones',
+      items: {
+        create: [
+          {
+            itemId: items[0].id, // S24 Ultra - MRP 129999, 12% discount via rate sheet
+            quantity: 1,
+            rate: 114399, // calculateInclusiveTaxRate(129999, 18, 12)
+            discountPercent: 12,
+            taxRate: 18,
+            taxAmount: 17417,
+            amount: 96982,
+          },
+          {
+            itemId: items[1].id, // A54 - MRP 47999, 10% discount via rate sheet (Samsung brand)
+            quantity: 2,
+            rate: 43199, // calculateInclusiveTaxRate(47999, 18, 10)
+            discountPercent: 10,
+            taxRate: 18,
+            taxAmount: 13178,
+            amount: 73220,
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.orderStatusHistory.create({
+    data: {
+      salesOrderId: so5.id,
+      fromStatus: null,
+      toStatus: 'OPEN',
+      reason: 'Order created',
+      changedBy: salesman.id,
+      changedAt: new Date('2026-02-10'),
+    },
+  });
+
+  // Reserve inventory for SO-0005
+  await prisma.inventory.update({
+    where: { id: inv1.id }, // S24 Ultra
+    data: { reservedQuantity: { increment: 1 } },
+  });
+  await prisma.inventory.update({
+    where: { id: inv2.id }, // A54
+    data: { reservedQuantity: { increment: 2 } },
+  });
+
+  // SO-0006: Retail Hub - Apple items (OPEN, reserved)
+  // Current stock: iPhone 14=3, iPad Air=3
+  const so6 = await prisma.salesOrder.create({
+    data: {
+      orderNumber: 'SO-0006',
+      orderDate: new Date('2026-02-12'),
+      customerId: customers[2].id,
+      expectedDelivery: new Date('2026-02-22'),
+      status: 'OPEN',
+      subtotal: 252900,
+      discountAmount: 0,
+      taxAmount: 45522,
+      totalAmount: 298422,
+      createdBy: salesman.id,
+      notes: 'Retail stock replenishment',
+      items: {
+        create: [
+          {
+            itemId: items[4].id, // iPhone 14 - sellingPrice 67900, 5% discount (standard rate, non-Apple excluded)
+            quantity: 2,
+            rate: 67900, // Apple is excluded from Standard Rate sheet, so selling price used, 0% disc
+            discountPercent: 0,
+            taxRate: 18,
+            taxAmount: 24444,
+            amount: 135800,
+          },
+          {
+            itemId: items[5].id, // iPad Air - sellingPrice 62900, Apple excluded
+            quantity: 1,
+            rate: 62900,
+            discountPercent: 0,
+            taxRate: 18,
+            taxAmount: 11322,
+            amount: 62900,
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.orderStatusHistory.create({
+    data: {
+      salesOrderId: so6.id,
+      fromStatus: null,
+      toStatus: 'OPEN',
+      reason: 'Order created',
+      changedBy: salesman.id,
+      changedAt: new Date('2026-02-12'),
+    },
+  });
+
+  // Reserve inventory for SO-0006
+  await prisma.inventory.update({
+    where: { id: inv5.id }, // iPhone 14
+    data: { reservedQuantity: { increment: 2 } },
+  });
+  await prisma.inventory.update({
+    where: { id: inv6.id }, // iPad Air
+    data: { reservedQuantity: { increment: 1 } },
+  });
+
+  // SO-0007: Smart Electronics - Dell & Lenovo (HOLD, reserved)
+  // Current stock: IdeaPad=6, Dell Inspiron=7
+  const so7 = await prisma.salesOrder.create({
+    data: {
+      orderNumber: 'SO-0007',
+      orderDate: new Date('2026-02-14'),
+      customerId: customers[3].id,
+      expectedDelivery: new Date('2026-02-28'),
+      status: 'HOLD',
+      subtotal: 263330,
+      discountAmount: 0,
+      taxAmount: 47399,
+      totalAmount: 310729,
+      createdBy: salesman.id,
+      notes: 'Pending customer confirmation on quantities',
+      items: {
+        create: [
+          {
+            itemId: items[8].id, // IdeaPad - MRP 54999, 8% discount via rate sheet (Lenovo brand)
+            quantity: 2,
+            rate: 50599, // calculateInclusiveTaxRate(54999, 18, 8)
+            discountPercent: 8,
+            taxRate: 18,
+            taxAmount: 15437,
+            amount: 85761,
+          },
+          {
+            itemId: items[10].id, // Dell Inspiron - MRP 59999, no discount (Dell not in Premium rate sheet inclusion)
+            quantity: 3,
+            rate: 59999, // MRP used since customer has rate sheet but Dell not in inclusion list
+            discountPercent: 0,
+            taxRate: 18,
+            taxAmount: 27457,
+            amount: 152540,
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.orderStatusHistory.create({
+    data: {
+      salesOrderId: so7.id,
+      fromStatus: null,
+      toStatus: 'OPEN',
+      reason: 'Order created',
+      changedBy: salesman.id,
+      changedAt: new Date('2026-02-14'),
+    },
+  });
+  await prisma.orderStatusHistory.create({
+    data: {
+      salesOrderId: so7.id,
+      fromStatus: 'OPEN',
+      toStatus: 'HOLD',
+      reason: 'Customer requested hold - pending budget approval',
+      changedBy: salesman.id,
+      changedAt: new Date('2026-02-15'),
+    },
+  });
+
+  // Reserve inventory for SO-0007
+  await prisma.inventory.update({
+    where: { id: inv9.id }, // IdeaPad
+    data: { reservedQuantity: { increment: 2 } },
+  });
+  await prisma.inventory.update({
+    where: { id: inv11.id }, // Dell Inspiron
+    data: { reservedQuantity: { increment: 3 } },
+  });
+
+  // SO-0008: Digital World - Mixed order (OPEN, reserved) - tests FIFO priority
+  // Created after SO-0005 for same items, so SO-0005 gets priority
+  const so8 = await prisma.salesOrder.create({
+    data: {
+      orderNumber: 'SO-0008',
+      orderDate: new Date('2026-02-16'),
+      customerId: customers[1].id,
+      expectedDelivery: new Date('2026-02-25'),
+      status: 'OPEN',
+      subtotal: 170198,
+      discountAmount: 0,
+      taxAmount: 30636,
+      totalAmount: 200834,
+      createdBy: salesman.id,
+      notes: 'Urgent order for client demo',
+      items: {
+        create: [
+          {
+            itemId: items[1].id, // A54 - MRP 47999, 5% discount (standard rate, Samsung not excluded)
+            quantity: 2,
+            rate: 45599, // calculateInclusiveTaxRate(47999, 18, 5)
+            discountPercent: 5,
+            taxRate: 18,
+            taxAmount: 13905,
+            amount: 77293,
+          },
+          {
+            itemId: items[8].id, // IdeaPad - MRP 54999, 5% discount (standard rate, Lenovo not excluded)
+            quantity: 1,
+            rate: 52249, // calculateInclusiveTaxRate(54999, 18, 5)
+            discountPercent: 5,
+            taxRate: 18,
+            taxAmount: 7983,
+            amount: 44266,
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.orderStatusHistory.create({
+    data: {
+      salesOrderId: so8.id,
+      fromStatus: null,
+      toStatus: 'OPEN',
+      reason: 'Order created',
+      changedBy: salesman.id,
+      changedAt: new Date('2026-02-16'),
+    },
+  });
+
+  // Reserve inventory for SO-0008
+  await prisma.inventory.update({
+    where: { id: inv2.id }, // A54 (already has 2 reserved from SO-0005, now +2 more)
+    data: { reservedQuantity: { increment: 2 } },
+  });
+  await prisma.inventory.update({
+    where: { id: inv9.id }, // IdeaPad (already has 2 reserved from SO-0007, now +1 more)
+    data: { reservedQuantity: { increment: 1 } },
   });
 
   console.log('\n✅ Database seeding completed successfully!');
@@ -2586,39 +2847,42 @@ async function main() {
   console.log('🏭 Vendors: 4');
   console.log('👨‍💼 Employees: 4');
   console.log('🏦 Bank Accounts: 3 (Cash + HDFC + ICICI)');
-  console.log('💰 Rate Sheets: 2');
+  console.log('💰 Rate Sheets: 2 (valid Jan-Jun 2026)');
   console.log('\n💼 Purchase Transactions:');
   console.log('  - Purchase Orders: 4 (All RECEIVED)');
-  console.log('  - Purchase Invoices: 4 (₹38.74L total)');
-  console.log('  - Vendor Payments: 3 (₹10.5L paid)');
-  console.log('  - Purchase Returns: 1 (₹18,880)');
-  console.log('  - Outstanding: ₹28.24L to vendors');
+  console.log('  - Purchase Invoices: 4');
+  console.log('  - Vendor Payments: 3');
+  console.log('  - Purchase Returns: 1');
   console.log('\n🛍️  Sales Transactions:');
-  console.log('  - Sales Orders: 4 (3 fully invoiced, 1 partial)');
-  console.log('  - Sales Invoices: 5 (₹16.18L total)');
-  console.log('  - Payments Received: 4 (₹10.62L)');
-  console.log('  - Sales Returns: 1 (₹53,099)');
-  console.log('  - Outstanding: ₹5.55L from customers');
-  console.log('\n📊 Stock Status:');
-  console.log('  - Samsung S24 Ultra: 3 units');
-  console.log('  - Samsung A54: 5 units');
-  console.log('  - Samsung M34: 3 units');
-  console.log('  - iPhone 15 Pro Max: 3 units');
-  console.log('  - iPhone 14: 3 units');
-  console.log('  - iPad Air: 3 units');
-  console.log('  - MacBook Air: 1 unit');
-  console.log('  - ThinkPad X1: 2 units');
-  console.log('  - IdeaPad Slim: 6 units');
-  console.log('  - Dell XPS: 1 unit');
-  console.log('  - Dell Inspiron: 7 units');
-  console.log('\n🏦 Bank Balances:');
-  console.log('  - Cash: ₹5,00,000');
-  console.log('  - HDFC Current: ₹21,00,000');
-  console.log('  - ICICI Savings: ₹16,62,213');
+  console.log('  - Sales Orders: 8 (3 fully invoiced, 1 partial, 3 OPEN, 1 HOLD)');
+  console.log('  - Sales Invoices: 5');
+  console.log('  - Payments Received: 4');
+  console.log('  - Sales Returns: 1');
+  console.log('\n📊 Stock Status (Physical / Reserved / Available):');
+  console.log('  - Samsung S24 Ultra: 3 / 1 / 2  (SO-0005: 1 reserved)');
+  console.log('  - Samsung A54:       5 / 4 / 1  (SO-0005: 2 + SO-0008: 2 reserved)');
+  console.log('  - Samsung M34:       3 / 0 / 3');
+  console.log('  - iPhone 15 Pro Max: 3 / 0 / 3');
+  console.log('  - iPhone 14:         3 / 2 / 1  (SO-0006: 2 reserved)');
+  console.log('  - iPad Air:          3 / 1 / 2  (SO-0006: 1 reserved)');
+  console.log('  - MacBook Air:       1 / 0 / 1');
+  console.log('  - ThinkPad X1:       2 / 0 / 2');
+  console.log('  - IdeaPad Slim:      6 / 3 / 3  (SO-0007: 2 + SO-0008: 1 reserved)');
+  console.log('  - Dell XPS:          1 / 0 / 1');
+  console.log('  - Dell Inspiron:     7 / 3 / 4  (SO-0007: 3 reserved)');
+  console.log('\n📋 Open Orders (ready for invoice creation):');
+  console.log('  - SO-0005: Tech Solutions   (OPEN)  - 1x S24 Ultra, 2x A54');
+  console.log('  - SO-0006: Retail Hub       (OPEN)  - 2x iPhone 14, 1x iPad Air');
+  console.log('  - SO-0007: Smart Electronics (HOLD) - 2x IdeaPad, 3x Dell Inspiron');
+  console.log('  - SO-0008: Digital World    (OPEN)  - 2x A54, 1x IdeaPad');
+  console.log('\n💰 Rate Sheets (Active - Jan to Jun 2026):');
+  console.log('  - Premium: Tech Solutions, Smart Electronics');
+  console.log('    Inclusion model: Samsung 10%, Lenovo 8%, S24 Ultra 12%, ThinkPad 10%');
+  console.log('  - Standard: Digital World, Retail Hub');
+  console.log('    Exclusion model: 5% on all except Apple');
   console.log('\n🔧 Other:');
   console.log('  - Stock Adjustments: 1 (damage)');
-  console.log('  - Bank Ledger Entries: 10 (3 opening + 3 vendor + 4 receipts)');
-  console.log('  - Ledger Entries: All synced');
+  console.log('  - FIFO test: SO-0005 (Feb 10) has priority over SO-0008 (Feb 16) for A54');
   console.log('\n🔐 Test Login Credentials:');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('Admin:    admin@example.com / password123    | Phone OTP: +918639347263');

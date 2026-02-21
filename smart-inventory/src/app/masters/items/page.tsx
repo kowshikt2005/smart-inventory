@@ -165,8 +165,8 @@ export default function ItemsPage() {
 
   const handleAdjustStock = (item: Item) => {
     setAdjustingStockItem(item);
-    const availableStock = Number(item.inventory?.physicalStock || 0) - Number(item.inventory?.reservedQuantity || 0);
-    setNewStockValue(availableStock.toString());
+    const physicalStock = Number(item.inventory?.physicalStock || 0);
+    setNewStockValue(physicalStock.toString());
     setStockNotes("");
   };
 
@@ -314,7 +314,7 @@ export default function ItemsPage() {
                 <TableHead scope="col" className="font-semibold">Cost</TableHead>
                 <TableHead scope="col" className="font-semibold">MRP</TableHead>
                 <TableHead scope="col" className="font-semibold">Selling</TableHead>
-                <TableHead scope="col" className="font-semibold">Available</TableHead>
+                <TableHead scope="col" className="font-semibold">Stock</TableHead>
                 <TableHead scope="col" className="font-semibold">Status</TableHead>
                 <TableHead scope="col" className="font-semibold">Actions</TableHead>
               </TableRow>
@@ -362,15 +362,26 @@ export default function ItemsPage() {
                     <TableCell>₹{Number(item.mrp).toFixed(2)}</TableCell>
                     <TableCell>₹{Number(item.sellingPrice).toFixed(2)}</TableCell>
                     <TableCell>
-                      <div className="text-sm">
-                        <div className={`font-medium ${
-                          Number(item.inventory?.physicalStock || 0) - Number(item.inventory?.reservedQuantity || 0) > 0
-                            ? 'text-green-600'
-                            : 'text-red-600'
-                        }`}>
-                          {Number(item.inventory?.physicalStock || 0) - Number(item.inventory?.reservedQuantity || 0)} available
-                        </div>
-                      </div>
+                      {(() => {
+                        const physical = Number(item.inventory?.physicalStock || 0);
+                        const reserved = Number(item.inventory?.reservedQuantity || 0);
+                        const available = physical - reserved;
+                        return (
+                          <div className="text-sm leading-tight">
+                            <div className="font-medium text-gray-900">
+                              {physical} <span className="text-xs font-normal text-muted-foreground">total</span>
+                            </div>
+                            {reserved > 0 && (
+                              <div className="text-xs text-yellow-600">
+                                {reserved} reserved
+                              </div>
+                            )}
+                            <div className={`text-xs font-medium ${available > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {available} available
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       {item.isActive ? (
@@ -500,10 +511,22 @@ export default function ItemsPage() {
                 </div>
 
                 {/* Current Stock Info */}
-                <div className="grid grid-cols-1 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Current Available Stock</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="text-center p-2 bg-gray-50 rounded">
+                    <p className="text-xs text-gray-600">Physical</p>
                     <p className="text-lg font-semibold">
+                      {Number(adjustingStockItem.inventory?.physicalStock || 0)}
+                    </p>
+                  </div>
+                  <div className="text-center p-2 bg-yellow-50 rounded">
+                    <p className="text-xs text-gray-600">Reserved</p>
+                    <p className="text-lg font-semibold text-yellow-600">
+                      {Number(adjustingStockItem.inventory?.reservedQuantity || 0)}
+                    </p>
+                  </div>
+                  <div className="text-center p-2 bg-green-50 rounded">
+                    <p className="text-xs text-gray-600">Available</p>
+                    <p className="text-lg font-semibold text-green-600">
                       {Number(adjustingStockItem.inventory?.physicalStock || 0) - Number(adjustingStockItem.inventory?.reservedQuantity || 0)}
                     </p>
                   </div>
@@ -512,7 +535,7 @@ export default function ItemsPage() {
                 {/* New Stock Input */}
                 <div>
                   <Label htmlFor="newStock" className="text-sm font-medium">
-                    New Available Stock
+                    New Physical Stock
                   </Label>
                   <Input
                     id="newStock"
@@ -522,12 +545,12 @@ export default function ItemsPage() {
                     value={newStockValue}
                     onChange={(e) => setNewStockValue(e.target.value)}
                     className="mt-1"
-                    placeholder="Enter new stock amount"
+                    placeholder="Enter new physical stock"
                     disabled={isAdjustingStock}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Adjustment: {newStockValue && !isNaN(parseFloat(newStockValue))
-                      ? `${parseFloat(newStockValue) - (Number(adjustingStockItem.inventory?.physicalStock || 0) - Number(adjustingStockItem.inventory?.reservedQuantity || 0)) > 0 ? '+' : ''}${parseFloat(newStockValue) - (Number(adjustingStockItem.inventory?.physicalStock || 0) - Number(adjustingStockItem.inventory?.reservedQuantity || 0))}`
+                      ? `${parseFloat(newStockValue) - Number(adjustingStockItem.inventory?.physicalStock || 0) > 0 ? '+' : ''}${parseFloat(newStockValue) - Number(adjustingStockItem.inventory?.physicalStock || 0)}`
                       : '0'}
                   </p>
                 </div>

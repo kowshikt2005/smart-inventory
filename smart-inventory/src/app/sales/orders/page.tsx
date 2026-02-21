@@ -83,14 +83,6 @@ interface ItemStockDetail {
   unit: string;
 }
 
-interface InsufficientStockItem {
-  itemName: string;
-  itemCode: string;
-  required: number;
-  available: number;
-  shortfall: number;
-}
-
 interface SalesOrder {
   id: string;
   orderNumber: string;
@@ -206,45 +198,9 @@ export default function SalesOrdersPage() {
     }
   };
 
-  // Handle create invoice from delivered order
-  const handleCreateInvoice = async (orderId: string) => {
-    try {
-      const response = await fetch("/api/sales-invoices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ salesOrderId: orderId }),
-      });
-
-      const data = await response.json();
-
-      if (response.status === 409 && data.invoiceId) {
-        // Invoice already exists
-        router.push(`/sales/invoices/${data.invoiceId}`);
-        return;
-      }
-
-      // Handle insufficient stock error
-      if (!response.ok && data.insufficientStock) {
-        const stockDetails = data.insufficientStock
-          .map(
-            (item: InsufficientStockItem) =>
-              `${item.itemName} (${item.itemCode}):\n  Required: ${item.required}\n  Available: ${item.available}\n  Missing: ${item.shortfall}`
-          )
-          .join("\n\n");
-        alert(`${data.error}\n\n${stockDetails}`);
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to create invoice");
-      }
-
-      // Redirect to the new invoice
-      router.push(`/sales/invoices/${data.id}`);
-    } catch (err) {
-      console.error("Error creating invoice:", err);
-      alert(err instanceof Error ? err.message : "Failed to create invoice");
-    }
+  // Handle create invoice - navigate to review page
+  const handleCreateInvoice = (orderId: string) => {
+    router.push(`/sales/invoices/create?salesOrderId=${orderId}`);
   };
 
   // Handle status change
