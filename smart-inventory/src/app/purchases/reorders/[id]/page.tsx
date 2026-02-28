@@ -10,7 +10,7 @@ import { ReorderStatusBadge } from "@/components/reorders/ReorderStatusBadge";
 import {
   ArrowLeft, Loader2, PackageCheck, XCircle, X, AlertTriangle,
 } from "lucide-react";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import useSWR from "swr";
 
@@ -88,7 +88,7 @@ export default function ReorderDetailPage() {
   const [vendorGroups, setVendorGroups] = useState<VendorGroupRow[]>([]);
   const [vendorSearches, setVendorSearches] = useState<Record<string, string>>({});
   const [isConverting, setIsConverting] = useState(false);
-  const [convertResult, setConvertResult] = useState<any>(null);
+  const [convertResult, setConvertResult] = useState<{ createdOrders: { purchaseOrderId: string; orderNumber: string; vendorName: string; itemCount: number }[] } | null>(null);
 
   // Build vendor groups when dialog opens
   const buildVendorGroups = useCallback(() => {
@@ -351,7 +351,7 @@ export default function ReorderDetailPage() {
                     Purchase Orders Created
                   </h2>
                   <div className="space-y-2 mb-6">
-                    {convertResult.createdOrders.map((po: any) => (
+                    {convertResult.createdOrders.map((po) => (
                       <div key={po.purchaseOrderId} className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
                         <div>
                           <span className="font-medium text-green-800">{po.orderNumber}</span>

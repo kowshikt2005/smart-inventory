@@ -107,7 +107,7 @@ export async function runStockScan(db: PrismaClient): Promise<ScanResult> {
   const priceMap = new Map(itemRecords.map((i) => [i.id, Number(i.purchasePrice)]));
 
   // Create StockReorder with items and junction rows in one transaction
-  const reorder = await (db as any).$transaction(async (tx: any) => {
+  const reorder = await (db as unknown as { $transaction: (fn: (tx: typeof db) => Promise<unknown>) => Promise<unknown> }).$transaction(async (tx) => {
     const reorderNumber = await generateReorderNumber(tx);
 
     const created = await tx.stockReorder.create({
