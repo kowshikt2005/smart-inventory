@@ -121,6 +121,7 @@ export const Sidebar = memo(function Sidebar() {
 
   const purchaseItems = useMemo(() => [
     { icon: FileText, label: "Orders", href: "/purchases/orders" },
+    { icon: ClipboardList, label: "Reorders", href: "/purchases/reorders" },
     { icon: Receipt, label: "Invoices", href: "/purchases/invoices" },
     { icon: CreditCard, label: "Payments", href: "/purchases/payments" },
     { icon: RotateCcw, label: "Returns", href: "/purchases/returns" },

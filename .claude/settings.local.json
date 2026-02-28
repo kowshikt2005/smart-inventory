@@ -26,15 +26,45 @@
       "Bash(npx next build)",
       "Bash(npx prisma db push)",
       "Bash(npm install:*)",
+<<<<<<< Updated upstream
       "Bash(node -e \"\nconst twilio = require\\(''twilio''\\);\nconst client = twilio\\(''AC01c68a5a1817b264c8389e0baf9ed0cc'', ''2b12166c36ca5fbc4c24c13d7a3257eb''\\);\n\n// Check account info\nclient.api.accounts\\(''AC01c68a5a1817b264c8389e0baf9ed0cc''\\).fetch\\(\\)\n  .then\\(account => {\n    console.log\\(''Account Status:'', account.status\\);\n    console.log\\(''Account Type:'', account.type\\);\n    console.log\\(''Account Name:'', account.friendlyName\\);\n  }\\)\n  .catch\\(err => console.error\\(''Account Error:'', err.message\\)\\);\n\n// List available phone numbers on this account\nclient.incomingPhoneNumbers.list\\({limit: 5}\\)\n  .then\\(numbers => {\n    if \\(numbers.length === 0\\) {\n      console.log\\(''\\\\nNo Twilio phone numbers purchased on this account.''\\);\n      console.log\\(''You need to buy a Twilio number or use Twilio Verify service instead.''\\);\n    } else {\n      console.log\\(''\\\\nTwilio Numbers:''\\);\n      numbers.forEach\\(n => console.log\\('' -'', n.phoneNumber, ''\\('' + n.friendlyName + ''\\)''\\)\\);\n    }\n  }\\)\n  .catch\\(err => console.error\\(''Numbers Error:'', err.message\\)\\);\n\")",
       "Bash(node -e \"\nconst twilio = require\\(''twilio''\\);\nconst client = twilio\\(''AC01c68a5a1817b264c8389e0baf9ed0cc'', ''2b12166c36ca5fbc4c24c13d7a3257eb''\\);\n\n// Check verified caller IDs \\(trial accounts can only send to these\\)\nclient.outgoingCallerIds.list\\({limit: 10}\\)\n  .then\\(callerIds => {\n    console.log\\(''Verified Numbers \\(can receive SMS on trial\\):''\\);\n    if \\(callerIds.length === 0\\) {\n      console.log\\(''  None found. You need to verify your phone number in Twilio console.''\\);\n    }\n    callerIds.forEach\\(c => console.log\\('' -'', c.phoneNumber, ''\\('' + c.friendlyName + ''\\)''\\)\\);\n  }\\)\n  .catch\\(err => console.error\\(''Error:'', err.message\\)\\);\n\")",
       "Bash(node -e:*)",
       "Bash(head:*)"
+=======
+      "Bash(node -e:*)",
+      "mcp__ide__getDiagnostics"
+>>>>>>> Stashed changes
     ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "context7",
     "playwright"
-  ]
+  ],
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"$CLAUDE_FILE_PATH\" in *smart-inventory*.ts|*smart-inventory*.tsx|*smart-inventory*.js|*smart-inventory*.jsx) (cd /c/Users/kowsh/Desktop/ledger/smart-inventory && npx eslint --fix \"$CLAUDE_FILE_PATH\") >/dev/null 2>&1 ;; esac; exit 0"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"$CLAUDE_FILE_PATH\" in *.env|*.env.*) exit 2 ;; esac; exit 0"
+          }
+        ]
+      }
+    ]
+  },
+  "prefersReducedMotion": false
 }

@@ -162,6 +162,21 @@ export default function SalesOrdersPage() {
   // Use SWR for data fetching with caching
   const { data, error, isLoading, mutate } = useSWR(apiUrl);
 
+  // Fetch pending reorders to show badge on affected orders
+  const { data: reordersData } = useSWR("/api/reorders?status=PENDING&limit=100");
+  const reorderOrderIds = useMemo(() => {
+    const ids = new Set<string>();
+    const reorders = reordersData?.reorders || [];
+    for (const ro of reorders) {
+      if (ro.salesOrders) {
+        for (const sor of ro.salesOrders) {
+          ids.add(sor.salesOrderId);
+        }
+      }
+    }
+    return ids;
+  }, [reordersData]);
+
   const totalCount = data?.pagination?.total || 0;
 
   // Handle status filter
@@ -570,11 +585,18 @@ export default function SalesOrdersPage() {
                         {order.referenceNumber || "-"}
                       </TableCell>
                       <TableCell className="text-center">
-                        <StockStatusBadge
-                          status={order.stockStatus}
-                          stockSummary={order.stockSummary}
-                          itemStockDetails={order.itemStockDetails}
-                        />
+                        <div className="flex flex-col items-center gap-1">
+                          <StockStatusBadge
+                            status={order.stockStatus}
+                            stockSummary={order.stockSummary}
+                            itemStockDetails={order.itemStockDetails}
+                          />
+                          {reorderOrderIds.has(order.id) && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">
+                              Reorder Pending
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-center">
                         <SalesOrderStatusBadge status={order.status} />

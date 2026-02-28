@@ -378,6 +378,42 @@ export default function SettingsPage() {
               </div>
             </div>
 
+            {/* Stock Scan Settings */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+              <div className="px-6 py-4 border-b border-gray-100">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Stock Scan Settings
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Configure when the system checks stock shortfalls and creates reorders
+                </p>
+              </div>
+              <div className="px-6 py-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 pr-8">
+                    <h3 className="text-sm font-medium text-gray-900">
+                      Daily Scan Time
+                    </h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      The stock scan script will run at this time each day to check
+                      for shortfalls and create reorder reports.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {saving === "stock_scan_time" && (
+                      <Loader2 className="h-4 w-4 animate-spin text-teal-500" />
+                    )}
+                    <input
+                      type="time"
+                      value={getSettingValue("stock_scan_time") === "false" ? "21:00" : getSettingValue("stock_scan_time")}
+                      onChange={(e) => updateSetting("stock_scan_time", e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Danger Zone -- Admin Only */}
             {session?.user?.role === "ADMIN" && (
               <div className="bg-white rounded-xl border border-red-200 shadow-sm">

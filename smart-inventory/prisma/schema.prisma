@@ -97,6 +97,7 @@ model Vendor {
   purchaseReturns  PurchaseReturn[]
   ledgerEntries    VendorLedger[]
   vendorPayments   VendorPayment[]
+  brands           Brand[]
 
   @@index([vendorNumber])
   @@index([gstin])
@@ -104,15 +105,18 @@ model Vendor {
 }
 
 model Brand {
-  id              String     @id @default(uuid())
-  name            String     @unique
-  discountPercent Decimal?   @db.Decimal(5, 2)
-  logoUrl         String?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
-  items           Item[]
-  subBrands       SubBrand[]
+  id                String     @id @default(uuid())
+  name              String     @unique
+  discountPercent   Decimal?   @db.Decimal(5, 2)
+  logoUrl           String?
+  preferredVendorId String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  items             Item[]
+  subBrands         SubBrand[]
+  preferredVendor   Vendor?    @relation(fields: [preferredVendorId], references: [id])
 
+  @@index([preferredVendorId])
   @@map("brands")
 }
 
@@ -164,6 +168,7 @@ model Item {
   salesOrderItems      SalesOrderItem[]
   salesReturnItems     SalesReturnItem[]
   stockMovements       StockMovement[]
+  reorderItems         StockReorderItem[]
 
   @@index([itemCode])
   @@index([userCode])
@@ -245,6 +250,7 @@ model SalesOrder {
   invoices         Invoice[]
   statusHistory    OrderStatusHistory[]
   items            SalesOrderItem[]
+  reorders         SalesOrderReorder[]
   user             User                 @relation(fields: [createdBy], references: [id])
   customer         Customer             @relation(fields: [customerId], references: [id])
 
@@ -709,6 +715,61 @@ model VendorLedger {
   @@index([type])
   @@index([referenceType, referenceId])
   @@map("vendor_ledger")
+}
+
+// ============================================
+// STOCK REORDER SYSTEM
+// ============================================
+
+model StockReorder {
+  id            String              @id @default(uuid())
+  reorderNumber String              @unique
+  status        ReorderStatus       @default(PENDING)
+  notes         String?             @db.Text
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  items         StockReorderItem[]
+  salesOrders   SalesOrderReorder[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("stock_reorders")
+}
+
+model StockReorderItem {
+  id          String              @id @default(uuid())
+  reorderId   String
+  itemId      String
+  requiredQty Decimal             @db.Decimal(15, 3)
+  rate        Decimal             @db.Decimal(15, 2)
+  reorder     StockReorder        @relation(fields: [reorderId], references: [id], onDelete: Cascade)
+  item        Item                @relation(fields: [itemId], references: [id])
+  salesOrders SalesOrderReorder[]
+
+  @@index([reorderId])
+  @@index([itemId])
+  @@map("stock_reorder_items")
+}
+
+model SalesOrderReorder {
+  salesOrderId  String
+  reorderId     String
+  reorderItemId String
+  shortfallQty  Decimal          @db.Decimal(15, 3)
+  salesOrder    SalesOrder       @relation(fields: [salesOrderId], references: [id])
+  reorder       StockReorder     @relation(fields: [reorderId], references: [id], onDelete: Cascade)
+  reorderItem   StockReorderItem @relation(fields: [reorderItemId], references: [id], onDelete: Cascade)
+
+  @@id([salesOrderId, reorderItemId])
+  @@index([salesOrderId])
+  @@index([reorderId])
+  @@map("sales_order_reorders")
+}
+
+enum ReorderStatus {
+  PENDING
+  CONVERTED
+  CANCELLED
 }
 
 enum UserRole {

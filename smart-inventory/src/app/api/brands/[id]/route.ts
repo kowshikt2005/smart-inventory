@@ -15,6 +15,9 @@ export async function GET(
         subBrands: {
           orderBy: { name: 'asc' },
         },
+        preferredVendor: {
+          select: { id: true, name: true },
+        },
         _count: {
           select: { items: true },
         },
@@ -73,6 +76,20 @@ export async function PUT(
       }
     }
 
+    // Validate preferredVendorId if provided
+    if (body.preferredVendorId) {
+      const vendor = await db.vendor.findUnique({
+        where: { id: body.preferredVendorId },
+        select: { id: true, isActive: true },
+      });
+      if (!vendor) {
+        return NextResponse.json({ error: 'Preferred vendor not found' }, { status: 400 });
+      }
+      if (!vendor.isActive) {
+        return NextResponse.json({ error: 'Preferred vendor is inactive' }, { status: 400 });
+      }
+    }
+
     const updatedBrand = await db.brand.update({
       where: { id },
       data: {
@@ -81,6 +98,14 @@ export async function PUT(
           ? (body.discountPercent === null ? null : parseFloat(body.discountPercent))
           : existingBrand.discountPercent,
         logoUrl: body.logoUrl !== undefined ? (body.logoUrl || null) : existingBrand.logoUrl,
+        preferredVendorId: body.preferredVendorId !== undefined
+          ? (body.preferredVendorId || null)
+          : existingBrand.preferredVendorId,
+      },
+      include: {
+        preferredVendor: {
+          select: { id: true, name: true },
+        },
       },
     });
 

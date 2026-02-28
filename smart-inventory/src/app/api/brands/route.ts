@@ -22,13 +22,10 @@ export async function GET(request: Request) {
       db.brand.findMany({
         where,
         orderBy: { name: 'asc' },
-        include: includeSubBrands
-          ? {
-              subBrands: {
-                orderBy: { name: 'asc' },
-              },
-            }
-          : undefined,
+        include: {
+          preferredVendor: { select: { id: true, name: true } },
+          ...(includeSubBrands ? { subBrands: { orderBy: { name: 'asc' } } } : {}),
+        },
         ...(page && limit ? { skip: (page - 1) * limit, take: limit } : {}),
       }),
       page && limit ? db.brand.count({ where }) : Promise.resolve(0),
