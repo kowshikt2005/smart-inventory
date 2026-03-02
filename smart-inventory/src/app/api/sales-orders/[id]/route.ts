@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { calculateLineItemV2, calculateOrderTotals } from '@/lib/order-utils';
 import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/sales-orders/[id] - Get a single sales order
 export async function GET(
@@ -9,6 +10,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_orders', 'view');
+    if (error) return error;
     const { id } = await params;
 
     const salesOrder = await db.salesOrder.findUnique({
@@ -162,6 +165,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_orders', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
@@ -420,6 +425,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_orders', 'edit');
+    if (error) return error;
     const { id } = await params;
 
     // Get existing order

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { cache, cacheKeys } from '@/lib/cache';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/rate-sheets/[id] - Get a single rate sheet
 export async function GET(
@@ -8,6 +9,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_rate_sheets', 'view');
+    if (error) return error;
+
     const { id } = await params;
 
     const rateSheet = await db.rateSheet.findUnique({
@@ -53,6 +57,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_rate_sheets', 'edit');
+    if (error) return error;
+
     const { id } = await params;
     const body = await request.json();
 
@@ -173,6 +180,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error: delError } = await checkPermission('masters_rate_sheets', 'edit');
+    if (delError) return delError;
+
     const { id } = await params;
 
     const [existingRateSheet, affectedCustomers] = await Promise.all([

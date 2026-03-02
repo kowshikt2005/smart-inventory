@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { PATH_TO_PERMISSION } from "@/types/permissions";
+import type { RolePermissions } from "@/types/permissions";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -21,7 +23,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Allow the request to continue
+  // Permission-based page access check (defense-in-depth)
+  // Only applies to page routes, not API routes (those have their own checks)
+  if (!pathname.startsWith("/api/")) {
+    const permissionKey = PATH_TO_PERMISSION[pathname];
+    if (permissionKey) {
+      const permissions = token.permissions as RolePermissions | undefined;
+      if (permissions && !permissions[permissionKey]?.view) {
+        const homeUrl = new URL("/", request.url);
+        return NextResponse.redirect(homeUrl);
+      }
+    }
+  }
+
   return NextResponse.next();
 }
 

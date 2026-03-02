@@ -4,6 +4,50 @@ import GoogleProvider from "next-auth/providers/google";
 import { db } from "@/lib/db";
 import { verifyPassword } from "@/lib/auth-utils";
 import { verifyOTP } from "@/lib/otp";
+import type { RolePermissions } from "@/types/permissions";
+
+/**
+ * Load role data (id, name, permissions) for a user record.
+ * Handles both migration states: roleId set or falling back to role enum.
+ */
+async function loadUserRole(user: { roleId?: string | null; role?: string }) {
+  // Primary: use roleId FK
+  if (user.roleId) {
+    const role = await db.role.findUnique({
+      where: { id: user.roleId },
+      select: { id: true, name: true, permissions: true },
+    });
+    if (role) {
+      return {
+        roleId: role.id,
+        roleName: role.name,
+        permissions: role.permissions as unknown as RolePermissions,
+      };
+    }
+  }
+
+  // Fallback: look up Role by enum name (during migration)
+  if (user.role) {
+    const role = await db.role.findUnique({
+      where: { name: user.role },
+      select: { id: true, name: true, permissions: true },
+    });
+    if (role) {
+      return {
+        roleId: role.id,
+        roleName: role.name,
+        permissions: role.permissions as unknown as RolePermissions,
+      };
+    }
+  }
+
+  // Default: empty permissions (shouldn't happen in normal flow)
+  return {
+    roleId: '',
+    roleName: user.role || 'SALESMAN',
+    permissions: {} as RolePermissions,
+  };
+}
 
 export const authConfig: NextAuthConfig = {
   providers: [
@@ -33,11 +77,16 @@ export const authConfig: NextAuthConfig = {
             return null;
           }
 
+          const roleData = await loadUserRole(user);
+
           return {
             id: user.id,
             email: user.email,
             name: user.name,
-            role: user.role,
+            role: roleData.roleName,
+            roleId: roleData.roleId,
+            roleName: roleData.roleName,
+            permissions: roleData.permissions,
           };
         } catch (error) {
           console.error("Auth error:", error);
@@ -81,11 +130,16 @@ export const authConfig: NextAuthConfig = {
             return null;
           }
 
+          const roleData = await loadUserRole(user);
+
           return {
             id: user.id,
             email: user.email,
             name: user.name,
-            role: user.role,
+            role: roleData.roleName,
+            roleId: roleData.roleId,
+            roleName: roleData.roleName,
+            permissions: roleData.permissions,
           };
         } catch (error) {
           console.error("Phone OTP auth error:", error);
@@ -102,26 +156,21 @@ export const authConfig: NextAuthConfig = {
     async signIn({ user, account }) {
       if (account?.provider === "google") {
         try {
-          // Check if user exists with this Google ID
           let existingUser = await db.user.findUnique({
             where: { googleId: account.providerAccountId },
           });
 
           if (!existingUser) {
-            // Check if user exists with this email
             existingUser = await db.user.findUnique({
               where: { email: user.email! },
             });
 
             if (existingUser) {
-              // Link Google account to existing user
               await db.user.update({
                 where: { id: existingUser.id },
                 data: { googleId: account.providerAccountId },
               });
             } else {
-              // User doesn't exist - reject sign in
-              // Admin must create the user first
               return false;
             }
           }
@@ -130,9 +179,13 @@ export const authConfig: NextAuthConfig = {
             return false;
           }
 
-          // Update user object with database info
+          const roleData = await loadUserRole(existingUser);
+
           user.id = existingUser.id;
-          user.role = existingUser.role;
+          user.role = roleData.roleName;
+          user.roleId = roleData.roleId;
+          user.roleName = roleData.roleName;
+          user.permissions = roleData.permissions;
 
           return true;
         } catch (error) {
@@ -145,8 +198,11 @@ export const authConfig: NextAuthConfig = {
     },
     async jwt({ token, user }) {
       if (user) {
-        token.role = user.role;
         token.id = user.id as string;
+        token.role = user.role;
+        token.roleId = user.roleId;
+        token.roleName = user.roleName;
+        token.permissions = user.permissions;
       }
       return token;
     },
@@ -154,6 +210,9 @@ export const authConfig: NextAuthConfig = {
       if (token) {
         session.user.id = token.id as string;
         session.user.role = token.role as string;
+        session.user.roleId = token.roleId;
+        session.user.roleName = token.roleName;
+        session.user.permissions = token.permissions;
       }
       return session;
     },

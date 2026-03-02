@@ -1,7 +1,3 @@
-//TODO: add role based access control for employees and resetrict access to employees
-
-
-
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -16,20 +12,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { X, Loader2 } from "lucide-react";
+import useSWR from "swr";
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
+interface RoleOption {
+  id: string;
+  name: string;
+}
 
 interface AddEmployeeModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
 }
-
-const USER_ROLES = [
-  { value: "SALESMAN", label: "Salesman" },
-  { value: "BILLING_OPERATOR", label: "Billing Operator" },
-  { value: "ACCOUNTANT", label: "Accountant" },
-  { value: "MANAGER", label: "Manager" },
-  { value: "ADMIN", label: "Administrator" },
-];
 
 export function AddEmployeeModal({
   isOpen,
@@ -40,11 +36,17 @@ export function AddEmployeeModal({
   const [error, setError] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
 
+  // Fetch roles dynamically
+  const { data: roles } = useSWR<RoleOption[]>(
+    isOpen ? "/api/roles?activeOnly=true" : null,
+    fetcher
+  );
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
-    role: "SALESMAN",
+    roleId: "",
     phone: "",
     designation: "",
     department: "",
@@ -52,14 +54,23 @@ export function AddEmployeeModal({
     joinDate: new Date().toISOString().split("T")[0],
   });
 
+  // Set default roleId when roles load
+  useEffect(() => {
+    if (roles?.length && !formData.roleId) {
+      const salesman = roles.find((r) => r.name === "SALESMAN");
+      setFormData((prev) => ({ ...prev, roleId: salesman?.id || roles[0].id }));
+    }
+  }, [roles, formData.roleId]);
+
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
+      const defaultRoleId = roles?.find((r) => r.name === "SALESMAN")?.id || roles?.[0]?.id || "";
       setFormData({
         name: "",
         email: "",
         password: "",
-        role: "SALESMAN",
+        roleId: defaultRoleId,
         phone: "",
         designation: "",
         department: "",
@@ -68,7 +79,7 @@ export function AddEmployeeModal({
       });
       setError(null);
     }
-  }, [isOpen]);
+  }, [isOpen, roles]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,7 +94,7 @@ export function AddEmployeeModal({
           name: formData.name,
           email: formData.email,
           password: formData.password,
-          role: formData.role,
+          roleId: formData.roleId,
           phone: formData.phone || null,
           designation: formData.designation || null,
           department: formData.department || null,
@@ -235,16 +246,16 @@ export function AddEmployeeModal({
                   User Role <span className="text-red-500">*</span>
                 </Label>
                 <Select
-                  value={formData.role}
-                  onValueChange={(value) => handleSelectChange("role", value)}
+                  value={formData.roleId}
+                  onValueChange={(value) => handleSelectChange("roleId", value)}
                 >
                   <SelectTrigger id="role">
-                    <SelectValue />
+                    <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
-                    {USER_ROLES.map((role) => (
-                      <SelectItem key={role.value} value={role.value}>
-                        {role.label}
+                    {roles?.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name.split("_").map((w: string) => w.charAt(0) + w.slice(1).toLowerCase()).join(" ")}
                       </SelectItem>
                     ))}
                   </SelectContent>

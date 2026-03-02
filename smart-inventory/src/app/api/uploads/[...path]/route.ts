@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { readFile, stat } from 'fs/promises';
 import path from 'path';
+import { checkAuth } from '@/lib/api-auth';
 
 const MIME_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
   '.webp': 'image/webp',
+  '.pdf': 'application/pdf',
 };
 
 export async function GET(
@@ -14,6 +16,9 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
+    const { error } = await checkAuth();
+    if (error) return error;
+
     const { path: segments } = await params;
     const filePath = segments.join('/');
 

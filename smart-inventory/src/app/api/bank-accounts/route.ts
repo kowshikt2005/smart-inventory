@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/bank-accounts - List bank accounts
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('bank_accounts', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const activeOnly = searchParams.get('activeOnly') !== 'false';
@@ -43,6 +46,9 @@ export async function GET(request: Request) {
 // POST /api/bank-accounts - Create bank account
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('bank_accounts', 'edit');
+    if (error) return error;
+
     const body = await request.json();
 
     if (!body.accountName) {

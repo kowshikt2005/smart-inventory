@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { cache, cacheKeys, cacheTTL } from '@/lib/cache';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/rate-sheets/customer/[customerId] - Get the active rate sheet for a customer
 // This is used during sales order creation to calculate discounted prices.
@@ -10,6 +11,9 @@ export async function GET(
   { params }: { params: Promise<{ customerId: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_rate_sheets', 'view');
+    if (error) return error;
+
     const { customerId } = await params;
 
     const cachedData = await cache.getOrSet(

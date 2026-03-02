@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // POST /api/sales-returns/[id]/complete - Complete sales return (restore inventory, update invoice, create ledger entry)
 export async function POST(
@@ -7,6 +8,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_returns', 'edit');
+    if (error) return error;
     const { id } = await params;
 
     const salesReturn = await db.salesReturn.findUnique({

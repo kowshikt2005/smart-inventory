@@ -42,6 +42,7 @@ async function main() {
     prisma.bankAccount.deleteMany(),
     prisma.appSetting.deleteMany(),
     prisma.user.deleteMany(),
+    prisma.role.deleteMany(),
   ]);
 
   // 1. Create App Settings
@@ -54,7 +55,113 @@ async function main() {
     },
   });
 
-  // 2. Create Users
+  // 2. Create Roles
+  console.log('🔐 Creating roles...');
+  type PagePerm = { view: boolean; edit: boolean };
+  type Perms = Record<string, PagePerm>;
+  const none: PagePerm = { view: false, edit: false };
+  const viewOnly: PagePerm = { view: true, edit: false };
+  const full: PagePerm = { view: true, edit: true };
+
+  function buildPermissions(overrides: Record<string, PagePerm>): Perms {
+    const allKeys = [
+      'dashboard',
+      'sales_orders', 'sales_invoices', 'sales_dummy_invoices', 'sales_receipts', 'sales_returns',
+      'purchases_orders', 'purchases_reorders', 'purchases_invoices', 'purchases_payments', 'purchases_returns',
+      'bank_accounts', 'bank_ledger',
+      'ledger_customers', 'ledger_vendors', 'ledger_stock', 'ledger_stock_journal',
+      'reports',
+      'masters_customers', 'masters_vendors', 'masters_employees', 'masters_rate_sheets', 'masters_items', 'masters_roles',
+      'settings',
+    ];
+    const perms: Perms = {};
+    for (const key of allKeys) {
+      perms[key] = overrides[key] ?? none;
+    }
+    return perms;
+  }
+
+  const adminRole = await prisma.role.create({
+    data: {
+      name: 'ADMIN',
+      description: 'Full system access — all permissions',
+      isSystem: true,
+      isActive: true,
+      permissions: buildPermissions({
+        dashboard: full,
+        sales_orders: full, sales_invoices: full, sales_dummy_invoices: full, sales_receipts: full, sales_returns: full,
+        purchases_orders: full, purchases_reorders: full, purchases_invoices: full, purchases_payments: full, purchases_returns: full,
+        bank_accounts: full, bank_ledger: full,
+        ledger_customers: full, ledger_vendors: full, ledger_stock: full, ledger_stock_journal: full,
+        reports: full,
+        masters_customers: full, masters_vendors: full, masters_employees: full, masters_rate_sheets: full, masters_items: full, masters_roles: full,
+        settings: full,
+      }),
+    },
+  });
+
+  const salesmanRole = await prisma.role.create({
+    data: {
+      name: 'SALESMAN',
+      description: 'Sales orders only',
+      isSystem: true,
+      isActive: true,
+      permissions: buildPermissions({
+        dashboard: viewOnly,
+        sales_orders: full, sales_invoices: viewOnly,
+      }),
+    },
+  });
+
+  await prisma.role.createMany({
+    data: [
+      {
+        name: 'MANAGER',
+        description: 'All access except role management',
+        isSystem: true,
+        isActive: true,
+        permissions: buildPermissions({
+          dashboard: full,
+          sales_orders: full, sales_invoices: full, sales_dummy_invoices: full, sales_receipts: full, sales_returns: full,
+          purchases_orders: full, purchases_reorders: full, purchases_invoices: full, purchases_payments: full, purchases_returns: full,
+          bank_accounts: full, bank_ledger: full,
+          ledger_customers: full, ledger_vendors: full, ledger_stock: full, ledger_stock_journal: full,
+          reports: full,
+          masters_customers: full, masters_vendors: full, masters_employees: viewOnly, masters_rate_sheets: full, masters_items: full,
+          settings: full,
+        }),
+      },
+      {
+        name: 'ACCOUNTANT',
+        description: 'Sales, ledger, reports, and read-only masters',
+        isSystem: true,
+        isActive: true,
+        permissions: buildPermissions({
+          dashboard: viewOnly,
+          sales_orders: viewOnly, sales_invoices: full, sales_dummy_invoices: full, sales_receipts: full, sales_returns: full,
+          bank_accounts: full, bank_ledger: full,
+          ledger_customers: full, ledger_vendors: full, ledger_stock: full, ledger_stock_journal: full,
+          reports: full,
+          masters_customers: viewOnly, masters_vendors: viewOnly, masters_rate_sheets: viewOnly, masters_items: viewOnly,
+        }),
+      },
+      {
+        name: 'BILLING_OPERATOR',
+        description: 'Sales transactions and basic reporting',
+        isSystem: true,
+        isActive: true,
+        permissions: buildPermissions({
+          dashboard: viewOnly,
+          sales_orders: full, sales_invoices: full, sales_dummy_invoices: full, sales_receipts: full, sales_returns: full,
+          bank_accounts: viewOnly, bank_ledger: viewOnly,
+          ledger_customers: viewOnly, ledger_vendors: viewOnly, ledger_stock: viewOnly, ledger_stock_journal: viewOnly,
+          reports: viewOnly,
+        }),
+      },
+    ],
+  });
+
+  // 3. Create Users
   console.log('👥 Creating users...');
   const hashedPassword = await hash('password123', 10);
 
@@ -65,6 +172,7 @@ async function main() {
       password: hashedPassword,
       phone: '+918639347263',
       role: 'ADMIN',
+      roleId: adminRole.id,
     },
   });
 
@@ -75,6 +183,7 @@ async function main() {
       password: hashedPassword,
       phone: '+919030437915',
       role: 'SALESMAN',
+      roleId: salesmanRole.id,
     },
   });
 

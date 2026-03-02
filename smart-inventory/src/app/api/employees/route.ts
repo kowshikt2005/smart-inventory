@@ -1,19 +1,13 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { db, transaction } from '@/lib/db';
-import { hashPassword, generateEmployeeNumber, hasRole } from '@/lib/auth-utils';
+import { hashPassword, generateEmployeeNumber } from '@/lib/auth-utils';
+import { checkPermission } from '@/lib/api-auth';
 
-// GET /api/employees - Get all employees (Admin only)
+// GET /api/employees - Get all employees
 export async function GET(request: Request) {
   try {
-    const session = await auth();
-    
-    if (!session?.user || !hasRole(session.user.role, 'ADMIN')) {
-      return NextResponse.json(
-        { error: 'Unauthorized - Admin access required' },
-        { status: 403 }
-      );
-    }
+    const { error } = await checkPermission('masters_employees', 'view');
+    if (error) return error;
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
@@ -55,17 +49,17 @@ export async function GET(request: Request) {
       db.employee.count({ where }),
     ]);
 
-    // Fetch all user roles in a single query (fixes N+1 problem)
+    // Fetch user → role in a single query (N+1 fix)
     const emails = employees.map(e => e.email).filter((email): email is string => !!email);
     const users = emails.length > 0 ? await db.user.findMany({
       where: { email: { in: emails } },
-      select: { email: true, role: true },
+      select: { email: true, roleRef: { select: { name: true } } },
     }) : [];
 
-    const roleMap = new Map(users.map(u => [u.email, u.role]));
+    const roleMap = new Map(users.map(u => [u.email, u.roleRef?.name || 'Unknown']));
     const employeesWithRoles = employees.map(employee => ({
       ...employee,
-      role: employee.email ? (roleMap.get(employee.email) || 'SALESMAN') : 'SALESMAN',
+      roleName: employee.email ? (roleMap.get(employee.email) || 'Unknown') : 'Unknown',
     }));
 
     return NextResponse.json({
@@ -86,22 +80,16 @@ export async function GET(request: Request) {
   }
 }
 
-// POST /api/employees - Create new employee (Admin only)
+// POST /api/employees - Create new employee
 export async function POST(request: Request) {
   try {
-    const session = await auth();
-    
-    if (!session?.user || !hasRole(session.user.role, 'ADMIN')) {
-      return NextResponse.json(
-        { error: 'Unauthorized - Admin access required' },
-        { status: 403 }
-      );
-    }
+    const { error } = await checkPermission('masters_employees', 'edit');
+    if (error) return error;
 
     const body = await request.json();
 
     // Validate required fields
-    const requiredFields = ['name', 'email', 'password', 'role'];
+    const requiredFields = ['name', 'email', 'password', 'roleId'];
     for (const field of requiredFields) {
       if (!body[field]) {
         return NextResponse.json(
@@ -111,11 +99,14 @@ export async function POST(request: Request) {
       }
     }
 
-    // Validate role
-    const validRoles = ['SALESMAN', 'BILLING_OPERATOR', 'ACCOUNTANT', 'MANAGER', 'ADMIN'];
-    if (!validRoles.includes(body.role)) {
+    // Validate roleId exists
+    const role = await db.role.findUnique({
+      where: { id: body.roleId },
+      select: { id: true, name: true },
+    });
+    if (!role) {
       return NextResponse.json(
-        { error: `Invalid role. Must be one of: ${validRoles.join(', ')}` },
+        { error: 'Invalid role selected' },
         { status: 400 }
       );
     }
@@ -140,13 +131,13 @@ export async function POST(request: Request) {
 
     // Create employee and user in transaction
     const result = await transaction(async (tx) => {
-      // Create user account
+      // Create user account with roleId
       const user = await tx.user.create({
         data: {
           email: body.email,
           name: body.name,
           password: hashedPassword,
-          role: body.role,
+          roleId: body.roleId,
           isActive: true,
         },
       });
@@ -169,7 +160,6 @@ export async function POST(request: Request) {
       return { user, employee };
     });
 
-    // Return employee data (without password)
     return NextResponse.json({
       id: result.employee.id,
       employeeNumber: result.employee.employeeNumber,
@@ -180,7 +170,7 @@ export async function POST(request: Request) {
       department: result.employee.department,
       salary: result.employee.salary,
       joinDate: result.employee.joinDate,
-      role: body.role,
+      roleName: role.name,
       isActive: result.employee.isActive,
       createdAt: result.employee.createdAt,
     }, { status: 201 });

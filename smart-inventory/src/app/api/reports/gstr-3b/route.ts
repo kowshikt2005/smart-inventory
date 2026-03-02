@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getMonthDates, getMonthName, splitTax } from "@/lib/gst-report-utils";
+import { checkPermission } from "@/lib/api-auth";
 
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('reports', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const month = parseInt(searchParams.get("month") || "");
     const year = parseInt(searchParams.get("year") || "");

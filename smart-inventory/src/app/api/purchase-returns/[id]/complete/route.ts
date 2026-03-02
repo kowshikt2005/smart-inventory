@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // POST /api/purchase-returns/[id]/complete - Complete a purchase return
 export async function POST(
@@ -7,6 +8,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('purchases_returns', 'edit');
+    if (error) return error;
+
     const { id } = await params;
 
     // Find existing return

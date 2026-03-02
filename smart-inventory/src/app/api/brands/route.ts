@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/brands - Get all brands (with optional pagination)
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('masters_items', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const includeSubBrands = searchParams.get('includeSubBrands') === 'true';
@@ -49,6 +52,8 @@ export async function GET(request: Request) {
 // POST /api/brands - Create a new brand
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('masters_items', 'edit');
+    if (error) return error;
     const body = await request.json();
 
     if (!body.name) {

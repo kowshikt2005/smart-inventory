@@ -25,7 +25,7 @@ Next.js 15 App Router + Prisma ORM + MySQL (Railway/AWS RDS) + shadcn/ui + Tailw
 ## Key Patterns
 - Use SWR for all client-side data fetching
 - Use shadcn/ui components from `src/components/ui/`
-- API routes must validate NextAuth session before processing — **most routes currently missing this**
+- API routes use `checkPermission()` / `checkAuth()` from `src/lib/api-auth.ts` — all 86 routes are protected
 - Business logic lives in `src/lib/` (invoice-utils, fifo-utils, etc.)
 - Path alias: `@/*` maps to `./src/*`
 - Shared company settings fetch: `fetchCompanySettings()` from `src/lib/export-utils.ts`
@@ -38,18 +38,20 @@ Next.js 15 App Router + Prisma ORM + MySQL (Railway/AWS RDS) + shadcn/ui + Tailw
 - Do NOT edit files in `src/generated/` — they are auto-generated
 - Do NOT edit `node_modules/` or lock files
 
-## ⚠ SECURITY — MUST FIX (last audit: 2026-02-20)
+## RBAC System (implemented 2026-03-02)
+- **All 86 API routes protected** with `checkPermission()` or `checkAuth()` from `src/lib/api-auth.ts`
+- `/api/test-prisma` deleted
+- Custom roles with granular view/edit permissions per page — `src/types/permissions.ts`
+- Middleware enforces page-level access from JWT — `src/middleware.ts`
+- Role management UI at `/masters/roles`
 
-### CRITICAL
-1. **No auth on API routes** — `src/app/api/customers/`, `src/app/api/vendors/`, `src/app/api/items/`, `src/app/api/sales-invoices/`, `src/app/api/settings/`, `src/app/api/upload/`, `src/app/api/import/execute/` — ALL lack `auth()` session checks. Fix: add `const session = await auth(); if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });` at the top of every handler.
-2. **Delete `/api/test-prisma`** — raw SQL endpoint exposed to public internet.
+## ⚠ SECURITY — Remaining Items
 
 ### HIGH
-3. No RBAC — SALESMAN role can perform admin operations (delete items, adjust stock, change settings).
-4. Negative invoice amounts allowed — no validation of quantity/rate in sales-invoices handlers.
-5. Financial fields accept negative values — `creditLimit`, `openingBalance` (customer), `mrp`, `sellingPrice` (item) PUT handlers.
-6. No login rate limiting in `src/lib/auth.ts`.
+1. Negative invoice amounts allowed — no validation of quantity/rate in sales-invoices handlers.
+2. Financial fields accept negative values — `creditLimit`, `openingBalance` (customer), `mrp`, `sellingPrice` (item) PUT handlers.
+3. No login rate limiting in `src/lib/auth.ts`.
 
 ### MEDIUM
-7. Invoice number race condition — use DB transaction lock in `generateInvoiceNumber()`.
-8. `console.error` logs full Prisma error objects — may leak DB details in production.
+4. Invoice number race condition — use DB transaction lock in `generateInvoiceNumber()`.
+5. `console.error` logs full Prisma error objects — may leak DB details in production.

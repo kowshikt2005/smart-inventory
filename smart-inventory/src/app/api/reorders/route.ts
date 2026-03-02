@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { auth } from '@/lib/auth';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/reorders - List all stock reorders with pagination
 export async function GET(request: Request) {
   try {
-    await auth();
+    const { error } = await checkPermission('purchases_reorders', 'view');
+    if (error) return error;
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') || '';

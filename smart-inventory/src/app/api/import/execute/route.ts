@@ -4,6 +4,7 @@ import { ENTITY_FIELDS, type EntityType } from '@/lib/import-utils';
 import { generateJournalNumber, generatePaymentNumber } from '@/lib/invoice-utils';
 import { generateVendorPaymentNumber } from '@/lib/purchase-utils';
 import { SYSTEM_USER_ID } from '@/lib/order-utils';
+import { checkAuth } from '@/lib/api-auth';
 // ── helpers ──────────────────────────────────────────────
 
 function str(v: unknown): string {
@@ -486,7 +487,7 @@ async function importPayments(batch: Record<string, unknown>[], offset: number, 
           where: { customerId: cust.id },
           orderBy: { date: 'desc' },
         });
-        const prevBalance = lastEntry ? Number(lastEntry.balance) : Number(cust.creditDays); // opening
+        const _prevBalance = lastEntry ? Number(lastEntry.balance) : Number(cust.creditDays); // opening
         const newBalance = (lastEntry ? Number(lastEntry.balance) : 0) - amount;
 
         await tx.customerLedger.create({
@@ -905,6 +906,9 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
 
 export async function POST(request: Request) {
   try {
+    const { error } = await checkAuth();
+    if (error) return error;
+
     const body = await request.json();
     const { action, entityType, rows } = body;
 

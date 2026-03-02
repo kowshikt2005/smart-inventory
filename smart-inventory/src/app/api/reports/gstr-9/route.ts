@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getFYDates, splitTax } from "@/lib/gst-report-utils";
+import { checkPermission } from "@/lib/api-auth";
 
 const MONTH_NAMES = [
   "April", "May", "June", "July", "August", "September",
@@ -9,6 +10,9 @@ const MONTH_NAMES = [
 
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('reports', 'view');
+    if (error) return error;
+
     const { searchParams } = new URL(request.url);
     const fy = searchParams.get("fy");
 

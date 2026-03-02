@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -8,6 +9,8 @@ const MONTH_NAMES = [
 
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('reports', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');

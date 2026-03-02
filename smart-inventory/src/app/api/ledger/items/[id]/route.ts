@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/ledger/items/[id] - Get stock ledger for an item
 export async function GET(
@@ -7,6 +8,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('ledger_stock', 'view');
+    if (error) return error;
+
     const { id } = await params;
     const { searchParams } = new URL(request.url);
 

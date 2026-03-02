@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { checkPermission } from "@/lib/api-auth";
 
 // GET /api/settings - Get all settings or a specific setting by key
 export async function GET(request: NextRequest) {
   try {
+    const { error } = await checkPermission('settings', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const key = searchParams.get("key");
 
@@ -39,6 +42,9 @@ export async function GET(request: NextRequest) {
 // PUT /api/settings - Update a setting
 export async function PUT(request: NextRequest) {
   try {
+    const { error } = await checkPermission('settings', 'edit');
+    if (error) return error;
+
     const body = await request.json();
     const { key, value } = body;
 

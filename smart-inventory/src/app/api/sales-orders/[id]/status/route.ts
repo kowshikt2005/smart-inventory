@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { isValidStatusTransition, SYSTEM_USER_ID } from '@/lib/order-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // PATCH /api/sales-orders/[id]/status - Change order status
 export async function PATCH(
@@ -8,6 +9,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_orders', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 

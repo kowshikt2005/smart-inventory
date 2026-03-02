@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/items - Get all items with optional search and pagination
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('masters_items', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1);
@@ -74,6 +77,8 @@ export async function GET(request: Request) {
 // POST /api/items - Create a new item
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('masters_items', 'edit');
+    if (error) return error;
     const body = await request.json();
 
     // Validate required fields

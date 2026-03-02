@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/bank-accounts/[id] - Get single bank account
 export async function GET(
@@ -7,6 +8,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('bank_accounts', 'view');
+    if (error) return error;
+
     const { id } = await params;
 
     const bankAccount = await db.bankAccount.findUnique({
@@ -36,6 +40,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('bank_accounts', 'edit');
+    if (error) return error;
+
     const { id } = await params;
     const body = await request.json();
 
@@ -96,6 +103,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error: deleteError } = await checkPermission('bank_accounts', 'edit');
+    if (deleteError) return deleteError;
+
     const { id } = await params;
 
     const existing = await db.bankAccount.findUnique({

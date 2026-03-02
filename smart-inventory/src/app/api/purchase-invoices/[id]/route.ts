@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/purchase-invoices/[id] - Get a single purchase invoice
 export async function GET(
@@ -7,6 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('purchases_invoices', 'view');
+    if (error) return error;
     const { id } = await params;
 
     const purchaseInvoice = await db.purchaseInvoice.findUnique({
@@ -96,6 +99,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('purchases_invoices', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
@@ -316,6 +321,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('purchases_invoices', 'edit');
+    if (error) return error;
     const { id } = await params;
 
     // Find existing invoice

@@ -16,6 +16,8 @@ model User {
   phone              String?              @unique
   googleId           String?              @unique
   role               UserRole             @default(SALESMAN)
+  roleId             String?
+  roleRef            Role?                @relation(fields: [roleId], references: [id])
   isActive           Boolean              @default(true)
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
@@ -23,6 +25,7 @@ model User {
   salesOrders        SalesOrder[]
   stockJournals      StockJournal[]
 
+  @@index([roleId])
   @@map("users")
 }
 
@@ -516,18 +519,19 @@ model SalesReturnItem {
 }
 
 model Employee {
-  id             String   @id @default(uuid())
-  employeeNumber String   @unique
+  id             String             @id @default(uuid())
+  employeeNumber String             @unique
   name           String
-  email          String?  @unique
+  email          String?            @unique
   phone          String?
   designation    String?
   department     String?
-  salary         Decimal? @db.Decimal(15, 2)
+  salary         Decimal?           @db.Decimal(15, 2)
   joinDate       DateTime
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  documents      EmployeeDocument[]
 
   @@index([employeeNumber])
   @@map("employees")
@@ -764,6 +768,44 @@ model SalesOrderReorder {
   @@index([salesOrderId])
   @@index([reorderId])
   @@map("sales_order_reorders")
+}
+
+// ============================================
+// ROLE-BASED ACCESS CONTROL
+// ============================================
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  permissions Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+
+  @@index([name])
+  @@index([isActive])
+  @@map("roles")
+}
+
+// ============================================
+// EMPLOYEE DOCUMENTS
+// ============================================
+
+model EmployeeDocument {
+  id         String   @id @default(uuid())
+  employeeId String
+  label      String
+  fileUrl    String
+  fileType   String
+  fileSize   Int
+  uploadedAt DateTime @default(now())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_documents")
 }
 
 enum ReorderStatus {

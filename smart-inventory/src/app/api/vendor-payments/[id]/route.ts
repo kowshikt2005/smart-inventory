@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/vendor-payments/[id] - Get a single vendor payment
 export async function GET(
@@ -7,6 +8,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('purchases_payments', 'view');
+    if (error) return error;
+
     const { id } = await params;
 
     const vendorPayment = await db.vendorPayment.findUnique({

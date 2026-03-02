@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/stock-journals/[id] - Get a single stock journal
 export async function GET(
@@ -7,6 +8,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('ledger_stock_journal', 'view');
+    if (error) return error;
+
     const { id } = await params;
 
     const journal = await db.stockJournal.findUnique({
@@ -48,6 +52,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('ledger_stock_journal', 'edit');
+    if (error) return error;
+
     const { id } = await params;
 
     const journal = await db.stockJournal.findUnique({

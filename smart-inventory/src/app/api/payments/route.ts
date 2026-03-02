@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { generatePaymentNumber } from '@/lib/invoice-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/payments - Get all payments with filtering
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('sales_receipts', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const customerId = searchParams.get('customerId') || '';
@@ -99,6 +102,9 @@ export async function GET(request: Request) {
 // POST /api/payments - Create payment with allocations
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('sales_receipts', 'edit');
+    if (error) return error;
+
     const body = await request.json();
 
     // Validate required fields

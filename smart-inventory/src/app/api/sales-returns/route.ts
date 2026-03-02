@@ -2,10 +2,13 @@ import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { generateReturnNumber } from '@/lib/invoice-utils';
 import { calculateTax } from '@/lib/order-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/sales-returns - Get all sales returns with filtering
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('sales_returns', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
@@ -110,6 +113,9 @@ export async function GET(request: Request) {
 // POST /api/sales-returns - Create a new sales return
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('sales_returns', 'edit');
+    if (error) return error;
+
     const body = await request.json();
 
     // Validate required fields

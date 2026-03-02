@@ -107,7 +107,8 @@ export async function runStockScan(db: PrismaClient): Promise<ScanResult> {
   const priceMap = new Map(itemRecords.map((i) => [i.id, Number(i.purchasePrice)]));
 
   // Create StockReorder with items and junction rows in one transaction
-  const reorder = await (db as unknown as { $transaction: (fn: (tx: typeof db) => Promise<unknown>) => Promise<unknown> }).$transaction(async (tx) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const reorder: { id: string; reorderNumber: string } = await (db as any).$transaction(async (tx: any) => {
     const reorderNumber = await generateReorderNumber(tx);
 
     const created = await tx.stockReorder.create({
@@ -128,7 +129,7 @@ export async function runStockScan(db: PrismaClient): Promise<ScanResult> {
     });
 
     // Map itemId → reorderItemId for junction rows
-    const itemToReorderItemId = new Map(
+    const itemToReorderItemId = new Map<string, string>(
       created.items.map((ri: { id: string; itemId: string }) => [ri.itemId, ri.id])
     );
 

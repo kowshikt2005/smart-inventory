@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { SYSTEM_USER_ID } from '@/lib/order-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // POST /api/items/[id]/adjust-stock - Adjust physical stock for an item
 export async function POST(
@@ -8,6 +9,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_items', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 

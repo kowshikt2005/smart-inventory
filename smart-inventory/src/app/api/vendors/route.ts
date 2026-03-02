@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/vendors - Get all vendors with optional search and pagination
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('masters_vendors', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1);
@@ -56,6 +59,8 @@ export async function GET(request: Request) {
 // POST /api/vendors - Create a new vendor
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('masters_vendors', 'edit');
+    if (error) return error;
     const body = await request.json();
 
     // Validate required fields

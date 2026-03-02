@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
-import { auth } from '@/lib/auth';
+import { checkPermission } from '@/lib/api-auth';
 import {
   generatePurchaseOrderNumber,
   calculatePurchaseLineItem,
@@ -18,7 +18,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await auth();
+    const { error } = await checkPermission('purchases_reorders', 'edit');
+    if (error) return error;
+
     const { id } = await params;
     const body = await request.json();
 

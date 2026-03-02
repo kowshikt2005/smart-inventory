@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { PaymentStatus } from '@/generated/prisma';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/payments/[id] - Get single payment
 export async function GET(
@@ -8,6 +9,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_receipts', 'view');
+    if (error) return error;
     const { id } = await params;
 
     const payment = await db.payment.findUnique({
@@ -63,6 +66,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_receipts', 'edit');
+    if (error) return error;
     const { id } = await params;
 
     const payment = await db.payment.findUnique({

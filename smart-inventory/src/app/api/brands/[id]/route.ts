@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/brands/[id] - Get a specific brand
 export async function GET(
@@ -7,6 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_items', 'view');
+    if (error) return error;
     const { id } = await params;
 
     const brand = await db.brand.findUnique({
@@ -47,6 +50,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_items', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
@@ -133,6 +138,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_items', 'edit');
+    if (error) return error;
     const { id } = await params;
 
     // Check if brand has items

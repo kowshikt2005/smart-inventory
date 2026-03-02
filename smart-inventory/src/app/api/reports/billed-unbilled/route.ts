@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { SalesOrderStatus } from '@/generated/prisma';
+import { checkPermission } from '@/lib/api-auth';
 
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('reports', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
     const brandId = searchParams.get('brandId');

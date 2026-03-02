@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { generatePurchaseInvoiceNumber, calculatePurchaseLineItem, calculatePurchaseTotals } from '@/lib/purchase-utils';
-import { auth } from '@/lib/auth';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/purchase-invoices - Get all purchase invoices with filtering
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('purchases_invoices', 'view');
+    if (error) return error;
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
@@ -17,8 +20,6 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
-
-    await auth();
 
     // Build where clause
     const where: any = {};
@@ -189,6 +190,9 @@ export async function GET(request: Request) {
 // POST /api/purchase-invoices - Create a new purchase invoice
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('purchases_invoices', 'edit');
+    if (error) return error;
+
     const body = await request.json();
 
     // Validate required fields

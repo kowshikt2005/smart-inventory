@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('reports', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'customer'; // 'customer' or 'vendor'
     const customerId = searchParams.get('customerId');

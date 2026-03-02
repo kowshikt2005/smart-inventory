@@ -2,10 +2,13 @@ import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { generateDummyInvoiceNumber, calculateDueDate } from '@/lib/invoice-utils';
 import { calculateOrderTotals, calculateLineItemV2 } from '@/lib/order-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/dummy-invoices — list all DI-xxxx invoices
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('sales_dummy_invoices', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
@@ -77,6 +80,8 @@ export async function GET(request: Request) {
 // POST /api/dummy-invoices — create a dummy invoice directly (no sales order)
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('sales_dummy_invoices', 'edit');
+    if (error) return error;
     const body = await request.json();
 
     if (!body.customerId) {

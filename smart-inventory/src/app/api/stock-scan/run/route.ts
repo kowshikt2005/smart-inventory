@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { auth } from '@/lib/auth';
+import { checkPermission } from '@/lib/api-auth';
 import { runStockScan } from '@/lib/reorder-utils';
 
 // POST /api/stock-scan/run - Trigger stock scan manually
 export async function POST() {
   try {
-    await auth();
+    const { error } = await checkPermission('purchases_reorders', 'edit');
+    if (error) return error;
     const result = await runStockScan(db);
     return NextResponse.json(result);
   } catch (error) {

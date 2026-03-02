@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { generatePurchaseReturnNumber, calculatePurchaseLineItem, calculatePurchaseTotals } from '@/lib/purchase-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/purchase-returns - Get all purchase returns with filtering
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('purchases_returns', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
@@ -121,6 +124,9 @@ export async function GET(request: Request) {
 // POST /api/purchase-returns - Create a new purchase return
 export async function POST(request: Request) {
   try {
+    const { error: postError } = await checkPermission('purchases_returns', 'edit');
+    if (postError) return postError;
+
     const body = await request.json();
 
     // Validate required fields

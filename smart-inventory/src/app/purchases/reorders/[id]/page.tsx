@@ -7,6 +7,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { ReorderStatusBadge } from "@/components/reorders/ReorderStatusBadge";
+import { VendorSelectionModal } from "@/components/reorders/VendorSelectionModal";
 import {
   ArrowLeft, Loader2, PackageCheck, XCircle, X, AlertTriangle,
 } from "lucide-react";
@@ -86,7 +87,7 @@ export default function ReorderDetailPage() {
   );
   const [convertNotes, setConvertNotes] = useState("");
   const [vendorGroups, setVendorGroups] = useState<VendorGroupRow[]>([]);
-  const [vendorSearches, setVendorSearches] = useState<Record<string, string>>({});
+  const [vendorModalGroupKey, setVendorModalGroupKey] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [convertResult, setConvertResult] = useState<{ createdOrders: { purchaseOrderId: string; orderNumber: string; vendorName: string; itemCount: number }[] } | null>(null);
 
@@ -131,7 +132,7 @@ export default function ReorderDetailPage() {
     groups.sort((a, b) => (a.vendorId ? 0 : 1) - (b.vendorId ? 0 : 1));
 
     setVendorGroups(groups);
-    setVendorSearches({});
+    setVendorModalGroupKey(null);
   }, [reorder]);
 
   const handleOpenConvert = () => {
@@ -154,8 +155,10 @@ export default function ReorderDetailPage() {
         g.key === key ? { ...g, vendorId, vendorName } : g
       )
     );
-    setVendorSearches((prev) => ({ ...prev, [key]: "" }));
   };
+
+  // The group currently being assigned a vendor via modal
+  const vendorModalGroup = vendorGroups.find((g) => g.key === vendorModalGroupKey);
 
   const checkedGroupCount = vendorGroups.filter(
     (g) => g.checked && g.vendorId
@@ -395,11 +398,6 @@ export default function ReorderDetailPage() {
                           const groupValue = g.items.reduce(
                             (s, i) => s + Number(i.requiredQty) * Number(i.rate), 0
                           );
-                          const searchKey = g.key;
-                          const searchVal = vendorSearches[searchKey] || "";
-                          const filteredVendors = searchVal
-                            ? vendors.filter((v) => v.name.toLowerCase().includes(searchVal.toLowerCase())).slice(0, 6)
-                            : [];
 
                           return (
                             <TableRow key={g.key} className={!g.vendorId ? "bg-amber-50/50" : ""}>
@@ -426,35 +424,19 @@ export default function ReorderDetailPage() {
                                     </button>
                                   </div>
                                 ) : (
-                                  <div className="relative">
-                                    <Input
-                                      placeholder="Search vendor..."
-                                      value={searchVal}
-                                      onChange={(e) =>
-                                        setVendorSearches((prev) => ({ ...prev, [searchKey]: e.target.value }))
-                                      }
-                                      className="h-8 text-sm"
-                                    />
-                                    {searchVal && filteredVendors.length > 0 && (
-                                      <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-32 overflow-y-auto">
-                                        {filteredVendors.map((v) => (
-                                          <button
-                                            key={v.id}
-                                            className="w-full text-left px-3 py-1.5 text-sm hover:bg-teal-50 hover:text-teal-700"
-                                            onClick={() => updateGroupVendor(g.key, v.id, v.name)}
-                                          >
-                                            {v.name}
-                                            <span className="text-gray-400 ml-2 text-xs">{v.vendorNumber}</span>
-                                          </button>
-                                        ))}
-                                      </div>
-                                    )}
-                                    {!g.vendorId && (
-                                      <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                                        <AlertTriangle className="h-3 w-3" />
-                                        No default vendor
-                                      </p>
-                                    )}
+                                  <div>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 text-sm text-teal-700 border-teal-300 hover:bg-teal-50"
+                                      onClick={() => setVendorModalGroupKey(g.key)}
+                                    >
+                                      Select Vendor
+                                    </Button>
+                                    <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      No default vendor
+                                    </p>
                                   </div>
                                 )}
                               </TableCell>
@@ -515,6 +497,20 @@ export default function ReorderDetailPage() {
             </div>
           </div>
         )}
+
+        {/* Vendor Selection Modal */}
+        <VendorSelectionModal
+          isOpen={!!vendorModalGroupKey}
+          onClose={() => setVendorModalGroupKey(null)}
+          vendors={vendors}
+          brandName={vendorModalGroup?.brandNames.join(", ")}
+          onSelect={(vendor) => {
+            if (vendorModalGroupKey) {
+              updateGroupVendor(vendorModalGroupKey, vendor.id, vendor.name);
+              setVendorModalGroupKey(null);
+            }
+          }}
+        />
       </div>
     </DashboardLayout>
   );

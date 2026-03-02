@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { cache, cacheKeys } from '@/lib/cache';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/rate-sheets - Get all rate sheets
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('masters_rate_sheets', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const page = parseInt(searchParams.get('page') || '1');
@@ -75,6 +78,9 @@ export async function GET(request: Request) {
 // POST /api/rate-sheets - Create a new rate sheet
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('masters_rate_sheets', 'edit');
+    if (error) return error;
+
     const body = await request.json();
 
     // Validate required fields

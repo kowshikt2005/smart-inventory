@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/sales-returns/[id] - Get single sales return
 export async function GET(
@@ -7,6 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_returns', 'view');
+    if (error) return error;
     const { id } = await params;
 
     const salesReturn = await db.salesReturn.findUnique({
@@ -72,6 +75,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_returns', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
@@ -137,6 +142,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_returns', 'edit');
+    if (error) return error;
     const { id } = await params;
 
     const salesReturn = await db.salesReturn.findUnique({

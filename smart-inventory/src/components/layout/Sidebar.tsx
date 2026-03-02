@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
+import type { PermissionKey, RolePermissions } from "@/types/permissions";
 import {
   LayoutDashboard,
   Database,
@@ -24,53 +25,10 @@ import {
   BarChart3,
   Landmark,
   Settings,
+  Shield,
 } from "lucide-react";
 import { useState, memo, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-
-// Role-based access control
-const ROLE_PERMISSIONS = {
-  SALESMAN: {
-    sales: true,
-    ledger: false,
-    reports: false,
-    masters: false,
-    employees: false,
-    settings: false,
-  },
-  BILLING_OPERATOR: {
-    sales: true,
-    ledger: true,
-    reports: true,
-    masters: false,
-    employees: false,
-    settings: false,
-  },
-  ACCOUNTANT: {
-    sales: true,
-    ledger: true,
-    reports: true,
-    masters: true,
-    employees: false,
-    settings: false,
-  },
-  MANAGER: {
-    sales: true,
-    ledger: true,
-    reports: true,
-    masters: true,
-    employees: true,
-    settings: true,
-  },
-  ADMIN: {
-    sales: true,
-    ledger: true,
-    reports: true,
-    masters: true,
-    employees: true,
-    settings: true,
-  },
-};
 
 function CollapsibleSection({
   isOpen,
@@ -98,6 +56,24 @@ function CollapsibleSection({
   );
 }
 
+/** Check if at least one page key in the array has view permission */
+function canViewAny(permissions: RolePermissions | undefined, keys: PermissionKey[]): boolean {
+  if (!permissions) return false;
+  return keys.some((k) => permissions[k]?.view);
+}
+
+/** Check if a specific page key has view permission */
+function canView(permissions: RolePermissions | undefined, key: PermissionKey): boolean {
+  return permissions?.[key]?.view === true;
+}
+
+type NavItem = {
+  icon: typeof FileText;
+  label: string;
+  href: string;
+  permKey: PermissionKey;
+};
+
 export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
@@ -107,43 +83,65 @@ export const Sidebar = memo(function Sidebar() {
   const [mastersOpen, setMastersOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
 
-  // Get user permissions
-  const userRole = session?.user?.role || "SALESMAN";
-  const permissions = ROLE_PERMISSIONS[userRole as keyof typeof ROLE_PERMISSIONS] || ROLE_PERMISSIONS.SALESMAN;
+  const permissions = session?.user?.permissions as RolePermissions | undefined;
 
-  const salesItems = useMemo(() => [
-    { icon: FileText, label: "Orders", href: "/sales/orders" },
-    { icon: Receipt, label: "Invoices", href: "/sales/invoices" },
-    { icon: Receipt, label: "Dummy Invoices", href: "/sales/dummy-invoices" },
-    { icon: CreditCard, label: "Receipts", href: "/sales/receipts" },
-    { icon: RotateCcw, label: "Returns", href: "/sales/returns" },
+  // Section visibility based on whether any child page has view permission
+  const showSales = canViewAny(permissions, [
+    'sales_orders', 'sales_invoices', 'sales_dummy_invoices', 'sales_receipts', 'sales_returns',
+  ]);
+  const showPurchases = canViewAny(permissions, [
+    'purchases_orders', 'purchases_reorders', 'purchases_invoices', 'purchases_payments', 'purchases_returns',
+  ]);
+  const showTransactions = showSales || showPurchases;
+  const showBankCash = canViewAny(permissions, ['bank_accounts', 'bank_ledger']);
+  const showLedger = canViewAny(permissions, ['ledger_customers', 'ledger_stock', 'ledger_stock_journal']);
+  const showFinance = showBankCash || showLedger;
+  const showReports = canView(permissions, 'reports');
+  const showMasters = canViewAny(permissions, [
+    'masters_customers', 'masters_vendors', 'masters_employees', 'masters_rate_sheets', 'masters_items', 'masters_roles',
+  ]);
+  const showSettings = canView(permissions, 'settings');
+
+  // Define nav items with permission keys for filtering
+  const salesItems: NavItem[] = useMemo(() => [
+    { icon: FileText, label: "Orders", href: "/sales/orders", permKey: "sales_orders" },
+    { icon: Receipt, label: "Invoices", href: "/sales/invoices", permKey: "sales_invoices" },
+    { icon: Receipt, label: "Dummy Invoices", href: "/sales/dummy-invoices", permKey: "sales_dummy_invoices" },
+    { icon: CreditCard, label: "Receipts", href: "/sales/receipts", permKey: "sales_receipts" },
+    { icon: RotateCcw, label: "Returns", href: "/sales/returns", permKey: "sales_returns" },
   ], []);
 
-  const purchaseItems = useMemo(() => [
-    { icon: FileText, label: "Orders", href: "/purchases/orders" },
-    { icon: ClipboardList, label: "Reorders", href: "/purchases/reorders" },
-    { icon: Receipt, label: "Invoices", href: "/purchases/invoices" },
-    { icon: CreditCard, label: "Payments", href: "/purchases/payments" },
-    { icon: RotateCcw, label: "Returns", href: "/purchases/returns" },
+  const purchaseItems: NavItem[] = useMemo(() => [
+    { icon: FileText, label: "Orders", href: "/purchases/orders", permKey: "purchases_orders" },
+    { icon: ClipboardList, label: "Reorders", href: "/purchases/reorders", permKey: "purchases_reorders" },
+    { icon: Receipt, label: "Invoices", href: "/purchases/invoices", permKey: "purchases_invoices" },
+    { icon: CreditCard, label: "Payments", href: "/purchases/payments", permKey: "purchases_payments" },
+    { icon: RotateCcw, label: "Returns", href: "/purchases/returns", permKey: "purchases_returns" },
   ], []);
 
-  const bankCashItems = useMemo(() => [
-    { icon: Building2, label: "Accounts", href: "/bank-cash/accounts" },
-    { icon: BookOpen, label: "Bank Ledger", href: "/bank-cash/ledger" },
+  const bankCashItems: NavItem[] = useMemo(() => [
+    { icon: Building2, label: "Accounts", href: "/bank-cash/accounts", permKey: "bank_accounts" },
+    { icon: BookOpen, label: "Bank Ledger", href: "/bank-cash/ledger", permKey: "bank_ledger" },
   ], []);
 
-  const masterItems = useMemo(() => [
-    { icon: Users, label: "Customers", href: "/masters/customers" },
-    { icon: Building2, label: "Vendors", href: "/masters/vendors" },
-    ...(permissions.employees ? [{ icon: UserCircle, label: "Employees", href: "/masters/employees" }] : []),
-    { icon: DollarSign, label: "Rate Sheets", href: "/masters/rate-sheets" },
-  ], [permissions.employees]);
-
-  const ledgerItems = useMemo(() => [
-    { icon: Users, label: "Customer Ledger", href: "/ledger/customers" },
-    { icon: Package, label: "Stock Ledger", href: "/ledger/items" },
-    { icon: ClipboardList, label: "Stock Journal", href: "/ledger/stock-journal" },
+  const ledgerItems: NavItem[] = useMemo(() => [
+    { icon: Users, label: "Customer Ledger", href: "/ledger/customers", permKey: "ledger_customers" },
+    { icon: Package, label: "Stock Ledger", href: "/ledger/items", permKey: "ledger_stock" },
+    { icon: ClipboardList, label: "Stock Journal", href: "/ledger/stock-journal", permKey: "ledger_stock_journal" },
   ], []);
+
+  const masterItems: NavItem[] = useMemo(() => [
+    { icon: Users, label: "Customers", href: "/masters/customers", permKey: "masters_customers" },
+    { icon: Building2, label: "Vendors", href: "/masters/vendors", permKey: "masters_vendors" },
+    { icon: UserCircle, label: "Employees", href: "/masters/employees", permKey: "masters_employees" },
+    { icon: DollarSign, label: "Rate Sheets", href: "/masters/rate-sheets", permKey: "masters_rate_sheets" },
+    { icon: Package, label: "Items", href: "/masters/items", permKey: "masters_items" },
+    { icon: Shield, label: "Roles", href: "/masters/roles", permKey: "masters_roles" },
+  ], []);
+
+  /** Filter nav items to only those the user can view */
+  const filterItems = (items: NavItem[]) =>
+    items.filter((item) => canView(permissions, item.permKey));
 
   const navLinkClass = (isActive: boolean) =>
     cn(
@@ -169,6 +167,18 @@ export const Sidebar = memo(function Sidebar() {
         : "text-white/80 hover:bg-white/[0.10] hover:text-white"
     );
 
+  const renderNavItems = (items: NavItem[]) =>
+    filterItems(items).map((item) => {
+      const Icon = item.icon;
+      const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+      return (
+        <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
+          <Icon className="h-4 w-4" strokeWidth={1.5} />
+          <span>{item.label}</span>
+        </Link>
+      );
+    });
+
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-[230px] bg-gradient-to-b from-[#2D2A5E] via-[#272462] to-[#1A1740] flex flex-col shadow-xl">
       {/* Logo */}
@@ -193,7 +203,7 @@ export const Sidebar = memo(function Sidebar() {
         </Link>
 
         {/* TRANSACTIONS section */}
-        {permissions.sales && (
+        {showTransactions && (
           <>
             <div className="mx-3 my-3 h-px bg-white/[0.12]" />
             <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
@@ -201,61 +211,47 @@ export const Sidebar = memo(function Sidebar() {
             </p>
 
             {/* Sales */}
-            <div className="mb-0.5">
-              <button
-                onClick={() => setSalesOpen(!salesOpen)}
-                className={sectionButtonClass(pathname.startsWith("/sales"))}
-              >
-                <div className="flex items-center gap-3">
-                  <ShoppingCart className="h-5 w-5" strokeWidth={1.5} />
-                  <span>Sales</span>
-                </div>
-                <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", salesOpen && "rotate-180")} />
-              </button>
-              <CollapsibleSection isOpen={salesOpen}>
-                {salesItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                  return (
-                    <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
-                      <Icon className="h-4 w-4" strokeWidth={1.5} />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </CollapsibleSection>
-            </div>
+            {showSales && (
+              <div className="mb-0.5">
+                <button
+                  onClick={() => setSalesOpen(!salesOpen)}
+                  className={sectionButtonClass(pathname.startsWith("/sales"))}
+                >
+                  <div className="flex items-center gap-3">
+                    <ShoppingCart className="h-5 w-5" strokeWidth={1.5} />
+                    <span>Sales</span>
+                  </div>
+                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", salesOpen && "rotate-180")} />
+                </button>
+                <CollapsibleSection isOpen={salesOpen}>
+                  {renderNavItems(salesItems)}
+                </CollapsibleSection>
+              </div>
+            )}
 
             {/* Purchases */}
-            <div className="mb-0.5">
-              <button
-                onClick={() => setPurchasesOpen(!purchasesOpen)}
-                className={sectionButtonClass(pathname.startsWith("/purchases"))}
-              >
-                <div className="flex items-center gap-3">
-                  <Truck className="h-5 w-5" strokeWidth={1.5} />
-                  <span>Purchases</span>
-                </div>
-                <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", purchasesOpen && "rotate-180")} />
-              </button>
-              <CollapsibleSection isOpen={purchasesOpen}>
-                {purchaseItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                  return (
-                    <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
-                      <Icon className="h-4 w-4" strokeWidth={1.5} />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </CollapsibleSection>
-            </div>
+            {showPurchases && (
+              <div className="mb-0.5">
+                <button
+                  onClick={() => setPurchasesOpen(!purchasesOpen)}
+                  className={sectionButtonClass(pathname.startsWith("/purchases"))}
+                >
+                  <div className="flex items-center gap-3">
+                    <Truck className="h-5 w-5" strokeWidth={1.5} />
+                    <span>Purchases</span>
+                  </div>
+                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", purchasesOpen && "rotate-180")} />
+                </button>
+                <CollapsibleSection isOpen={purchasesOpen}>
+                  {renderNavItems(purchaseItems)}
+                </CollapsibleSection>
+              </div>
+            )}
           </>
         )}
 
         {/* FINANCE section */}
-        {permissions.ledger && (
+        {showFinance && (
           <>
             <div className="mx-3 my-3 h-px bg-white/[0.12]" />
             <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
@@ -263,61 +259,47 @@ export const Sidebar = memo(function Sidebar() {
             </p>
 
             {/* Bank/Cash */}
-            <div className="mb-0.5">
-              <button
-                onClick={() => setBankCashOpen(!bankCashOpen)}
-                className={sectionButtonClass(pathname.startsWith("/bank-cash"))}
-              >
-                <div className="flex items-center gap-3">
-                  <Landmark className="h-5 w-5" strokeWidth={1.5} />
-                  <span>Bank/Cash</span>
-                </div>
-                <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", bankCashOpen && "rotate-180")} />
-              </button>
-              <CollapsibleSection isOpen={bankCashOpen}>
-                {bankCashItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                  return (
-                    <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
-                      <Icon className="h-4 w-4" strokeWidth={1.5} />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </CollapsibleSection>
-            </div>
+            {showBankCash && (
+              <div className="mb-0.5">
+                <button
+                  onClick={() => setBankCashOpen(!bankCashOpen)}
+                  className={sectionButtonClass(pathname.startsWith("/bank-cash"))}
+                >
+                  <div className="flex items-center gap-3">
+                    <Landmark className="h-5 w-5" strokeWidth={1.5} />
+                    <span>Bank/Cash</span>
+                  </div>
+                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", bankCashOpen && "rotate-180")} />
+                </button>
+                <CollapsibleSection isOpen={bankCashOpen}>
+                  {renderNavItems(bankCashItems)}
+                </CollapsibleSection>
+              </div>
+            )}
 
             {/* Ledger */}
-            <div className="mb-0.5">
-              <button
-                onClick={() => setLedgerOpen(!ledgerOpen)}
-                className={sectionButtonClass(pathname.startsWith("/ledger"))}
-              >
-                <div className="flex items-center gap-3">
-                  <BookOpen className="h-5 w-5" strokeWidth={1.5} />
-                  <span>Ledger</span>
-                </div>
-                <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", ledgerOpen && "rotate-180")} />
-              </button>
-              <CollapsibleSection isOpen={ledgerOpen}>
-                {ledgerItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                  return (
-                    <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
-                      <Icon className="h-4 w-4" strokeWidth={1.5} />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </CollapsibleSection>
-            </div>
+            {showLedger && (
+              <div className="mb-0.5">
+                <button
+                  onClick={() => setLedgerOpen(!ledgerOpen)}
+                  className={sectionButtonClass(pathname.startsWith("/ledger"))}
+                >
+                  <div className="flex items-center gap-3">
+                    <BookOpen className="h-5 w-5" strokeWidth={1.5} />
+                    <span>Ledger</span>
+                  </div>
+                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", ledgerOpen && "rotate-180")} />
+                </button>
+                <CollapsibleSection isOpen={ledgerOpen}>
+                  {renderNavItems(ledgerItems)}
+                </CollapsibleSection>
+              </div>
+            )}
           </>
         )}
 
         {/* ANALYTICS section */}
-        {permissions.reports && (
+        {showReports && (
           <>
             <div className="mx-3 my-3 h-px bg-white/[0.12]" />
             <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
@@ -334,7 +316,7 @@ export const Sidebar = memo(function Sidebar() {
         )}
 
         {/* CONFIGURATION section */}
-        {permissions.masters && (
+        {showMasters && (
           <>
             <div className="mx-3 my-3 h-px bg-white/[0.12]" />
             <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
@@ -354,32 +336,14 @@ export const Sidebar = memo(function Sidebar() {
                 <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", mastersOpen && "rotate-180")} />
               </button>
               <CollapsibleSection isOpen={mastersOpen}>
-                {masterItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.href;
-                  return (
-                    <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
-                      <Icon className="h-4 w-4" strokeWidth={1.5} />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-
-                {/* Items - direct link */}
-                <Link
-                  href="/masters/items"
-                  className={subLinkClass(pathname.startsWith("/masters/items"))}
-                >
-                  <Package className="h-4 w-4" strokeWidth={1.5} />
-                  <span>Items</span>
-                </Link>
+                {renderNavItems(masterItems)}
               </CollapsibleSection>
             </div>
           </>
         )}
 
         {/* Settings */}
-        {permissions.settings && (
+        {showSettings && (
           <div className="mb-0.5">
             <Link href="/settings" className={navLinkClass(pathname === "/settings")}>
               <Settings className="h-5 w-5" strokeWidth={1.5} />

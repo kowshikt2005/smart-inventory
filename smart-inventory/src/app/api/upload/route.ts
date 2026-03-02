@@ -7,9 +7,10 @@ const ALLOWED_TYPES: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
   'image/webp': '.webp',
+  'application/pdf': '.pdf',
 };
 
-const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
 export async function POST(request: Request) {
   try {
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
     const ext = ALLOWED_TYPES[file.type];
     if (!ext) {
       return NextResponse.json(
-        { error: 'Invalid file type. Only JPEG, PNG, and WebP are allowed.' },
+        { error: 'Invalid file type. Only JPEG, PNG, WebP, and PDF are allowed.' },
         { status: 400 }
       );
     }
@@ -32,14 +33,14 @@ export async function POST(request: Request) {
     // Validate file size
     if (file.size > MAX_SIZE) {
       return NextResponse.json(
-        { error: 'File too large. Maximum size is 5MB.' },
+        { error: 'File too large. Maximum size is 10MB.' },
         { status: 400 }
       );
     }
 
     // Determine upload folder
     const folder = (formData.get('folder') as string) || 'items';
-    const VALID_FOLDERS = ['items', 'brands'];
+    const VALID_FOLDERS = ['items', 'brands', 'employees'];
     if (!VALID_FOLDERS.includes(folder)) {
       return NextResponse.json(
         { error: `Invalid folder. Allowed: ${VALID_FOLDERS.join(', ')}` },

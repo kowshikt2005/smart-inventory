@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/customers/[id]/pending-invoices - Get pending/overdue invoices for customer
 export async function GET(
@@ -7,6 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_customers', 'view');
+    if (error) return error;
     const { id } = await params;
 
     // Check customer exists

@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/dashboard/stats - Get dashboard summary metrics
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('dashboard', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const fromDate = searchParams.get('fromDate');
     const toDate = searchParams.get('toDate');

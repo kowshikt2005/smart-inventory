@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { generateVendorPaymentNumber } from '@/lib/purchase-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/vendor-payments - Get all vendor payments with filtering
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('purchases_payments', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const vendorId = searchParams.get('vendorId') || '';

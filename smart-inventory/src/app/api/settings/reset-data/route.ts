@@ -1,24 +1,13 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { compare } from 'bcryptjs';
+import { checkPermission } from '@/lib/api-auth';
 
 // POST /api/settings/reset-data - Wipe all business data, keep users
 export async function POST(request: Request) {
   try {
-    // Check authentication
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Only ADMIN can reset data
-    if (session.user.role !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Only administrators can reset data' },
-        { status: 403 }
-      );
-    }
+    const { error, session } = await checkPermission('settings', 'edit');
+    if (error) return error;
 
     const { password } = await request.json();
 

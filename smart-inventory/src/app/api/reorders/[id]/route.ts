@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { auth } from '@/lib/auth';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/reorders/[id] - Get reorder detail
 export async function GET(
@@ -8,7 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await auth();
+    const { error } = await checkPermission('purchases_reorders', 'view');
+    if (error) return error;
     const { id } = await params;
 
     const reorder = await db.stockReorder.findUnique({
@@ -71,7 +72,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await auth();
+    const { error: patchError } = await checkPermission('purchases_reorders', 'edit');
+    if (patchError) return patchError;
+
     const { id } = await params;
     const body = await request.json();
 

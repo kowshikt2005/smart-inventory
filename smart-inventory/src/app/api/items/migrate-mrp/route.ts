@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // POST /api/items/migrate-mrp - One-time migration to set mrp and sellingPrice from standardPrice
 export async function POST() {
   try {
+    const { error } = await checkPermission('masters_items', 'edit');
+    if (error) return error;
     // Find all items that need migration (where mrp or sellingPrice is 0 but standardPrice has value)
     const itemsToUpdate = await db.item.findMany({
       select: {

@@ -35,15 +35,12 @@ export const Header = memo(function Header() {
       .slice(0, 2);
   };
 
-  const getRoleLabel = (role: string) => {
-    const roleLabels: Record<string, string> = {
-      SALESMAN: "Salesman",
-      BILLING_OPERATOR: "Billing Operator",
-      ACCOUNTANT: "Accountant",
-      MANAGER: "Manager",
-      ADMIN: "Administrator",
-    };
-    return roleLabels[role] || role;
+  const getRoleLabel = (roleName?: string) => {
+    if (!roleName) return "User";
+    return roleName
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
   };
 
   // Build breadcrumbs from pathname
@@ -125,7 +122,7 @@ export const Header = memo(function Header() {
                       {session.user.email}
                     </p>
                     <p className="text-xs leading-none text-muted-foreground">
-                      {getRoleLabel(session.user.role)}
+                      {getRoleLabel(session.user.roleName || session.user.role)}
                     </p>
                   </div>
                 </DropdownMenuLabel>

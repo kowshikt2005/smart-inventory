@@ -2,11 +2,14 @@ import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { generateOrderNumber, calculateLineItemV2, calculateOrderTotals, SYSTEM_USER_ID } from '@/lib/order-utils';
 import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
-import { auth } from '@/lib/auth';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/sales-orders - Get all sales orders with filtering
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('sales_orders', 'view');
+    if (error) return error;
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
@@ -17,8 +20,6 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
-
-    await auth();
 
     // Build where clause
     const where: any = {};
@@ -193,6 +194,9 @@ export async function GET(request: Request) {
 // POST /api/sales-orders - Create a new sales order
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('sales_orders', 'edit');
+    if (error) return error;
+
     const body = await request.json();
 
     // Validate required fields

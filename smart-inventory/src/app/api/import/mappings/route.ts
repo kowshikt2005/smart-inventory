@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkAuth } from '@/lib/api-auth';
 
 export async function GET(request: Request) {
   try {
+    const { error } = await checkAuth();
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const entityType = searchParams.get('entityType');
 
@@ -24,6 +27,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const { error: postErr } = await checkAuth();
+    if (postErr) return postErr;
+
     const body = await request.json();
     const { entityType, name, mapping } = body;
 
@@ -47,6 +53,9 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const { error: putErr } = await checkAuth();
+    if (putErr) return putErr;
+
     const body = await request.json();
     const { id, name, mapping } = body;
 
