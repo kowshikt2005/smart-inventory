@@ -51,3 +51,22 @@ export function getStateFromGSTIN(gstin: string): { stateCode: string; stateName
   if (!stateName) return null;
   return { stateCode, stateName };
 }
+
+// Reverse lookup: normalized state name → 2-digit code
+// For duplicate names (e.g. "Andhra Pradesh"), prefer the newer/current code
+const GST_STATE_NAME_TO_CODE: Record<string, string> = {};
+for (const [code, name] of Object.entries(GST_STATE_CODES)) {
+  const key = name.toLowerCase().replace(/\s*\(new\)\s*$/i, "").trim();
+  // Later entries (higher codes) overwrite earlier ones for duplicates
+  GST_STATE_NAME_TO_CODE[key] = code;
+}
+
+/**
+ * Get a 2-digit GST state code from a free-text state name.
+ * Returns null if not recognized.
+ */
+export function getStateCodeFromName(stateName: string | null | undefined): string | null {
+  if (!stateName) return null;
+  const key = stateName.trim().toLowerCase().replace(/\s*\(new\)\s*$/i, "").trim();
+  return GST_STATE_NAME_TO_CODE[key] ?? null;
+}

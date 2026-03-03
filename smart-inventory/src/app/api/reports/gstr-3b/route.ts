@@ -1,12 +1,24 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getMonthDates, getMonthName, splitTax } from "@/lib/gst-report-utils";
+import {
+  getMonthDates,
+  getMonthName,
+  fmtFilingPeriod,
+  splitGST,
+  getStateCode,
+  round2,
+} from "@/lib/gst-report-utils";
 import { checkPermission } from "@/lib/api-auth";
+import type { GSTR3BGovJSON } from "@/types/gst-gov-types";
+
+const ZERO_TAX = { txval: 0, iamt: 0, camt: 0, samt: 0, csamt: 0 };
+const ZERO_ITC = { iamt: 0, camt: 0, samt: 0, csamt: 0 };
 
 export async function GET(request: Request) {
   try {
-    const { error } = await checkPermission('reports', 'view');
+    const { error } = await checkPermission("reports", "view");
     if (error) return error;
+
     const { searchParams } = new URL(request.url);
     const month = parseInt(searchParams.get("month") || "");
     const year = parseInt(searchParams.get("year") || "");
@@ -21,113 +33,222 @@ export async function GET(request: Request) {
     const { startDate, endDate } = getMonthDates(month, year);
     const dateFilter = { gte: startDate, lte: endDate };
 
-    // === 3.1 Outward Supplies (Sales) ===
+    // ── Fetch company GSTIN ───────────────────────────────────────────────
+    const gstinSetting = await db.appSetting.findUnique({
+      where: { key: "company_gstin" },
+    });
+    const companyGstin = gstinSetting?.value || "";
+    const companyStateCode = companyGstin.substring(0, 2);
+
+    // ── 3.1(a) Outward: Sales invoices ────────────────────────────────────
     const salesInvoices = await db.invoice.findMany({
       where: { invoiceDate: dateFilter, paymentStatus: { not: "CANCELLED" } },
       include: {
+        customer: { select: { gstin: true, state: true } },
         items: { select: { taxRate: true, amount: true, taxAmount: true } },
       },
     });
 
-    let totalSalesTaxable = 0;
-    let totalSalesTax = 0;
-    const rateWiseMap = new Map<
-      number,
-      { rate: number; taxableValue: number; cgst: number; sgst: number }
-    >();
+    // ── 3.1(a) Subtract: Sales returns ────────────────────────────────────
+    const salesReturns = await db.salesReturn.findMany({
+      where: { returnDate: dateFilter, status: "COMPLETED" },
+      include: {
+        customer: { select: { gstin: true, state: true } },
+        items: { select: { taxRate: true, amount: true, taxAmount: true } },
+      },
+    });
+
+    let osup_txval = 0, osup_igst = 0, osup_cgst = 0, osup_sgst = 0;
+
+    // Rate-wise breakdown (for display)
+    type RateRow = { rate: number; txval: number; igst: number; cgst: number; sgst: number };
+    const rateMap = new Map<number, RateRow>();
 
     for (const inv of salesInvoices) {
-      totalSalesTaxable += Number(inv.subtotal);
-      totalSalesTax += Number(inv.taxAmount);
-
+      const custStateCode = getStateCode(inv.customer.gstin, inv.customer.state);
+      osup_txval += Number(inv.subtotal);
       for (const it of inv.items) {
         const rate = Number(it.taxRate);
-        const existing = rateWiseMap.get(rate) || {
-          rate,
-          taxableValue: 0,
-          cgst: 0,
-          sgst: 0,
-        };
-        const tax = splitTax(Number(it.taxAmount));
-        existing.taxableValue += Number(it.amount);
-        existing.cgst += tax.cgst;
-        existing.sgst += tax.sgst;
-        rateWiseMap.set(rate, existing);
+        const { igst, cgst, sgst } = splitGST(
+          Number(it.taxAmount), companyStateCode, custStateCode
+        );
+        osup_igst += igst; osup_cgst += cgst; osup_sgst += sgst;
+
+        if (!rateMap.has(rate)) rateMap.set(rate, { rate, txval: 0, igst: 0, cgst: 0, sgst: 0 });
+        const r = rateMap.get(rate)!;
+        r.txval += Number(it.amount);
+        r.igst += igst; r.cgst += cgst; r.sgst += sgst;
       }
     }
 
-    const salesTax = splitTax(totalSalesTax);
-    const outwardSupplies = {
-      taxableValue: totalSalesTaxable,
-      cgst: salesTax.cgst,
-      sgst: salesTax.sgst,
-      rateWise: Array.from(rateWiseMap.values()).sort((a, b) => a.rate - b.rate),
-    };
+    // Subtract returns from outward supplies
+    for (const sr of salesReturns) {
+      const custStateCode = getStateCode(sr.customer.gstin, sr.customer.state);
+      osup_txval -= Number(sr.subtotal);
+      for (const it of sr.items) {
+        const { igst, cgst, sgst } = splitGST(
+          Number(it.taxAmount), companyStateCode, custStateCode
+        );
+        osup_igst -= igst; osup_cgst -= cgst; osup_sgst -= sgst;
+      }
+    }
 
-    // === 4. Input Tax Credit ===
-    // ITC Available: from purchase invoices
+    // ── 4(A)(5) ITC Available — Purchase invoices ─────────────────────────
     const purchaseInvoices = await db.purchaseInvoice.findMany({
       where: { date: dateFilter, status: { not: "CANCELLED" } },
-      select: { amount: true, taxAmount: true },
+      include: {
+        vendor: { select: { gstin: true, state: true } },
+        items: { select: { taxRate: true, amount: true, taxAmount: true } },
+      },
     });
 
-    let purchaseTaxable = 0;
-    let purchaseTaxTotal = 0;
+    let itcAvl_igst = 0, itcAvl_cgst = 0, itcAvl_sgst = 0;
     for (const pi of purchaseInvoices) {
-      purchaseTaxable += Number(pi.amount);
-      purchaseTaxTotal += Number(pi.taxAmount);
+      const vendorStateCode = getStateCode(pi.vendor?.gstin, pi.vendor?.state);
+      for (const it of pi.items) {
+        const { igst, cgst, sgst } = splitGST(
+          Number(it.taxAmount), companyStateCode, vendorStateCode
+        );
+        itcAvl_igst += igst; itcAvl_cgst += cgst; itcAvl_sgst += sgst;
+      }
     }
-    const itcAvailableTax = splitTax(purchaseTaxTotal);
 
-    // ITC Reversed: from purchase returns
+    // ── 4(B)(2) ITC Reversed — Purchase returns ──────────────────────────
     const purchaseReturns = await db.purchaseReturn.findMany({
       where: { date: dateFilter, status: "COMPLETED" },
-      select: { amount: true, taxAmount: true },
+      include: {
+        vendor: { select: { gstin: true, state: true } },
+        items: { select: { taxRate: true, amount: true, taxAmount: true } },
+      },
     });
 
-    let returnTaxable = 0;
-    let returnTaxTotal = 0;
+    let itcRev_igst = 0, itcRev_cgst = 0, itcRev_sgst = 0;
     for (const pr of purchaseReturns) {
-      returnTaxable += Number(pr.amount);
-      returnTaxTotal += Number(pr.taxAmount);
+      const vendorStateCode = getStateCode(pr.vendor?.gstin, pr.vendor?.state);
+      for (const it of pr.items) {
+        const { igst, cgst, sgst } = splitGST(
+          Number(it.taxAmount), companyStateCode, vendorStateCode
+        );
+        itcRev_igst += igst; itcRev_cgst += cgst; itcRev_sgst += sgst;
+      }
     }
-    const itcReversedTax = splitTax(returnTaxTotal);
 
-    const netITCcgst = itcAvailableTax.cgst - itcReversedTax.cgst;
-    const netITCsgst = itcAvailableTax.sgst - itcReversedTax.sgst;
+    const netITC_igst = round2(itcAvl_igst - itcRev_igst);
+    const netITC_cgst = round2(itcAvl_cgst - itcRev_cgst);
+    const netITC_sgst = round2(itcAvl_sgst - itcRev_sgst);
 
-    const inputTaxCredit = {
-      available: {
-        taxableValue: purchaseTaxable,
-        cgst: itcAvailableTax.cgst,
-        sgst: itcAvailableTax.sgst,
+    // ── Inter-state B2C supplies (unregistered) grouped by POS ────────────
+    const b2cInterMap = new Map<string, { pos: string; txval: number; iamt: number }>();
+    for (const inv of salesInvoices) {
+      if (inv.customer.gstin) continue;
+      const custStateCode = getStateCode(null, inv.customer.state);
+      if (!custStateCode || custStateCode === companyStateCode) continue;
+
+      let invTxval = 0, invIgst = 0;
+      for (const it of inv.items) {
+        invTxval += Number(it.amount);
+        invIgst += Number(it.taxAmount);
+      }
+
+      if (!b2cInterMap.has(custStateCode)) {
+        b2cInterMap.set(custStateCode, { pos: custStateCode, txval: 0, iamt: 0 });
+      }
+      const e = b2cInterMap.get(custStateCode)!;
+      e.txval = round2(e.txval + invTxval);
+      e.iamt = round2(e.iamt + invIgst);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Assemble government JSON
+    // ═══════════════════════════════════════════════════════════════════════
+    const govJson: GSTR3BGovJSON = {
+      gstin: companyGstin,
+      ret_period: fmtFilingPeriod(month, year),
+      sup_details: {
+        osup_det: {
+          txval: round2(osup_txval), iamt: round2(osup_igst),
+          camt: round2(osup_cgst), samt: round2(osup_sgst), csamt: 0,
+        },
+        osup_zero: { ...ZERO_TAX },
+        osup_nil_exmp: { ...ZERO_TAX },
+        isup_rev: { ...ZERO_TAX },
+        osup_nongst: { ...ZERO_TAX },
       },
-      reversed: {
-        taxableValue: returnTaxable,
-        cgst: itcReversedTax.cgst,
-        sgst: itcReversedTax.sgst,
+      itc_elg: {
+        itc_avl: [
+          { ty: "IMPG", ...ZERO_ITC },
+          { ty: "IMPS", ...ZERO_ITC },
+          { ty: "ISRC", ...ZERO_ITC },
+          { ty: "ISD", ...ZERO_ITC },
+          { ty: "OTH", iamt: round2(itcAvl_igst), camt: round2(itcAvl_cgst), samt: round2(itcAvl_sgst), csamt: 0 },
+        ],
+        itc_rev: [
+          { ty: "RUL", ...ZERO_ITC },
+          { ty: "OTH", iamt: round2(itcRev_igst), camt: round2(itcRev_cgst), samt: round2(itcRev_sgst), csamt: 0 },
+        ],
+        itc_net: { iamt: netITC_igst, camt: netITC_cgst, samt: netITC_sgst, csamt: 0 },
+        itc_inelg: [
+          { ty: "RUL", ...ZERO_ITC },
+          { ty: "OTH", ...ZERO_ITC },
+        ],
       },
-      net: { cgst: netITCcgst, sgst: netITCsgst },
+      inward_sup: {
+        isup_details: [
+          { ty: "GST", inter: 0, intra: 0 },
+          { ty: "NONGST", inter: 0, intra: 0 },
+        ],
+      },
+      intr_ltfee: { intr_details: { ...ZERO_ITC } },
+      inter_sup: {
+        unreg_details: Array.from(b2cInterMap.values()),
+        comp_details: [],
+        uin_details: [],
+      },
     };
 
-    // === 5. Tax Payable ===
-    const netCGST = salesTax.cgst - netITCcgst;
-    const netSGST = salesTax.sgst - netITCsgst;
-
-    const taxPayable = {
-      output: { cgst: salesTax.cgst, sgst: salesTax.sgst },
-      input: { cgst: netITCcgst, sgst: netITCsgst },
-      net: { cgst: netCGST, sgst: netSGST, total: netCGST + netSGST },
-    };
+    // ═══════════════════════════════════════════════════════════════════════
+    // Display data (for UI)
+    // ═══════════════════════════════════════════════════════════════════════
+    // Round rate-wise values
+    const rateWise = Array.from(rateMap.values())
+      .map((r) => ({
+        rate: r.rate,
+        txval: round2(r.txval), igst: round2(r.igst),
+        cgst: round2(r.cgst), sgst: round2(r.sgst),
+      }))
+      .sort((a, b) => a.rate - b.rate);
 
     return NextResponse.json({
       period: { month: getMonthName(month), year },
-      outwardSupplies,
-      inputTaxCredit,
-      taxPayable,
+      govJson,
+      display: {
+        outwardSupplies: {
+          txval: round2(osup_txval), igst: round2(osup_igst),
+          cgst: round2(osup_cgst), sgst: round2(osup_sgst),
+          rateWise,
+        },
+        itc: {
+          available: { igst: round2(itcAvl_igst), cgst: round2(itcAvl_cgst), sgst: round2(itcAvl_sgst) },
+          reversed: { igst: round2(itcRev_igst), cgst: round2(itcRev_cgst), sgst: round2(itcRev_sgst) },
+          net: { igst: netITC_igst, cgst: netITC_cgst, sgst: netITC_sgst },
+        },
+        taxPayable: {
+          outputTax: { igst: round2(osup_igst), cgst: round2(osup_cgst), sgst: round2(osup_sgst) },
+          itcNet: { igst: netITC_igst, cgst: netITC_cgst, sgst: netITC_sgst },
+          netPayable: {
+            igst: round2(round2(osup_igst) - netITC_igst),
+            cgst: round2(round2(osup_cgst) - netITC_cgst),
+            sgst: round2(round2(osup_sgst) - netITC_sgst),
+            total: round2(
+              round2(osup_igst) + round2(osup_cgst) + round2(osup_sgst) -
+              netITC_igst - netITC_cgst - netITC_sgst
+            ),
+          },
+        },
+      },
     });
-  } catch (error) {
-    console.error("Error fetching GSTR-3B:", error);
+  } catch (err) {
+    console.error("Error fetching GSTR-3B:", err);
     return NextResponse.json(
       { error: "Failed to fetch GSTR-3B report" },
       { status: 500 }
