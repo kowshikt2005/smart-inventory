@@ -29,6 +29,7 @@ interface PurchaseInvoice {
   paidAmount: number;
   balanceAmount: number;
   notes: string | null;
+  ref: string | null;
   vendor: {
     id: string;
     vendorNumber: string;
@@ -159,9 +160,16 @@ export default function PurchaseInvoiceDetailPage() {
           </Button>
           <div className="flex items-start justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                Purchase Invoice {invoice.invoiceNumber}
-              </h1>
+              <div className="flex items-center gap-2 mb-2">
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Purchase Invoice {invoice.invoiceNumber}
+                </h1>
+                {invoice.ref && (
+                  <span className="inline-flex items-center rounded bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-200">
+                    {invoice.ref}
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-4">
                 <PurchaseInvoiceStatusBadge status={invoice.status} />
                 <span className="text-gray-600">Due: {formatDate(invoice.dueDate)}</span>

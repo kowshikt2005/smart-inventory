@@ -281,12 +281,13 @@ export async function PUT(
       return NextResponse.json(updatedInvoice);
     }
 
-    // Simple update (only notes and due date)
+    // Simple update (only notes, due date, ref)
     const updatedInvoice = await db.purchaseInvoice.update({
       where: { id },
       data: {
         dueDate: body.dueDate ? new Date(body.dueDate) : existingInvoice.dueDate,
         notes: body.notes !== undefined ? body.notes : existingInvoice.notes,
+        ref: body.ref !== undefined ? (body.ref || null) : existingInvoice.ref,
       },
       include: {
         vendor: { select: { id: true, vendorNumber: true, name: true } },

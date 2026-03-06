@@ -182,15 +182,9 @@ export const Sidebar = memo(function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-[230px] bg-gradient-to-b from-[#2D2A5E] via-[#272462] to-[#1A1740] flex flex-col shadow-xl">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-white/[0.12]">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 shadow-lg shadow-amber-900/20">
-          <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M9 1v6m6-6v6" />
-          </svg>
-        </div>
-        <div className="flex flex-col">
-          <span className="text-white font-semibold text-sm tracking-wide leading-tight">SRI BALAJI</span>
-          <span className="text-amber-400/70 text-[10px] font-medium tracking-wider uppercase">Enterprises</span>
+      <div className="flex items-center justify-center px-3 py-4 border-b border-white/[0.12]">
+        <div className="w-full rounded-lg bg-white p-2">
+          <img src="/logo.jpg" alt="Sri Balaji Enterprises" className="w-full h-auto object-contain" />
         </div>
       </div>
 

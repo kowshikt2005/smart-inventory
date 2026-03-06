@@ -83,6 +83,7 @@ interface Invoice {
   paymentStatus: string;
   effectiveStatus: string;
   notes: string | null;
+  ref: string | null;
   customer: Customer;
   items: InvoiceItem[];
   allocations: PaymentAllocation[];
@@ -213,9 +214,16 @@ export default function InvoiceDetailPage() {
           </Button>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {invoice.invoiceNumber}
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {invoice.invoiceNumber}
+                </h1>
+                {invoice.ref && (
+                  <span className="inline-flex items-center rounded bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-200">
+                    {invoice.ref}
+                  </span>
+                )}
+              </div>
               {invoice.orderNumber && (
                 <p className="text-gray-600">
                   Order: {invoice.orderNumber}

@@ -415,7 +415,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Danger Zone -- Admin Only */}
-            {session?.user?.role === "ADMIN" && (
+            {session?.user?.permissions?.settings?.edit && (
               <div className="bg-white rounded-xl border border-red-200 shadow-sm">
                 <div className="px-6 py-4 border-b border-red-100 bg-red-50/50 rounded-t-xl">
                   <div className="flex items-center gap-2">

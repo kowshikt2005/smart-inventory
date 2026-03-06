@@ -22,8 +22,9 @@ export const Header = memo(function Header() {
   const { data: session } = useSession();
   const pathname = usePathname();
 
-  const handleSignOut = () => {
-    signOut({ callbackUrl: "/login" });
+  const handleSignOut = async () => {
+    await signOut({ redirect: false });
+    window.location.href = "/login";
   };
 
   const getUserInitials = (name: string) => {

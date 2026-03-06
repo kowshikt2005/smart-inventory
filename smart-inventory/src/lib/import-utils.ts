@@ -96,6 +96,7 @@ export const ENTITY_FIELDS: Record<EntityType, ImportField[]> = {
     { key: 'discountPercent', label: 'Discount %', required: false, type: 'decimal' },
     { key: 'taxRate', label: 'Tax Rate %', required: false, type: 'decimal' },
     { key: 'notes', label: 'Notes', required: false, type: 'string' },
+    { key: 'ref', label: 'Ref / Source', required: false, type: 'string' },
   ],
   PURCHASE_INVOICE: [
     { key: 'invoiceNumber', label: 'Invoice Number', required: true, type: 'string' },
@@ -107,6 +108,7 @@ export const ENTITY_FIELDS: Record<EntityType, ImportField[]> = {
     { key: 'rate', label: 'Rate', required: true, type: 'decimal' },
     { key: 'taxRate', label: 'Tax Rate %', required: false, type: 'decimal' },
     { key: 'notes', label: 'Notes', required: false, type: 'string' },
+    { key: 'ref', label: 'Ref / Source', required: false, type: 'string' },
   ],
 };
 

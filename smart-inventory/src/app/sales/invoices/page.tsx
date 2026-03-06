@@ -74,6 +74,7 @@ interface Invoice {
   balanceAmount: number;
   paymentStatus: string;
   effectiveStatus: string;
+  ref: string | null;
   customer: Customer;
 }
 
@@ -600,12 +601,19 @@ export default function SalesInvoicesPage() {
                       </TableCell>
                       <TableCell className="text-sm">{formatDate(invoice.invoiceDate)}</TableCell>
                       <TableCell>
-                        <button
-                          onClick={() => router.push(`/sales/invoices/${invoice.id}`)}
-                          className="font-medium text-teal-600 hover:text-teal-800 hover:underline"
-                        >
-                          {invoice.invoiceNumber}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => router.push(`/sales/invoices/${invoice.id}`)}
+                            className="font-medium text-teal-600 hover:text-teal-800 hover:underline"
+                          >
+                            {invoice.invoiceNumber}
+                          </button>
+                          {invoice.ref && (
+                            <span className="inline-flex items-center rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700 ring-1 ring-inset ring-purple-200">
+                              {invoice.ref}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-sm text-gray-600">{invoice.orderNumber || "-"}</TableCell>
                       <TableCell>

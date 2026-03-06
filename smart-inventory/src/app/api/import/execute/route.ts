@@ -698,6 +698,7 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
             paymentStatus: 'PENDING',
             dueDate: firstRow.dueDate ? parseDate(firstRow.dueDate) : undefined,
             notes: str(firstRow.notes) || null,
+            ref: str(firstRow.ref) || null,
           },
         });
 
@@ -834,6 +835,7 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
             balanceAmount: totalAmount,
             status: 'PENDING',
             notes: str(firstRow.notes) || null,
+            ref: str(firstRow.ref) || null,
           },
         });
 

@@ -64,6 +64,11 @@ export async function POST(request: Request) {
       db.purchaseInvoiceItem.deleteMany(),
       db.purchaseInvoice.deleteMany(),
 
+      // Stock reorders (must precede sales orders and items)
+      db.salesOrderReorder.deleteMany(),
+      db.stockReorderItem.deleteMany(),
+      db.stockReorder.deleteMany(),
+
       // Sales orders
       db.salesOrderItem.deleteMany(),
       db.orderStatusHistory.deleteMany(),

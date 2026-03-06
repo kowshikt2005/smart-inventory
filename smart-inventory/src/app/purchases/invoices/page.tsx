@@ -69,6 +69,7 @@ interface PurchaseInvoice {
   totalAmount: number;
   paidAmount: number;
   balanceAmount: number;
+  ref: string | null;
   vendor: Vendor;
   purchaseOrder?: { id: string; orderNumber: string } | null;
 }
@@ -467,12 +468,19 @@ export default function PurchaseInvoicesPage() {
                     <TableRow key={invoice.id} className="hover:bg-gray-50">
                       <TableCell className="text-sm">{formatDate(invoice.date)}</TableCell>
                       <TableCell>
-                        <button
-                          onClick={() => router.push(`/purchases/invoices/${invoice.id}`)}
-                          className="font-medium text-teal-600 hover:text-teal-800 hover:underline"
-                        >
-                          {invoice.invoiceNumber}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => router.push(`/purchases/invoices/${invoice.id}`)}
+                            className="font-medium text-teal-600 hover:text-teal-800 hover:underline"
+                          >
+                            {invoice.invoiceNumber}
+                          </button>
+                          {invoice.ref && (
+                            <span className="inline-flex items-center rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700 ring-1 ring-inset ring-purple-200">
+                              {invoice.ref}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div>

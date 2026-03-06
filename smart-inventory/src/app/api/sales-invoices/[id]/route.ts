@@ -264,12 +264,13 @@ export async function PUT(
       return NextResponse.json(updatedInvoice);
     }
 
-    // Simple update (only notes and due date)
+    // Simple update (only notes, due date, ref)
     const updatedInvoice = await db.invoice.update({
       where: { id },
       data: {
         notes: body.notes !== undefined ? body.notes : invoice.notes,
         dueDate: body.dueDate ? new Date(body.dueDate) : invoice.dueDate,
+        ref: body.ref !== undefined ? (body.ref || null) : invoice.ref,
       },
       include: {
         customer: { select: { id: true, customerNumber: true, name: true } },
