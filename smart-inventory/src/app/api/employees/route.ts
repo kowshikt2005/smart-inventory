@@ -51,10 +51,12 @@ export async function GET(request: Request) {
 
     // Fetch user → role in a single query (N+1 fix)
     const emails = employees.map(e => e.email).filter((email): email is string => !!email);
-    const users = emails.length > 0 ? await db.user.findMany({
-      where: { email: { in: emails } },
-      select: { email: true, roleRef: { select: { name: true } } },
-    }) : [];
+    const users: Array<{ email: string; roleRef: { name: string } | null }> = emails.length > 0
+      ? await (db.user.findMany as any)({
+          where: { email: { in: emails } },
+          select: { email: true, roleRef: { select: { name: true } } },
+        })
+      : [];
 
     const roleMap = new Map(users.map(u => [u.email, u.roleRef?.name || 'Unknown']));
     const employeesWithRoles = employees.map(employee => ({
@@ -132,7 +134,7 @@ export async function POST(request: Request) {
     // Create employee and user in transaction
     const result = await transaction(async (tx) => {
       // Create user account with roleId
-      const user = await tx.user.create({
+      const user = await (tx.user.create as any)({
         data: {
           email: body.email,
           name: body.name,

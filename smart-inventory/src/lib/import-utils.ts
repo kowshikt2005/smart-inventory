@@ -13,6 +13,7 @@ export type EntityType =
   | 'CUSTOMER'
   | 'VENDOR'
   | 'ITEM'
+  | 'EMPLOYEE'
   | 'STOCK_JOURNAL'
   | 'PAYMENT'
   | 'VENDOR_PAYMENT'
@@ -110,6 +111,15 @@ export const ENTITY_FIELDS: Record<EntityType, ImportField[]> = {
     { key: 'notes', label: 'Notes', required: false, type: 'string' },
     { key: 'ref', label: 'Ref / Source', required: false, type: 'string' },
   ],
+  EMPLOYEE: [
+    { key: 'name', label: 'Name', required: true, type: 'string', maxLength: 255 },
+    { key: 'email', label: 'Email', required: false, type: 'string' },
+    { key: 'phone', label: 'Phone', required: false, type: 'string' },
+    { key: 'designation', label: 'Designation', required: false, type: 'string' },
+    { key: 'department', label: 'Department', required: false, type: 'string' },
+    { key: 'salary', label: 'Salary', required: false, type: 'decimal' },
+    { key: 'joinDate', label: 'Join Date', required: true, type: 'date' },
+  ],
 };
 
 export interface RowValidation {
@@ -121,7 +131,8 @@ export interface RowValidation {
 }
 
 /**
- * Auto-match Excel column headers to entity fields using case-insensitive label matching.
+ * Auto-match entity fields to Excel column headers using case-insensitive matching.
+ * Returns { dbField: excelColumn } — i.e. for each system field, which Excel column best matches.
  */
 export function autoMatchColumns(
   headers: string[],
@@ -130,26 +141,24 @@ export function autoMatchColumns(
   const fields = ENTITY_FIELDS[entityType];
   const mapping: Record<string, string> = {};
 
-  for (const header of headers) {
-    const normalised = header.trim().toLowerCase().replace(/[_\-.\s]+/g, '');
+  for (const field of fields) {
+    const fieldLabel = field.label.toLowerCase().replace(/[_\-.\s]+/g, '');
+    const fieldKey = field.key.toLowerCase().replace(/[_\-.\s]+/g, '');
     let bestMatch: string | null = null;
 
-    for (const field of fields) {
-      const fieldLabel = field.label.toLowerCase().replace(/[_\-.\s]+/g, '');
-      const fieldKey = field.key.toLowerCase().replace(/[_\-.\s]+/g, '');
-
+    for (const header of headers) {
+      const normalised = header.trim().toLowerCase().replace(/[_\-.\s]+/g, '');
       if (normalised === fieldLabel || normalised === fieldKey) {
-        bestMatch = field.key;
+        bestMatch = header;
         break;
       }
-      // partial match — header contains the label or vice versa
       if (!bestMatch && (normalised.includes(fieldLabel) || fieldLabel.includes(normalised))) {
-        bestMatch = field.key;
+        bestMatch = header;
       }
     }
 
     if (bestMatch) {
-      mapping[header] = bestMatch;
+      mapping[field.key] = bestMatch;
     }
   }
 
@@ -169,10 +178,10 @@ export function validateRow(
   const errors: { field: string; message: string }[] = [];
   const warnings: { field: string; message: string }[] = [];
 
-  // Build a mapped-values object keyed by DB field
+  // mapping is { dbField: excelColumn }
   const mapped: Record<string, unknown> = {};
-  for (const [excelCol, dbField] of Object.entries(mapping)) {
-    if (dbField) mapped[dbField] = row[excelCol];
+  for (const [dbField, excelCol] of Object.entries(mapping)) {
+    if (excelCol) mapped[dbField] = row[excelCol];
   }
 
   for (const field of fields) {
@@ -220,6 +229,7 @@ export function validateRow(
 
 /**
  * Transform raw Excel rows using the column mapping into DB-field-keyed objects.
+ * mapping is { dbField: excelColumn }
  */
 export function applyMapping(
   rows: Record<string, unknown>[],
@@ -227,8 +237,8 @@ export function applyMapping(
 ): Record<string, unknown>[] {
   return rows.map((row) => {
     const mapped: Record<string, unknown> = {};
-    for (const [excelCol, dbField] of Object.entries(mapping)) {
-      if (dbField) {
+    for (const [dbField, excelCol] of Object.entries(mapping)) {
+      if (excelCol) {
         mapped[dbField] = row[excelCol];
       }
     }

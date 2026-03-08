@@ -1,4 +1,3 @@
-import { PrismaClient } from '@/generated/prisma';
 import {
   calculateStockAllocation,
   calculateOrderStockStatus,
@@ -16,7 +15,8 @@ export interface ScanResult {
 /**
  * Generate the next reorder number in sequence (RO-0001, RO-0002, etc.)
  */
-export async function generateReorderNumber(db: PrismaClient): Promise<string> {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export async function generateReorderNumber(db: any): Promise<string> {
   const last = await db.stockReorder.findFirst({
     orderBy: { reorderNumber: 'desc' },
     select: { reorderNumber: true },
@@ -36,7 +36,7 @@ export async function generateReorderNumber(db: PrismaClient): Promise<string> {
  * - Idempotent: skips if a non-CANCELLED reorder was already created today.
  * - Consolidates shortfall quantities across all Partial/Unavailable orders per item.
  */
-export async function runStockScan(db: PrismaClient): Promise<ScanResult> {
+export async function runStockScan(db: any): Promise<ScanResult> {
   // Idempotency: only one scan per calendar day
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -104,11 +104,10 @@ export async function runStockScan(db: PrismaClient): Promise<ScanResult> {
     where: { id: { in: itemIds } },
     select: { id: true, purchasePrice: true },
   });
-  const priceMap = new Map(itemRecords.map((i) => [i.id, Number(i.purchasePrice)]));
+  const priceMap = new Map<string, number>((itemRecords as any[]).map((i) => [i.id, Number(i.purchasePrice)]));
 
   // Create StockReorder with items and junction rows in one transaction
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const reorder: { id: string; reorderNumber: string } = await (db as any).$transaction(async (tx: any) => {
+  const reorder: { id: string; reorderNumber: string } = await db.$transaction(async (tx: any) => {
     const reorderNumber = await generateReorderNumber(tx);
 
     const created = await tx.stockReorder.create({

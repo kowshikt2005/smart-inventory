@@ -29,9 +29,7 @@ export async function GET(
                     id: true,
                     name: true,
                     preferredVendorId: true,
-                    preferredVendor: {
-                      select: { id: true, name: true },
-                    },
+                    preferredVendor: { select: { id: true, name: true } },
                   },
                 },
               },

@@ -172,9 +172,10 @@ export function ImportModal({
   }
 
   // ── Mapping helpers ────────────────────────────────────
+  // mapping is { dbField: excelColumn }
 
-  function updateMapping(header: string, dbField: string) {
-    setMapping((prev) => ({ ...prev, [header]: dbField }));
+  function updateMapping(dbField: string, excelCol: string) {
+    setMapping((prev) => ({ ...prev, [dbField]: excelCol }));
   }
 
   function loadSavedMapping(id: string) {
@@ -237,11 +238,12 @@ export function ImportModal({
 
   // ── Validate ──────────────────────────────────────────
 
+  // mapping is { dbField: excelColumn }
   function getMappedRows(): Record<string, unknown>[] {
     return rawRows.map((row) => {
       const mapped: Record<string, unknown> = {};
-      for (const [excelCol, dbField] of Object.entries(mapping)) {
-        if (dbField) mapped[dbField] = row[excelCol];
+      for (const [dbField, excelCol] of Object.entries(mapping)) {
+        if (excelCol) mapped[dbField] = row[excelCol];
       }
       return mapped;
     });
@@ -309,10 +311,8 @@ export function ImportModal({
   // ── Computed ──────────────────────────────────────────
 
   const requiredFields = fields.filter((f) => f.required);
-  const mappedFieldKeys = new Set(Object.values(mapping).filter(Boolean));
-  const missingRequired = requiredFields.filter(
-    (f) => !mappedFieldKeys.has(f.key)
-  );
+  // mapping is { dbField: excelColumn } — check that all required fields have a non-empty excelColumn
+  const missingRequired = requiredFields.filter((f) => !mapping[f.key]);
 
   const validCount = validationResults.filter(
     (r) => r.status === "valid"
@@ -487,52 +487,63 @@ export function ImportModal({
                 </div>
               )}
 
-              {/* Mapping table */}
+              {/* Mapping table — DB fields on left, Excel columns on right */}
               <div className="border rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-muted/30 text-left">
+                      <th className="px-4 py-2 font-medium w-8">#</th>
+                      <th className="px-4 py-2 font-medium">
+                        System Field
+                      </th>
                       <th className="px-4 py-2 font-medium">
                         Excel Column
                       </th>
-                      <th className="px-4 py-2 font-medium">
-                        Maps To
-                      </th>
-                      <th className="px-4 py-2 font-medium w-24">
-                        Sample
+                      <th className="px-4 py-2 font-medium w-32">
+                        Sample Value
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {headers.map((header) => (
-                      <tr key={header} className="border-t">
-                        <td className="px-4 py-2 font-mono text-xs">
-                          {header}
-                        </td>
-                        <td className="px-4 py-2">
-                          <select
-                            className="border rounded px-2 py-1 text-sm bg-white w-full"
-                            value={mapping[header] || ""}
-                            onChange={(e) =>
-                              updateMapping(header, e.target.value)
-                            }
-                          >
-                            <option value="">-- Skip --</option>
-                            {fields.map((f) => (
-                              <option key={f.key} value={f.key}>
-                                {f.label}
-                                {f.required ? " *" : ""}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-4 py-2 text-xs text-muted-foreground truncate max-w-[150px]">
-                          {rawRows.length > 0
-                            ? String(rawRows[0][header] ?? "")
-                            : ""}
-                        </td>
-                      </tr>
-                    ))}
+                    {fields.map((field, idx) => {
+                      const selectedCol = mapping[field.key] || "";
+                      const sampleValue = selectedCol && rawRows.length > 0
+                        ? String(rawRows[0][selectedCol] ?? "")
+                        : "";
+                      return (
+                        <tr key={field.key} className={`border-t ${field.required && !selectedCol ? "bg-amber-50/50" : ""}`}>
+                          <td className="px-4 py-2 text-xs text-muted-foreground">{idx + 1}</td>
+                          <td className="px-4 py-2">
+                            <span className="font-medium">{field.label}</span>
+                            {field.required && (
+                              <span className="ml-1 text-xs text-red-500 font-semibold">*</span>
+                            )}
+                            {!field.required && (
+                              <span className="ml-1 text-xs text-muted-foreground">(optional)</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2">
+                            <select
+                              className="border rounded px-2 py-1 text-sm bg-white w-full"
+                              value={selectedCol}
+                              onChange={(e) =>
+                                updateMapping(field.key, e.target.value)
+                              }
+                            >
+                              <option value="">-- Skip --</option>
+                              {headers.map((h) => (
+                                <option key={h} value={h}>
+                                  {h}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-4 py-2 text-xs text-muted-foreground truncate max-w-[150px]">
+                            {sampleValue}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -574,7 +585,7 @@ export function ImportModal({
                         Status
                       </th>
                       {fields
-                        .filter((f) => mappedFieldKeys.has(f.key))
+                        .filter((f) => !!mapping[f.key])
                         .map((f) => (
                           <th
                             key={f.key}
@@ -617,7 +628,7 @@ export function ImportModal({
                             )}
                           </td>
                           {fields
-                            .filter((f) => mappedFieldKeys.has(f.key))
+                            .filter((f) => !!mapping[f.key])
                             .map((f) => (
                               <td
                                 key={f.key}

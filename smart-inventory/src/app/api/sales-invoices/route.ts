@@ -321,13 +321,14 @@ export async function POST(request: Request) {
       const dueDate = calculateDueDate(invoiceDate, salesOrder.customer.creditDays);
 
       // Create the invoice with items
-      const newInvoice = await tx.invoice.create({
+      const newInvoice = await (tx.invoice.create as any)({
         data: {
           invoiceNumber,
           invoiceDate,
           salesOrderId: salesOrder.id, // Link to sales order for duplicate detection
           orderNumber: salesOrder.orderNumber, // Store for reference
           customerId: salesOrder.customerId,
+          shippingAddressId: body.shippingAddressId || null,
           subtotal,
           cgst,
           sgst,

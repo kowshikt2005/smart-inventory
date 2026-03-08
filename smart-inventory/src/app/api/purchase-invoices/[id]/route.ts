@@ -105,10 +105,10 @@ export async function PUT(
     const body = await request.json();
 
     // Find existing invoice with items and payments
-    const existingInvoice = await db.purchaseInvoice.findUnique({
+    const existingInvoice = await (db.purchaseInvoice.findUnique as any)({
       where: { id },
       include: { items: true, vendorPayments: true },
-    });
+    }) as any;
 
     if (!existingInvoice) {
       return NextResponse.json(
@@ -282,7 +282,7 @@ export async function PUT(
     }
 
     // Simple update (only notes, due date, ref)
-    const updatedInvoice = await db.purchaseInvoice.update({
+    const updatedInvoice = await (db.purchaseInvoice.update as any)({
       where: { id },
       data: {
         dueDate: body.dueDate ? new Date(body.dueDate) : existingInvoice.dueDate,
@@ -327,14 +327,14 @@ export async function DELETE(
     const { id } = await params;
 
     // Find existing invoice
-    const existingInvoice = await db.purchaseInvoice.findUnique({
+    const existingInvoice = await (db.purchaseInvoice.findUnique as any)({
       where: { id },
       include: {
         items: true,
         vendorPayments: true,
         purchaseReturns: true,
       },
-    });
+    }) as any;
 
     if (!existingInvoice) {
       return NextResponse.json(

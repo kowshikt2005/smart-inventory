@@ -26,8 +26,8 @@ export async function GET(request: Request) {
         where,
         orderBy: { name: 'asc' },
         include: {
-          preferredVendor: { select: { id: true, name: true } },
           ...(includeSubBrands ? { subBrands: { orderBy: { name: 'asc' } } } : {}),
+          preferredVendor: { select: { id: true, name: true } },
         },
         ...(page && limit ? { skip: (page - 1) * limit, take: limit } : {}),
       }),
@@ -80,6 +80,7 @@ export async function POST(request: Request) {
         name: body.name,
         discountPercent: body.discountPercent !== undefined ? parseFloat(body.discountPercent) : null,
         logoUrl: body.logoUrl || null,
+        preferredVendorId: body.preferredVendorId || null,
       },
     });
 

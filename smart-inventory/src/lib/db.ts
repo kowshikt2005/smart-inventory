@@ -5,14 +5,27 @@ import { PrismaClient, Prisma } from '@/generated/prisma'
  * Prevents multiple instances in development due to hot-reloading
  */
 
+// Extended type to include models added to schema but not yet in generated client.
+// Remove this block once `npx prisma generate` has been run.
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type ExtendedPrismaClient = PrismaClient & {
+  role: any
+  customerShippingAddress: any
+  employeeDocument: any
+  stockReorder: any
+  stockReorderItem: any
+  salesOrderReorder: any
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
+  prisma: ExtendedPrismaClient | undefined
 }
 
-export const db = globalForPrisma.prisma ?? new PrismaClient({
+export const db = (globalForPrisma.prisma ?? new PrismaClient({
   // Reduce logging overhead - only log errors (queries were adding latency)
   log: ['error'],
-})
+})) as ExtendedPrismaClient
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = db

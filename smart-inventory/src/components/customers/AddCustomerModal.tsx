@@ -40,7 +40,14 @@ export function AddCustomerModal({
     creditDays: "0",
     creditLimit: "0",
     hasPriceList: false,
-    rateSheet: "",
+  });
+
+  // Rate sheet state (created after customer)
+  const [rateSheetData, setRateSheetData] = useState({
+    name: "",
+    validFrom: new Date().toISOString().split("T")[0],
+    validTo: "",
+    discountPercent: "0",
   });
 
   const [sameAsBilling, setSameAsBilling] = useState(false);
@@ -70,6 +77,33 @@ export function AddCustomerModal({
         throw new Error(data.error || "Failed to create customer");
       }
 
+      // Create rate sheet if hasPriceList and name is filled
+      if (formData.hasPriceList && rateSheetData.name.trim()) {
+        const rsResponse = await fetch("/api/rate-sheets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: rateSheetData.name.trim(),
+            validFrom: rateSheetData.validFrom,
+            validTo: rateSheetData.validTo || null,
+            discountPercent: parseFloat(rateSheetData.discountPercent) || 0,
+            customerIds: [data.id],
+            useInclusionModel: false,
+            inclusionDiscounts: { brands: [], subBrands: [], items: [] },
+            excludedItemIds: [],
+            excludedBrandIds: [],
+            excludedSubBrandIds: [],
+          }),
+        });
+        if (!rsResponse.ok) {
+          const rsData = await rsResponse.json();
+          // Non-fatal: customer was created, just warn
+          setError(`Customer created, but rate sheet failed: ${rsData.error || "Unknown error"}`);
+          onSuccess?.();
+          return;
+        }
+      }
+
       // Success
       onSuccess?.();
       onClose();
@@ -94,7 +128,12 @@ export function AddCustomerModal({
         creditDays: "0",
         creditLimit: "0",
         hasPriceList: false,
-        rateSheet: "",
+      });
+      setRateSheetData({
+        name: "",
+        validFrom: new Date().toISOString().split("T")[0],
+        validTo: "",
+        discountPercent: "0",
       });
       setSameAsBilling(false);
     } catch (err) {
@@ -578,7 +617,7 @@ export function AddCustomerModal({
             </div>
           </div>
 
-          {/* Pricing */}
+          {/* Pricing / Rate Sheet */}
           <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
               Pricing
@@ -597,25 +636,61 @@ export function AddCustomerModal({
                   htmlFor="customer-has-price-list"
                   className="ml-2 text-sm text-gray-700"
                 >
-                  Customer has custom price list
+                  Create a rate sheet for this customer
                 </label>
               </div>
               {formData.hasPriceList && (
-                <div>
-                  <label
-                    htmlFor="customer-rate-sheet"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Rate Sheet
-                  </label>
-                  <Input
-                    id="customer-rate-sheet"
-                    type="text"
-                    name="rateSheet"
-                    value={formData.rateSheet}
-                    onChange={handleChange}
-                    placeholder="Rate sheet name or code"
-                  />
+                <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 space-y-3">
+                  <p className="text-xs text-gray-500">
+                    A rate sheet will be created and linked to this customer. You can configure per-brand/item discounts from the Rate Sheets section later.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Rate Sheet Name <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        type="text"
+                        value={rateSheetData.name}
+                        onChange={(e) => setRateSheetData((p) => ({ ...p, name: e.target.value }))}
+                        placeholder="e.g. Special Discount 2026"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Global Discount %
+                      </label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={rateSheetData.discountPercent}
+                        onChange={(e) => setRateSheetData((p) => ({ ...p, discountPercent: e.target.value }))}
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Valid From <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        type="date"
+                        value={rateSheetData.validFrom}
+                        onChange={(e) => setRateSheetData((p) => ({ ...p, validFrom: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Valid To
+                      </label>
+                      <Input
+                        type="date"
+                        value={rateSheetData.validTo}
+                        onChange={(e) => setRateSheetData((p) => ({ ...p, validTo: e.target.value }))}
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

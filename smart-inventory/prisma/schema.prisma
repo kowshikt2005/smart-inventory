@@ -30,32 +30,51 @@ model User {
 }
 
 model Customer {
-  id             String              @id @default(uuid())
-  customerNumber String              @unique
-  name           String
-  gstin          String?             @db.VarChar(15)
-  email          String?
-  phone          String?
-  address        String?             @db.Text
-  city           String?
-  state          String?
-  pincode        String?
-  creditLimit    Decimal             @default(0.00) @db.Decimal(15, 2)
-  creditDays     Int                 @default(0)
-  openingBalance Decimal             @default(0.00) @db.Decimal(15, 2)
-  status         CustomerStatus      @default(ACTIVE)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  ledgerEntries  CustomerLedger[]
-  invoices       Invoice[]
-  payments       Payment[]
-  rateSheets     RateSheetCustomer[]
-  salesOrders    SalesOrder[]
-  salesReturns   SalesReturn[]
+  id                String                    @id @default(uuid())
+  customerNumber    String                    @unique
+  name              String
+  gstin             String?                   @db.VarChar(15)
+  email             String?
+  phone             String?
+  address           String?                   @db.Text
+  city              String?
+  state             String?
+  pincode           String?
+  creditLimit       Decimal                   @default(0.00) @db.Decimal(15, 2)
+  creditDays        Int                       @default(0)
+  openingBalance    Decimal                   @default(0.00) @db.Decimal(15, 2)
+  status            CustomerStatus            @default(ACTIVE)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  ledgerEntries     CustomerLedger[]
+  invoices          Invoice[]
+  payments          Payment[]
+  rateSheets        RateSheetCustomer[]
+  salesOrders       SalesOrder[]
+  salesReturns      SalesReturn[]
+  shippingAddresses CustomerShippingAddress[]
 
   @@index([customerNumber])
   @@index([gstin])
   @@map("customers")
+}
+
+model CustomerShippingAddress {
+  id         String   @id @default(uuid())
+  customerId String
+  label      String
+  address    String   @db.Text
+  city       String?
+  state      String?
+  pincode    String?
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  invoices   Invoice[]
+
+  @@index([customerId])
+  @@map("customer_shipping_addresses")
 }
 
 model CustomerLedger {
@@ -143,6 +162,7 @@ model Item {
   id                   String                @id @default(uuid())
   itemCode             String                @unique
   userCode             String?
+  barcode              String?               @unique
   name                 String
   description          String?               @db.Text
   brandId              String
@@ -157,6 +177,7 @@ model Item {
   discountPercent      Decimal?              @db.Decimal(5, 2)
   minStock             Decimal               @default(0.000) @db.Decimal(15, 3)
   unit                 String                @default("PCS")
+  uomConversions       Json?
   imageUrl             String?
   isActive             Boolean               @default(true)
   createdAt            DateTime              @default(now())
@@ -175,6 +196,7 @@ model Item {
 
   @@index([itemCode])
   @@index([userCode])
+  @@index([barcode])
   @@index([brandId])
   @@index([subBrandId])
   @@index([hsnCode])
@@ -379,38 +401,41 @@ model RateSheetCustomer {
 }
 
 model Invoice {
-  id            String              @id @default(uuid())
-  invoiceNumber String              @unique
-  invoiceDate   DateTime
-  salesOrderId  String?
-  orderNumber   String?
-  customerId    String
-  subtotal      Decimal             @default(0.00) @db.Decimal(15, 2)
-  cgst          Decimal             @default(0.00) @db.Decimal(15, 2)
-  sgst          Decimal             @default(0.00) @db.Decimal(15, 2)
-  taxAmount     Decimal             @default(0.00) @db.Decimal(15, 2)
-  roundOff      Decimal             @default(0.00) @db.Decimal(15, 2)
-  totalAmount   Decimal             @default(0.00) @db.Decimal(15, 2)
-  paidAmount    Decimal             @default(0.00) @db.Decimal(15, 2)
-  balanceAmount Decimal             @default(0.00) @db.Decimal(15, 2)
-  paymentStatus PaymentStatus       @default(PENDING)
-  dueDate       DateTime?
-  notes         String?             @db.Text
-  ref           String?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  items         InvoiceItem[]
-  customer      Customer            @relation(fields: [customerId], references: [id])
-  salesOrder    SalesOrder?         @relation(fields: [salesOrderId], references: [id])
-  allocations   PaymentAllocation[]
-  payments      Payment[]
-  salesReturns  SalesReturn[]
+  id                String                   @id @default(uuid())
+  invoiceNumber     String                   @unique
+  invoiceDate       DateTime
+  salesOrderId      String?
+  orderNumber       String?
+  customerId        String
+  shippingAddressId String?
+  subtotal          Decimal                  @default(0.00) @db.Decimal(15, 2)
+  cgst              Decimal                  @default(0.00) @db.Decimal(15, 2)
+  sgst              Decimal                  @default(0.00) @db.Decimal(15, 2)
+  taxAmount         Decimal                  @default(0.00) @db.Decimal(15, 2)
+  roundOff          Decimal                  @default(0.00) @db.Decimal(15, 2)
+  totalAmount       Decimal                  @default(0.00) @db.Decimal(15, 2)
+  paidAmount        Decimal                  @default(0.00) @db.Decimal(15, 2)
+  balanceAmount     Decimal                  @default(0.00) @db.Decimal(15, 2)
+  paymentStatus     PaymentStatus            @default(PENDING)
+  dueDate           DateTime?
+  notes             String?                  @db.Text
+  ref               String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  items             InvoiceItem[]
+  customer          Customer                 @relation(fields: [customerId], references: [id])
+  salesOrder        SalesOrder?              @relation(fields: [salesOrderId], references: [id])
+  shippingAddress   CustomerShippingAddress? @relation(fields: [shippingAddressId], references: [id])
+  allocations       PaymentAllocation[]
+  payments          Payment[]
+  salesReturns      SalesReturn[]
 
   @@index([invoiceNumber])
   @@index([customerId])
   @@index([invoiceDate])
   @@index([paymentStatus])
   @@index([salesOrderId], map: "invoices_salesOrderId_fkey")
+  @@index([shippingAddressId])
   @@map("invoices")
 }
 

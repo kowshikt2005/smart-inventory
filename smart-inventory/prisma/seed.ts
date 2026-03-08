@@ -23,24 +23,30 @@ async function main() {
     prisma.purchaseInvoice.deleteMany(),
     prisma.salesOrderItem.deleteMany(),
     prisma.orderStatusHistory.deleteMany(),
+    prisma.salesOrderReorder.deleteMany(),
     prisma.salesOrder.deleteMany(),
     prisma.purchaseOrderItem.deleteMany(),
     prisma.purchaseOrder.deleteMany(),
     prisma.stockJournal.deleteMany(),
     prisma.stockMovement.deleteMany(),
     prisma.inventory.deleteMany(),
+    prisma.stockReorderItem.deleteMany(),
+    prisma.stockReorder.deleteMany(),
     prisma.item.deleteMany(),
     prisma.subBrand.deleteMany(),
     prisma.brand.deleteMany(),
     prisma.rateSheetCustomer.deleteMany(),
     prisma.rateSheet.deleteMany(),
     prisma.customerLedger.deleteMany(),
+    prisma.customerShippingAddress.deleteMany(),
     prisma.customer.deleteMany(),
     prisma.vendorLedger.deleteMany(),
     prisma.vendor.deleteMany(),
+    prisma.employeeDocument.deleteMany(),
     prisma.employee.deleteMany(),
     prisma.bankAccount.deleteMany(),
     prisma.appSetting.deleteMany(),
+    prisma.importMapping.deleteMany(),
     prisma.user.deleteMany(),
     prisma.role.deleteMany(),
   ]);
@@ -538,6 +544,66 @@ async function main() {
     }),
   ]);
 
+  // Add shipping addresses for customers
+  console.log('📍 Creating customer shipping addresses...');
+  await Promise.all([
+    prisma.customerShippingAddress.create({
+      data: {
+        customerId: customers[0].id,
+        label: 'Head Office',
+        address: '123, MG Road, Commercial Complex',
+        city: 'Mumbai',
+        state: 'Maharashtra',
+        pincode: '400001',
+        isDefault: true,
+      },
+    }),
+    prisma.customerShippingAddress.create({
+      data: {
+        customerId: customers[0].id,
+        label: 'Warehouse',
+        address: '456, MIDC Industrial Area',
+        city: 'Thane',
+        state: 'Maharashtra',
+        pincode: '400601',
+        isDefault: false,
+      },
+    }),
+    prisma.customerShippingAddress.create({
+      data: {
+        customerId: customers[1].id,
+        label: 'Registered Office',
+        address: '456, Brigade Road, Tech Park',
+        city: 'Bangalore',
+        state: 'Karnataka',
+        pincode: '560001',
+        isDefault: true,
+      },
+    }),
+    prisma.customerShippingAddress.create({
+      data: {
+        customerId: customers[2].id,
+        label: 'Store',
+        address: '789, Anna Salai, Central Plaza',
+        city: 'Chennai',
+        state: 'Tamil Nadu',
+        pincode: '600002',
+        isDefault: true,
+      },
+    }),
+    prisma.customerShippingAddress.create({
+      data: {
+        customerId: customers[3].id,
+        label: 'Shop',
+        address: '321, CG Road',
+        city: 'Ahmedabad',
+        state: 'Gujarat',
+        pincode: '380001',
+        isDefault: true,
+      },
+    }),
+  ]);
+
   // 6. Create Vendors
   console.log('🏭 Creating vendors...');
   const vendors = await Promise.all([
@@ -601,6 +667,15 @@ async function main() {
         openingBalance: -120000,
       },
     }),
+  ]);
+
+  // Link brands to preferred vendors
+  console.log('🔗 Linking brands to preferred vendors...');
+  await Promise.all([
+    prisma.brand.update({ where: { id: samsungBrand.id }, data: { preferredVendorId: vendors[0].id } }),
+    prisma.brand.update({ where: { id: appleBrand.id }, data: { preferredVendorId: vendors[1].id } }),
+    prisma.brand.update({ where: { id: lenovoBrand.id }, data: { preferredVendorId: vendors[2].id } }),
+    prisma.brand.update({ where: { id: dellBrand.id }, data: { preferredVendorId: vendors[3].id } }),
   ]);
 
   // 7. Create Employees

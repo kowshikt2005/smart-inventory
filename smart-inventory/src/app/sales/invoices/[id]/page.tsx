@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, Loader2, Ban, FileDown } from "lucide-react";
+import { ArrowLeft, Loader2, Ban, FileDown, MapPin } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { generateInvoicePDF } from "@/lib/invoice-pdf";
@@ -66,6 +66,15 @@ interface PaymentAllocation {
   payment: Payment;
 }
 
+interface ShippingAddress {
+  id: string;
+  label: string;
+  address: string;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
+}
+
 interface Invoice {
   id: string;
   invoiceNumber: string;
@@ -87,6 +96,7 @@ interface Invoice {
   customer: Customer;
   items: InvoiceItem[];
   allocations: PaymentAllocation[];
+  shippingAddress: ShippingAddress | null;
 }
 
 export default function InvoiceDetailPage() {
@@ -308,6 +318,21 @@ export default function InvoiceDetailPage() {
                 <p className="text-gray-600">Credit Days</p>
                 <p className="font-medium">{invoice.customer.creditDays} days</p>
               </div>
+              {invoice.shippingAddress && (
+                <div className="pt-2 border-t border-gray-100">
+                  <p className="text-gray-600 flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5" />
+                    Shipping Address
+                  </p>
+                  <p className="font-medium mt-0.5">{invoice.shippingAddress.label}</p>
+                  <p className="text-gray-600">{invoice.shippingAddress.address}</p>
+                  {(invoice.shippingAddress.city || invoice.shippingAddress.state || invoice.shippingAddress.pincode) && (
+                    <p className="text-gray-500">
+                      {[invoice.shippingAddress.city, invoice.shippingAddress.state, invoice.shippingAddress.pincode].filter(Boolean).join(", ")}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

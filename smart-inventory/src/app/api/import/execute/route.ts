@@ -270,6 +270,9 @@ async function importRows(entityType: EntityType, rows: Record<string, unknown>[
       case 'ITEM':
         await importItems(batch, batchStart, ref, result);
         break;
+      case 'EMPLOYEE':
+        await importEmployees(batch, batchStart, result);
+        break;
       case 'STOCK_JOURNAL':
         await importStockJournals(batch, batchStart, ref, result);
         break;
@@ -392,6 +395,31 @@ async function importItems(batch: Record<string, unknown>[], offset: number, ref
     } catch (e: any) {
       result.failed++;
       result.errors.push({ row: offset + i + 1, field: '', message: e.message || 'Failed to create item' });
+    }
+  }
+}
+
+async function importEmployees(batch: Record<string, unknown>[], offset: number, result: ImportResult) {
+  for (let i = 0; i < batch.length; i++) {
+    const row = batch[i];
+    try {
+      await db.employee.create({
+        data: {
+          employeeNumber: `EMP-${Date.now()}-${i}`,
+          name: str(row.name),
+          email: str(row.email) || null,
+          phone: str(row.phone) || null,
+          designation: str(row.designation) || null,
+          department: str(row.department) || null,
+          salary: row.salary ? num(row.salary) : null,
+          joinDate: parseDate(row.joinDate),
+          isActive: true,
+        },
+      });
+      result.success++;
+    } catch (e: any) {
+      result.failed++;
+      result.errors.push({ row: offset + i + 1, field: '', message: e.message || 'Failed to create employee' });
     }
   }
 }
@@ -684,7 +712,7 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
         const cgst = Math.round(totalTax / 2 * 100) / 100;
         const sgst = totalTax - cgst;
 
-        const invoice = await tx.invoice.create({
+        const invoice = await (tx.invoice.create as any)({
           data: {
             invoiceNumber: invNo,
             invoiceDate: parseDate(firstRow.invoiceDate),
@@ -822,7 +850,7 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
         totalTax = Math.round(totalTax * 100) / 100;
         const totalAmount = Math.round((subtotal + totalTax) * 100) / 100;
 
-        const invoice = await tx.purchaseInvoice.create({
+        const invoice = await (tx.purchaseInvoice.create as any)({
           data: {
             invoiceNumber: invNo,
             vendorId: vend.id,

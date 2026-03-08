@@ -13,7 +13,7 @@ export async function GET(
     if (error) return error;
     const { id } = await params;
 
-    const invoice = await db.invoice.findUnique({
+    const invoice = await (db.invoice.findUnique as any)({
       where: { id },
       include: {
         customer: {
@@ -68,6 +68,16 @@ export async function GET(
             returnDate: true,
           },
         },
+        shippingAddress: {
+          select: {
+            id: true,
+            label: true,
+            address: true,
+            city: true,
+            state: true,
+            pincode: true,
+          },
+        },
       },
     });
 
@@ -114,10 +124,10 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    const invoice = await db.invoice.findUnique({
+    const invoice = await (db.invoice.findUnique as any)({
       where: { id },
       include: { items: true, allocations: true },
-    });
+    }) as any;
 
     if (!invoice) {
       return NextResponse.json(
@@ -265,7 +275,7 @@ export async function PUT(
     }
 
     // Simple update (only notes, due date, ref)
-    const updatedInvoice = await db.invoice.update({
+    const updatedInvoice = await (db.invoice.update as any)({
       where: { id },
       data: {
         notes: body.notes !== undefined ? body.notes : invoice.notes,

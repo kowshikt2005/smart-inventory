@@ -45,6 +45,7 @@ import useSWR from "swr";
 import { useDebounce } from "@/hooks/useDebounce";
 import { AddEmployeeModal } from "@/components/employees/AddEmployeeModal";
 import { EditEmployeeModal } from "@/components/employees/EditEmployeeModal";
+import { ImportButton } from "@/components/import/ImportButton";
 
 interface Employee {
   id: string;
@@ -177,13 +178,16 @@ export default function EmployeesPage() {
             )}
           </div>
           {canEdit && (
-            <Button
-              className="bg-teal-500 hover:bg-teal-600 text-white"
-              onClick={() => setShowAddModal(true)}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Employee
-            </Button>
+            <>
+              <ImportButton entityType="EMPLOYEE" entityLabel="Employees" onSuccess={() => mutate()} />
+              <Button
+                className="bg-teal-500 hover:bg-teal-600 text-white"
+                onClick={() => setShowAddModal(true)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Employee
+              </Button>
+            </>
           )}
         </div>
 

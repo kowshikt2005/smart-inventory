@@ -68,7 +68,7 @@ export async function POST(
     }
 
     // Build a map of reorderItemId → reorderItem for quick lookup
-    const reorderItemMap = new Map(reorder.items.map((ri) => [ri.id, ri]));
+    const reorderItemMap = new Map<string, any>((reorder.items as any[]).map((ri) => [ri.id, ri]));
 
     // Validate all itemIds in vendorGroups belong to this reorder
     const allGroupItemIds = vendorGroups.flatMap((g) => g.itemIds);
@@ -167,7 +167,7 @@ export async function POST(
       }
 
       // Mark reorder as CONVERTED
-      await tx.stockReorder.update({
+      await (tx as any).stockReorder.update({
         where: { id },
         data: { status: 'CONVERTED' },
       });

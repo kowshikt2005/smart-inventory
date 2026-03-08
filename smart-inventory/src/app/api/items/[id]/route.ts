@@ -49,9 +49,9 @@ export async function PUT(
     const body = await request.json();
 
     // Check if item exists
-    const existingItem = await db.item.findUnique({
+    const existingItem = await (db.item.findUnique as any)({
       where: { id },
-    });
+    }) as any;
 
     if (!existingItem) {
       return NextResponse.json(
@@ -75,11 +75,12 @@ export async function PUT(
     }
 
     // Update item
-    const updatedItem = await db.item.update({
+    const updatedItem = await (db.item.update as any)({
       where: { id },
       data: {
         itemCode: body.itemCode || existingItem.itemCode,
         userCode: body.userCode !== undefined ? (body.userCode || null) : existingItem.userCode,
+        barcode: body.barcode !== undefined ? (body.barcode || null) : existingItem.barcode,
         name: body.name || existingItem.name,
         description: body.description !== undefined ? body.description : existingItem.description,
         brandId: body.brandId !== undefined ? body.brandId : existingItem.brandId,
@@ -93,6 +94,7 @@ export async function PUT(
         marginType: body.marginType !== undefined ? body.marginType : existingItem.marginType,
         minStock: body.minStock !== undefined ? body.minStock : existingItem.minStock,
         unit: body.unit || existingItem.unit,
+        uomConversions: body.uomConversions !== undefined ? body.uomConversions : existingItem.uomConversions,
         imageUrl: body.imageUrl !== undefined ? body.imageUrl : existingItem.imageUrl,
         isActive: body.isActive !== undefined ? (typeof body.isActive === 'boolean' ? body.isActive : existingItem.isActive) : existingItem.isActive,
       },

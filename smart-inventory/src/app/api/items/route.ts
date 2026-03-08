@@ -24,6 +24,7 @@ export async function GET(request: Request) {
         { name: { contains: search } },
         { itemCode: { contains: search } },
         { userCode: { contains: search } },
+        { barcode: { contains: search } },
         { description: { contains: search } },
         { hsnCode: { contains: search } },
       ];
@@ -100,10 +101,11 @@ export async function POST(request: Request) {
     // Create item with inventory record in transaction (without includes for speed)
     const newItem = await transaction(async (tx) => {
       // Create the item (without includes to keep transaction fast)
-      const item = await tx.item.create({
+      const item = await (tx.item.create as any)({
         data: {
           itemCode: itemCode,
           userCode: body.userCode || null,
+          barcode: body.barcode || null,
           name: body.name,
           description: body.description || null,
           brandId: body.brandId,
@@ -118,6 +120,7 @@ export async function POST(request: Request) {
           discountPercent: body.discountPercent || null,
           minStock: body.minStock || 0,
           unit: body.unit || 'PCS',
+          uomConversions: body.uomConversions || null,
           imageUrl: body.imageUrl || null,
           isActive: body.isActive !== undefined ? body.isActive : true,
         },

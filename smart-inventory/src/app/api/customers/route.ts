@@ -108,6 +108,24 @@ export async function POST(request: Request) {
       },
     });
 
+    // Create initial shipping address if provided
+    if (body.shippingAddress || body.shippingCity) {
+      const shippingAddr = `${body.shippingAddress || ''}${body.shippingAddressLine2 ? ', ' + body.shippingAddressLine2 : ''}`.trim();
+      if (shippingAddr) {
+        await db.customerShippingAddress.create({
+          data: {
+            customerId: customer.id,
+            label: 'Default',
+            address: shippingAddr,
+            city: body.shippingCity || null,
+            state: body.shippingState || null,
+            pincode: body.shippingPincode || null,
+            isDefault: true,
+          },
+        });
+      }
+    }
+
     return NextResponse.json(customer, { status: 201 });
   } catch (error) {
     console.error('Error creating customer:', error);

@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { X, Upload, Trash2 } from "lucide-react";
+import { X, Upload, Trash2, Plus } from "lucide-react";
 import useSWR from "swr";
 
 interface Brand {
@@ -24,6 +24,11 @@ interface SubBrand {
   brandId: string;
 }
 
+interface UOMConversion {
+  name: string;
+  factor: string;
+}
+
 interface EditItem {
   id: string;
   itemCode: string;
@@ -35,7 +40,9 @@ interface EditItem {
   margin?: string | number;
   marginType?: string;
   userCode?: string;
+  barcode?: string | null;
   unit: string;
+  uomConversions?: Array<{ name: string; factor: number }> | null;
   hsnCode?: string;
   gstRate: string | number;
   brand?: { id: string; name: string };
@@ -70,6 +77,7 @@ export function AddItemModal({
   const [formData, setFormData] = useState({
     name: "",
     userCode: "",
+    barcode: "",
     description: "",
     brandId: "",
     subBrandId: "",
@@ -83,6 +91,7 @@ export function AddItemModal({
     minStock: "0",
     unit: "PCS",
   });
+  const [uomConversions, setUomConversions] = useState<UOMConversion[]>([]);
 
   // Use SWR to cache brands and sub-brands - NO N+1 queries!
   const { data: brandsData, isLoading: _brandsLoading } = useSWR(isOpen ? "/api/brands" : null);
@@ -104,6 +113,7 @@ export function AddItemModal({
       setFormData({
         name: "",
         userCode: "",
+        barcode: "",
         description: "",
         brandId: "",
         subBrandId: "",
@@ -117,6 +127,7 @@ export function AddItemModal({
         minStock: "0",
         unit: "PCS",
       });
+      setUomConversions([]);
       setImageUrl(null);
     }
   }, [editItem, isOpen]);
@@ -127,6 +138,7 @@ export function AddItemModal({
       setFormData({
         name: editItem.name || "",
         userCode: editItem.userCode || "",
+        barcode: editItem.barcode || "",
         description: editItem.description || "",
         brandId: editItem.brand?.id || "",
         subBrandId: editItem.subBrand?.id || "",
@@ -140,6 +152,12 @@ export function AddItemModal({
         minStock: String(editItem.inventory?.minStockLevel ?? 0),
         unit: editItem.unit || "PCS",
       });
+      setUomConversions(
+        (editItem.uomConversions || []).map((c) => ({
+          name: c.name,
+          factor: String(c.factor),
+        }))
+      );
       setImageUrl(editItem.imageUrl || null);
     }
   }, [editItem, isOpen, brandsData, subBrandsData]);
@@ -252,6 +270,7 @@ export function AddItemModal({
         body: JSON.stringify({
           name: formData.name,
           userCode: formData.userCode || null,
+          barcode: formData.barcode || null,
           description: formData.description || null,
           brandId: formData.brandId,
           subBrandId: formData.subBrandId,
@@ -264,6 +283,11 @@ export function AddItemModal({
           marginType: formData.marginType,
           minStock: parseFloat(formData.minStock) || 0,
           unit: formData.unit,
+          uomConversions: uomConversions.length > 0
+            ? uomConversions
+                .filter((c) => c.name.trim() && parseFloat(c.factor) > 0)
+                .map((c) => ({ name: c.name.trim().toUpperCase(), factor: parseFloat(c.factor) }))
+            : null,
           imageUrl: imageUrl || null,
         }),
       });
@@ -282,6 +306,7 @@ export function AddItemModal({
       setFormData({
         name: "",
         userCode: "",
+        barcode: "",
         description: "",
         brandId: "",
         subBrandId: "",
@@ -295,6 +320,7 @@ export function AddItemModal({
         minStock: "0",
         unit: "PCS",
       });
+      setUomConversions([]);
       setImageUrl(null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
@@ -406,6 +432,23 @@ export function AddItemModal({
                   placeholder="Enter your item code"
                 />
                 <p className="text-xs text-gray-500 mt-1">Your own code for searching</p>
+              </div>
+              <div>
+                <label
+                  htmlFor="item-barcode"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Barcode
+                </label>
+                <Input
+                  id="item-barcode"
+                  type="text"
+                  name="barcode"
+                  value={formData.barcode}
+                  onChange={handleChange}
+                  placeholder="Scan or enter barcode"
+                />
+                <p className="text-xs text-gray-500 mt-1">Unique barcode for this item</p>
               </div>
               <div className="md:col-span-2">
                 <label
@@ -769,6 +812,71 @@ export function AddItemModal({
                 />
               </div>
             </div>
+          </div>
+
+          {/* UOM / Packing Configuration */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">UOM / Packing Configuration</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Define how many <span className="font-medium">{formData.unit}</span> are in each packing type (e.g., 1 BOX = 12 {formData.unit})
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setUomConversions((prev) => [...prev, { name: "", factor: "" }])}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add
+              </Button>
+            </div>
+            {uomConversions.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">No packing configurations added.</p>
+            ) : (
+              <div className="space-y-2">
+                {uomConversions.map((conv, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500 shrink-0">1</span>
+                    <Input
+                      type="text"
+                      value={conv.name}
+                      onChange={(e) =>
+                        setUomConversions((prev) =>
+                          prev.map((c, i) => i === idx ? { ...c, name: e.target.value.toUpperCase() } : c)
+                        )
+                      }
+                      placeholder="BOX / SET / CASE..."
+                      className="w-32"
+                    />
+                    <span className="text-sm text-gray-500 shrink-0">=</span>
+                    <Input
+                      type="number"
+                      value={conv.factor}
+                      onChange={(e) =>
+                        setUomConversions((prev) =>
+                          prev.map((c, i) => i === idx ? { ...c, factor: e.target.value } : c)
+                        )
+                      }
+                      placeholder="12"
+                      min="1"
+                      step="1"
+                      className="w-24"
+                    />
+                    <span className="text-sm text-gray-500 shrink-0">{formData.unit}</span>
+                    <button
+                      type="button"
+                      onClick={() => setUomConversions((prev) => prev.filter((_, i) => i !== idx))}
+                      className="text-red-400 hover:text-red-600 ml-auto"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Actions */}

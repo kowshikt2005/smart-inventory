@@ -40,10 +40,10 @@ export async function GET(
     }
 
     // Fetch role via User → Role join
-    const user = employee.email ? await db.user.findUnique({
+    const user = employee.email ? await (db.user.findUnique as any)({
       where: { email: employee.email },
       select: { roleId: true, roleRef: { select: { name: true } } },
-    }) : null;
+    }) as { roleId: string | null; roleRef: { name: string } | null } | null : null;
 
     return NextResponse.json({
       ...employee,
@@ -150,10 +150,10 @@ export async function PUT(
 
       // Fetch the updated role name
       const updatedUser = existingEmployee.email
-        ? await tx.user.findUnique({
+        ? await (tx.user.findUnique as any)({
             where: { email: body.email || existingEmployee.email },
             select: { roleId: true, roleRef: { select: { name: true } } },
-          })
+          }) as { roleId: string | null; roleRef: { name: string } | null } | null
         : null;
 
       return { employee, roleId: updatedUser?.roleId, roleName: updatedUser?.roleRef?.name };

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, Fragment } from "react";
+import { memo, Fragment, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -15,16 +15,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut, ChevronRight } from "lucide-react";
+import { LogOut, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Header = memo(function Header() {
   const { data: session } = useSession();
   const pathname = usePathname();
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const handleSignOut = async () => {
-    await signOut({ redirect: false });
-    window.location.href = "/login";
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    await signOut({ callbackUrl: "/login" });
   };
 
   const getUserInitials = (name: string) => {
@@ -128,9 +130,13 @@ export const Header = memo(function Header() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
+                <DropdownMenuItem onClick={handleSignOut} disabled={isSigningOut}>
+                  {isSigningOut ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <LogOut className="mr-2 h-4 w-4" />
+                  )}
+                  <span>{isSigningOut ? "Signing out..." : "Log out"}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

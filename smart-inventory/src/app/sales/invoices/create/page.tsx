@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, Loader2, FileText } from "lucide-react";
+import { ArrowLeft, Loader2, FileText, MapPin } from "lucide-react";
 import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -65,6 +65,16 @@ interface InsufficientStockItem {
   shortfall: number;
 }
 
+interface ShippingAddress {
+  id: string;
+  label: string;
+  address: string;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
+  isDefault: boolean;
+}
+
 function CreateInvoiceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -78,6 +88,8 @@ function CreateInvoiceContent() {
     new Date().toISOString().split("T")[0]
   );
   const [notes, setNotes] = useState("");
+  const [shippingAddresses, setShippingAddresses] = useState<ShippingAddress[]>([]);
+  const [selectedShippingAddressId, setSelectedShippingAddressId] = useState<string>("");
 
   useEffect(() => {
     if (!salesOrderId) {
@@ -93,6 +105,18 @@ function CreateInvoiceContent() {
         const data = await response.json();
         setOrder(data);
         setNotes(data.notes || "");
+
+        // Fetch shipping addresses for this customer
+        if (data.customerId) {
+          const addrRes = await fetch(`/api/customers/${data.customerId}/shipping-addresses`);
+          if (addrRes.ok) {
+            const addrData = await addrRes.json();
+            const addrs: ShippingAddress[] = addrData.addresses || [];
+            setShippingAddresses(addrs);
+            const def = addrs.find((a) => a.isDefault);
+            if (def) setSelectedShippingAddressId(def.id);
+          }
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load order");
       } finally {
@@ -152,6 +176,7 @@ function CreateInvoiceContent() {
           salesOrderId: order.id,
           invoiceDate,
           notes: notes || undefined,
+          shippingAddressId: selectedShippingAddressId || null,
         }),
       });
 
@@ -247,7 +272,7 @@ function CreateInvoiceContent() {
         </div>
 
         {/* Order & Customer Info */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl border border-border/60 p-4">
             <p className="text-sm text-muted-foreground mb-1">Customer</p>
             <p className="font-semibold">{order.customer.name}</p>
@@ -270,6 +295,37 @@ function CreateInvoiceContent() {
               onChange={(e) => setInvoiceDate(e.target.value)}
               className="mt-1"
             />
+          </div>
+          <div className="bg-white rounded-xl border border-border/60 p-4">
+            <label className="flex items-center gap-1 text-sm text-muted-foreground mb-1">
+              <MapPin className="h-3.5 w-3.5" />
+              Shipping Address
+            </label>
+            {shippingAddresses.length === 0 ? (
+              <p className="text-xs text-gray-400 mt-1">No addresses configured</p>
+            ) : (
+              <select
+                value={selectedShippingAddressId}
+                onChange={(e) => setSelectedShippingAddressId(e.target.value)}
+                className="w-full h-9 rounded-md border border-gray-200 px-2 text-sm bg-white mt-1"
+              >
+                <option value="">— None —</option>
+                {shippingAddresses.map((addr) => (
+                  <option key={addr.id} value={addr.id}>
+                    {addr.label}{addr.isDefault ? " ★" : ""} — {addr.city || addr.address.slice(0, 20)}
+                  </option>
+                ))}
+              </select>
+            )}
+            {selectedShippingAddressId && (() => {
+              const addr = shippingAddresses.find((a) => a.id === selectedShippingAddressId);
+              if (!addr) return null;
+              return (
+                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                  {addr.address}{addr.city ? `, ${addr.city}` : ""}{addr.state ? `, ${addr.state}` : ""}{addr.pincode ? ` - ${addr.pincode}` : ""}
+                </p>
+              );
+            })()}
           </div>
           <div className="bg-white rounded-xl border border-border/60 p-4">
             <label className="text-sm text-muted-foreground mb-1 block">
