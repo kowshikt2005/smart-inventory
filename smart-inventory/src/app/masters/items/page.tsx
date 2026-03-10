@@ -20,7 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, MoreHorizontal, Eye, Edit, Loader2, X, Package, Trash2, Tag, Layers, ArrowRight, PowerOff, Power } from "lucide-react";
+import { Plus, MoreHorizontal, Eye, Edit, Loader2, X, Package, Trash2, Tag, Layers, ArrowRight, PowerOff, Power, Wand2 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -34,19 +34,22 @@ interface Item {
   itemCode: string;
   name: string;
   description?: string;
-  purchasePrice: string | number; // Cost price
-  mrp: string | number; // Maximum Retail Price
-  sellingPrice: string | number; // Actual selling price
+  purchasePrice: string | number;
+  mrp: string | number;
+  sellingPrice: string | number;
   unit: string;
   hsnCode?: string;
-  gstRate: string | number; // Prisma Decimal comes as string
+  gstRate: string | number;
   isActive: boolean;
-  brand?: { id: string; name: string };
-  subBrand?: { id: string; name: string };
+  isImported?: boolean;
+  importedBrandName?: string | null;
+  importedSubBrandName?: string | null;
+  brand?: { id: string; name: string } | null;
+  subBrand?: { id: string; name: string } | null;
   inventory?: {
-    physicalStock: string | number; // Prisma Decimal comes as string
-    reservedQuantity: string | number; // Prisma Decimal comes as string
-    minStockLevel: string | number; // Prisma Decimal comes as string
+    physicalStock: string | number;
+    reservedQuantity: string | number;
+    minStockLevel: string | number;
   };
 }
 
@@ -62,6 +65,7 @@ export default function ItemsPage() {
   const [isAdjustingStock, setIsAdjustingStock] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [isResolving, setIsResolving] = useState(false);
   const itemsPerPage = 10;
 
   // Debounce search
@@ -69,6 +73,10 @@ export default function ItemsPage() {
 
   // Use SWR for caching
   const { data, error, isLoading, mutate } = useSWR("/api/items?limit=1000");
+
+  const unresolvedCount = useMemo(() => {
+    return (data?.items || []).filter((i: Item) => i.isImported && !i.brand).length;
+  }, [data]);
 
   // Filter items based on search query and status filter
   const filteredItems = useMemo(() => {
@@ -211,6 +219,22 @@ export default function ItemsPage() {
     }
   };
 
+  const handleResolve = async () => {
+    if (!confirm(`Auto-create missing brands and sub-brands for ${unresolvedCount} imported item${unresolvedCount !== 1 ? 's' : ''}?`)) return;
+    setIsResolving(true);
+    try {
+      const res = await fetch('/api/items/resolve-imported', { method: 'POST' });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Failed to resolve');
+      mutate();
+      alert(`${result.message}\nBrands created: ${result.created?.brands?.join(', ') || 'none'}\nSub-brands created: ${result.created?.subBrands?.join(', ') || 'none'}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to resolve imported items');
+    } finally {
+      setIsResolving(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
@@ -286,6 +310,24 @@ export default function ItemsPage() {
           </div>
         </div>
 
+        {/* Resolve imported items banner */}
+        {unresolvedCount > 0 && (
+          <div className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 mb-4">
+            <p className="text-sm text-yellow-800 font-medium">
+              {unresolvedCount} imported item{unresolvedCount !== 1 ? 's' : ''} have missing brands/sub-brands.
+            </p>
+            <Button
+              size="sm"
+              onClick={handleResolve}
+              disabled={isResolving}
+              className="bg-yellow-500 hover:bg-yellow-600 text-white"
+            >
+              {isResolving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wand2 className="h-4 w-4 mr-2" />}
+              {isResolving ? 'Resolving...' : 'Auto-create & Link'}
+            </Button>
+          </div>
+        )}
+
         {/* Status Filter Tabs */}
         <div className="flex gap-1 border-b border-border mb-0 mt-2">
           {(["ALL", "ACTIVE", "INACTIVE"] as const).map((f) => (
@@ -350,11 +392,15 @@ export default function ItemsPage() {
                 </TableRow>
               ) : (
                 paginatedItems.map((item: Item) => (
-                  <TableRow key={item.id} className={!item.isActive ? "opacity-50 bg-muted/20" : undefined}>
+                  <TableRow key={item.id} className={
+                    !item.isActive ? "opacity-50 bg-muted/20" :
+                    (item.isImported && !item.brand) ? "bg-yellow-50 hover:bg-yellow-100" :
+                    undefined
+                  }>
                     <TableCell className="font-mono">{item.itemCode}</TableCell>
                     <TableCell className="font-medium">{item.name}</TableCell>
-                    <TableCell>{item.brand?.name || "N/A"}</TableCell>
-                    <TableCell>{item.subBrand?.name || "N/A"}</TableCell>
+                    <TableCell>{item.brand?.name || item.importedBrandName || "N/A"}</TableCell>
+                    <TableCell>{item.subBrand?.name || item.importedSubBrandName || "N/A"}</TableCell>
                     <TableCell>{item.hsnCode || "N/A"}</TableCell>
                     <TableCell>{item.unit}</TableCell>
                     <TableCell>GST @ {Number(item.gstRate)}%</TableCell>

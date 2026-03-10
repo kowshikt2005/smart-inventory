@@ -65,7 +65,7 @@ export async function GET(request: Request) {
     const rateMap = new Map<number, RateRow>();
 
     for (const inv of salesInvoices) {
-      const custStateCode = getStateCode(inv.customer.gstin, inv.customer.state);
+      const custStateCode = getStateCode(inv.customer?.gstin, inv.customer?.state);
       osup_txval += Number(inv.subtotal);
       for (const it of inv.items) {
         const rate = Number(it.taxRate);
@@ -140,8 +140,8 @@ export async function GET(request: Request) {
     // ── Inter-state B2C supplies (unregistered) grouped by POS ────────────
     const b2cInterMap = new Map<string, { pos: string; txval: number; iamt: number }>();
     for (const inv of salesInvoices) {
-      if (inv.customer.gstin) continue;
-      const custStateCode = getStateCode(null, inv.customer.state);
+      if (inv.customer?.gstin) continue;
+      const custStateCode = getStateCode(null, inv.customer?.state);
       if (!custStateCode || custStateCode === companyStateCode) continue;
 
       let invTxval = 0, invIgst = 0;

@@ -70,7 +70,8 @@ interface PurchaseInvoice {
   paidAmount: number;
   balanceAmount: number;
   ref: string | null;
-  vendor: Vendor;
+  isImported: boolean;
+  vendor: Vendor | null;
   purchaseOrder?: { id: string; orderNumber: string } | null;
 }
 
@@ -465,7 +466,7 @@ export default function PurchaseInvoicesPage() {
                   </TableRow>
                 ) : (
                   (data?.purchaseInvoices || []).map((invoice: PurchaseInvoice) => (
-                    <TableRow key={invoice.id} className="hover:bg-gray-50">
+                    <TableRow key={invoice.id} className={invoice.isImported ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-gray-50"}>
                       <TableCell className="text-sm">{formatDate(invoice.date)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1.5">
@@ -484,8 +485,8 @@ export default function PurchaseInvoicesPage() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{invoice.vendor.name}</p>
-                          <p className="text-xs text-gray-500">{invoice.vendor.vendorNumber}</p>
+                          <p className="font-medium">{invoice.vendor?.name || invoice.vendorName}</p>
+                          <p className="text-xs text-gray-500">{invoice.vendor?.vendorNumber || ''}</p>
                         </div>
                       </TableCell>
                       <TableCell className="text-sm text-gray-600">

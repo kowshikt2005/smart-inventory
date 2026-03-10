@@ -45,8 +45,8 @@ interface EditItem {
   uomConversions?: Array<{ name: string; factor: number }> | null;
   hsnCode?: string;
   gstRate: string | number;
-  brand?: { id: string; name: string };
-  subBrand?: { id: string; name: string };
+  brand?: { id: string; name: string } | null;
+  subBrand?: { id: string; name: string } | null;
   imageUrl?: string | null;
   inventory?: {
     minStockLevel: string | number;

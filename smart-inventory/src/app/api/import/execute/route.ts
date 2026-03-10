@@ -39,7 +39,7 @@ interface RefData {
   vendors: { id: string; name: string; gstin: string | null }[];
   brands: { id: string; name: string }[];
   subBrands: { id: string; name: string; brandId: string }[];
-  items: { id: string; name: string; itemCode: string; userCode: string | null; brandId: string; subBrandId: string; gstRate: any; inventory: { id: string } | null }[];
+  items: { id: string; name: string; itemCode: string; userCode: string | null; brandId: string | null; subBrandId: string | null; gstRate: any; inventory: { id: string } | null }[];
   bankAccounts: { id: string; accountName: string }[];
 }
 
@@ -155,14 +155,20 @@ async function validateRows(entityType: EntityType, rows: Record<string, unknown
     if (entityType === 'ITEM') {
       const brand = findBrand(ref, str(row.brandName));
       if (!brand) {
-        errors.push({ field: 'brandName', message: `Brand "${str(row.brandName)}" not found` });
+        warnings.push({ field: 'brandName', message: `Brand "${str(row.brandName)}" not found — will be stored as text` });
       } else {
         resolved._brandId = brand.id;
-        const subBrand = findSubBrand(ref, str(row.subBrandName), brand.id);
-        if (!subBrand) {
-          errors.push({ field: 'subBrandName', message: `Sub-Brand "${str(row.subBrandName)}" not found under brand "${brand.name}"` });
+        const sbName = str(row.subBrandName);
+        if (!sbName) {
+          // No sub-brand provided — will be auto-assigned on resolve
+          warnings.push({ field: 'subBrandName', message: `No sub-brand name — will be auto-assigned on resolve` });
         } else {
-          resolved._subBrandId = subBrand.id;
+          const subBrand = findSubBrand(ref, sbName, brand.id);
+          if (!subBrand) {
+            warnings.push({ field: 'subBrandName', message: `Sub-Brand "${sbName}" not found under "${brand.name}" — will be stored as text` });
+          } else {
+            resolved._subBrandId = subBrand.id;
+          }
         }
       }
       // duplicate check
@@ -206,11 +212,11 @@ async function validateRows(entityType: EntityType, rows: Record<string, unknown
 
     if (entityType === 'SALES_INVOICE') {
       const cust = findCustomer(ref, str(row.customerName));
-      if (!cust) errors.push({ field: 'customerName', message: `Customer "${str(row.customerName)}" not found` });
+      if (!cust) warnings.push({ field: 'customerName', message: `Customer "${str(row.customerName)}" not found — will be stored as text` });
       else resolved._customerId = cust.id;
 
       const item = findItem(ref, str(row.itemName));
-      if (!item) errors.push({ field: 'itemName', message: `Item "${str(row.itemName)}" not found` });
+      if (!item) warnings.push({ field: 'itemName', message: `Item "${str(row.itemName)}" not found — will be stored as text` });
       else {
         resolved._itemId = item.id;
         resolved._gstRate = Number(item.gstRate);
@@ -220,11 +226,11 @@ async function validateRows(entityType: EntityType, rows: Record<string, unknown
 
     if (entityType === 'PURCHASE_INVOICE') {
       const vend = findVendor(ref, str(row.vendorName));
-      if (!vend) errors.push({ field: 'vendorName', message: `Vendor "${str(row.vendorName)}" not found` });
+      if (!vend) warnings.push({ field: 'vendorName', message: `Vendor "${str(row.vendorName)}" not found — will be stored as text` });
       else resolved._vendorId = vend.id;
 
       const item = findItem(ref, str(row.itemName));
-      if (!item) errors.push({ field: 'itemName', message: `Item "${str(row.itemName)}" not found` });
+      if (!item) warnings.push({ field: 'itemName', message: `Item "${str(row.itemName)}" not found — will be stored as text` });
       else {
         resolved._itemId = item.id;
         resolved._gstRate = Number(item.gstRate);
@@ -358,20 +364,22 @@ async function importItems(batch: Record<string, unknown>[], offset: number, ref
     const row = batch[i];
     try {
       const brand = findBrand(ref, str(row.brandName));
-      if (!brand) throw new Error(`Brand "${str(row.brandName)}" not found`);
-
-      const subBrand = findSubBrand(ref, str(row.subBrandName), brand.id);
-      if (!subBrand) throw new Error(`Sub-Brand "${str(row.subBrandName)}" not found`);
+      const subBrandName = str(row.subBrandName); // may be empty for items with no sub-brand
+      const subBrand = (brand && subBrandName) ? findSubBrand(ref, subBrandName, brand.id) : null;
+      const isImported = !brand || !subBrand;
 
       await transaction(async (tx) => {
-        const item = await tx.item.create({
+        const item = await (tx.item.create as any)({
           data: {
             itemCode: `item-${Date.now()}-${i}`,
             userCode: str(row.userCode) || null,
             name: str(row.name),
             description: str(row.description) || null,
-            brandId: brand.id,
-            subBrandId: subBrand.id,
+            brandId: brand?.id || null,
+            subBrandId: subBrand?.id || null,
+            importedBrandName: !brand ? str(row.brandName) || null : null,
+            importedSubBrandName: !subBrand ? (subBrandName || null) : null,
+            isImported,
             hsnCode: str(row.hsnCode) || null,
             gstRate: num(row.gstRate),
             purchasePrice: num(row.purchasePrice),
@@ -666,40 +674,41 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
   for (const [invNo, { rows: invRows, indices }] of groups) {
     try {
       const firstRow = invRows[0];
-      const cust = findCustomer(ref, str(firstRow.customerName));
-      if (!cust) throw new Error(`Customer "${str(firstRow.customerName)}" not found`);
 
       // Check duplicate invoice number
       const existing = await db.invoice.findUnique({ where: { invoiceNumber: invNo } });
       if (existing) throw new Error(`Invoice ${invNo} already exists`);
 
       await transaction(async (tx) => {
+        const cust = findCustomer(ref, str(firstRow.customerName));
+        const isImported = !cust || invRows.some(r => !findItem(ref, str(r.itemName)));
+
         // Calculate line items
-        const lineItems: { itemId: string; quantity: number; rate: number; discountPercent: number; taxRate: number; taxAmount: number; amount: number; inventoryId: string | null }[] = [];
+        const lineItems: { itemId: string | null; itemName: string; quantity: number; rate: number; discountPercent: number; taxRate: number; taxAmount: number; amount: number; inventoryId: string | null }[] = [];
         let subtotal = 0;
         let totalTax = 0;
 
         for (const row of invRows) {
           const item = findItem(ref, str(row.itemName));
-          if (!item) throw new Error(`Item "${str(row.itemName)}" not found`);
+          const taxRate = row.taxRate !== undefined && row.taxRate !== null && str(row.taxRate) !== '' ? num(row.taxRate) : (item ? Number(item.gstRate) : 0);
 
           const qty = num(row.quantity);
           const rate = num(row.rate);
           const disc = num(row.discountPercent);
-          const taxRate = row.taxRate !== undefined && row.taxRate !== null && str(row.taxRate) !== '' ? num(row.taxRate) : Number(item.gstRate);
 
           const lineAmount = qty * rate * (1 - disc / 100);
           const lineTax = lineAmount * (taxRate / 100);
 
           lineItems.push({
-            itemId: item.id,
+            itemId: item?.id || null,
+            itemName: str(row.itemName),
             quantity: qty,
             rate,
             discountPercent: disc,
             taxRate,
             taxAmount: Math.round(lineTax * 100) / 100,
             amount: Math.round(lineAmount * 100) / 100,
-            inventoryId: item.inventory?.id || null,
+            inventoryId: item?.inventory?.id || null,
           });
 
           subtotal += lineAmount;
@@ -716,7 +725,8 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
           data: {
             invoiceNumber: invNo,
             invoiceDate: parseDate(firstRow.invoiceDate),
-            customerId: cust.id,
+            customerId: cust?.id || null,
+            customerName: str(firstRow.customerName),
             subtotal,
             cgst,
             sgst,
@@ -724,6 +734,7 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
             totalAmount,
             balanceAmount: totalAmount,
             paymentStatus: 'PENDING',
+            isImported,
             dueDate: firstRow.dueDate ? parseDate(firstRow.dueDate) : undefined,
             notes: str(firstRow.notes) || null,
             ref: str(firstRow.ref) || null,
@@ -736,6 +747,7 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
             data: {
               invoiceId: invoice.id,
               itemId: li.itemId,
+              itemName: li.itemName,
               quantity: li.quantity,
               rate: li.rate,
               discountPercent: li.discountPercent,
@@ -745,8 +757,8 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
             },
           });
 
-          // Decrement inventory
-          if (li.inventoryId) {
+          // Decrement inventory (only if item exists in masters)
+          if (li.itemId && li.inventoryId) {
             await tx.inventory.update({
               where: { id: li.inventoryId },
               data: { physicalStock: { decrement: li.quantity } },
@@ -765,26 +777,28 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
           }
         }
 
-        // Customer ledger
-        const lastEntry = await tx.customerLedger.findFirst({
-          where: { customerId: cust.id },
-          orderBy: { date: 'desc' },
-        });
-        const newBalance = (lastEntry ? Number(lastEntry.balance) : 0) + totalAmount;
+        // Customer ledger (only if customer exists in masters)
+        if (cust) {
+          const lastEntry = await tx.customerLedger.findFirst({
+            where: { customerId: cust.id },
+            orderBy: { date: 'desc' },
+          });
+          const newBalance = (lastEntry ? Number(lastEntry.balance) : 0) + totalAmount;
 
-        await tx.customerLedger.create({
-          data: {
-            customerId: cust.id,
-            date: parseDate(firstRow.invoiceDate),
-            description: `Sales Invoice ${invNo}`,
-            type: 'SALES_INVOICE',
-            debit: totalAmount,
-            credit: 0,
-            balance: newBalance,
-            referenceType: 'INVOICE',
-            referenceId: invoice.id,
-          },
-        });
+          await tx.customerLedger.create({
+            data: {
+              customerId: cust.id,
+              date: parseDate(firstRow.invoiceDate),
+              description: `Sales Invoice ${invNo}`,
+              type: 'SALES_INVOICE',
+              debit: totalAmount,
+              credit: 0,
+              balance: newBalance,
+              referenceType: 'INVOICE',
+              referenceId: invoice.id,
+            },
+          });
+        }
       });
 
       result.success += invRows.length;
@@ -810,36 +824,37 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
   for (const [invNo, { rows: invRows, indices }] of groups) {
     try {
       const firstRow = invRows[0];
-      const vend = findVendor(ref, str(firstRow.vendorName));
-      if (!vend) throw new Error(`Vendor "${str(firstRow.vendorName)}" not found`);
 
       const existing = await db.purchaseInvoice.findUnique({ where: { invoiceNumber: invNo } });
       if (existing) throw new Error(`Purchase Invoice ${invNo} already exists`);
 
       await transaction(async (tx) => {
-        const lineItems: { itemId: string; quantity: number; rate: number; taxRate: number; taxAmount: number; amount: number; inventoryId: string | null }[] = [];
+        const vend = findVendor(ref, str(firstRow.vendorName));
+        const isImported = !vend || invRows.some(r => !findItem(ref, str(r.itemName)));
+
+        const lineItems: { itemId: string | null; itemName: string; quantity: number; rate: number; taxRate: number; taxAmount: number; amount: number; inventoryId: string | null }[] = [];
         let subtotal = 0;
         let totalTax = 0;
 
         for (const row of invRows) {
           const item = findItem(ref, str(row.itemName));
-          if (!item) throw new Error(`Item "${str(row.itemName)}" not found`);
+          const taxRate = row.taxRate !== undefined && row.taxRate !== null && str(row.taxRate) !== '' ? num(row.taxRate) : (item ? Number(item.gstRate) : 0);
 
           const qty = num(row.quantity);
           const rate = num(row.rate);
-          const taxRate = row.taxRate !== undefined && row.taxRate !== null && str(row.taxRate) !== '' ? num(row.taxRate) : Number(item.gstRate);
 
           const lineAmount = qty * rate;
           const lineTax = lineAmount * (taxRate / 100);
 
           lineItems.push({
-            itemId: item.id,
+            itemId: item?.id || null,
+            itemName: str(row.itemName),
             quantity: qty,
             rate,
             taxRate,
             taxAmount: Math.round(lineTax * 100) / 100,
             amount: Math.round(lineAmount * 100) / 100,
-            inventoryId: item.inventory?.id || null,
+            inventoryId: item?.inventory?.id || null,
           });
 
           subtotal += lineAmount;
@@ -853,8 +868,8 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
         const invoice = await (tx.purchaseInvoice.create as any)({
           data: {
             invoiceNumber: invNo,
-            vendorId: vend.id,
-            vendorName: vend.name,
+            vendorId: vend?.id || null,
+            vendorName: vend?.name || str(firstRow.vendorName),
             date: parseDate(firstRow.date),
             dueDate: parseDate(firstRow.dueDate),
             amount: subtotal,
@@ -862,6 +877,7 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
             totalAmount,
             balanceAmount: totalAmount,
             status: 'PENDING',
+            isImported,
             notes: str(firstRow.notes) || null,
             ref: str(firstRow.ref) || null,
           },
@@ -872,6 +888,7 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
             data: {
               purchaseInvoiceId: invoice.id,
               itemId: li.itemId,
+              itemName: li.itemName,
               quantity: li.quantity,
               rate: li.rate,
               taxRate: li.taxRate,
@@ -880,8 +897,8 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
             },
           });
 
-          // Increment inventory
-          if (li.inventoryId) {
+          // Increment inventory (only if item exists in masters)
+          if (li.itemId && li.inventoryId) {
             await tx.inventory.update({
               where: { id: li.inventoryId },
               data: { physicalStock: { increment: li.quantity } },
@@ -900,26 +917,28 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
           }
         }
 
-        // Vendor ledger
-        const lastEntry = await tx.vendorLedger.findFirst({
-          where: { vendorId: vend.id },
-          orderBy: { date: 'desc' },
-        });
-        const newBalance = (lastEntry ? Number(lastEntry.balance) : 0) + totalAmount;
+        // Vendor ledger (only if vendor exists in masters)
+        if (vend) {
+          const lastEntry = await tx.vendorLedger.findFirst({
+            where: { vendorId: vend.id },
+            orderBy: { date: 'desc' },
+          });
+          const newBalance = (lastEntry ? Number(lastEntry.balance) : 0) + totalAmount;
 
-        await tx.vendorLedger.create({
-          data: {
-            vendorId: vend.id,
-            date: parseDate(firstRow.date),
-            description: `Purchase Invoice ${invNo}`,
-            type: 'PURCHASE_INVOICE',
-            debit: totalAmount,
-            credit: 0,
-            balance: newBalance,
-            referenceType: 'PURCHASE_INVOICE',
-            referenceId: invoice.id,
-          },
-        });
+          await tx.vendorLedger.create({
+            data: {
+              vendorId: vend.id,
+              date: parseDate(firstRow.date),
+              description: `Purchase Invoice ${invNo}`,
+              type: 'PURCHASE_INVOICE',
+              debit: totalAmount,
+              credit: 0,
+              balance: newBalance,
+              referenceType: 'PURCHASE_INVOICE',
+              referenceId: invoice.id,
+            },
+          });
+        }
       });
 
       result.success += invRows.length;

@@ -46,7 +46,7 @@ export async function GET(request: Request) {
       salesValue += Number(inv.totalAmount);
       salesTaxable += Number(inv.subtotal);
       salesTax += Number(inv.taxAmount);
-      if (inv.customer.gstin) {
+      if (inv.customer?.gstin) {
         b2bCount++;
         b2bValue += Number(inv.totalAmount);
       } else {

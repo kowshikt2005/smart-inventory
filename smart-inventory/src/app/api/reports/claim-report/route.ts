@@ -77,6 +77,7 @@ export async function GET(request: Request) {
     for (const invoice of invoices) {
       for (const invoiceItem of invoice.items) {
         const item = invoiceItem.item;
+        if (!item) continue;
 
         // Apply filters
         if (brandId && item.brandId !== brandId) continue;
@@ -115,7 +116,7 @@ export async function GET(request: Request) {
           brandId: item.brandId,
           subBrand: item.subBrand?.name || 'N/A',
           subBrandId: item.subBrandId,
-          customer: invoice.customer.name,
+          customer: invoice.customer?.name || invoice.customerName || '-',
           customerId: invoice.customerId,
           productName: item.name,
           productId: item.id,

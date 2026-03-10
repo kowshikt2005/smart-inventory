@@ -165,8 +165,11 @@ model Item {
   barcode              String?               @unique
   name                 String
   description          String?               @db.Text
-  brandId              String
-  subBrandId           String
+  brandId              String?
+  subBrandId           String?
+  importedBrandName    String?
+  importedSubBrandName String?
+  isImported           Boolean               @default(false)
   hsnCode              String?               @db.VarChar(8)
   gstRate              Decimal               @default(0.00) @db.Decimal(5, 2)
   purchasePrice        Decimal               @default(0.00) @db.Decimal(15, 2)
@@ -184,8 +187,8 @@ model Item {
   updatedAt            DateTime              @updatedAt
   inventory            Inventory?
   invoiceItems         InvoiceItem[]
-  brand                Brand                 @relation(fields: [brandId], references: [id])
-  subBrand             SubBrand              @relation(fields: [subBrandId], references: [id])
+  brand                Brand?                @relation(fields: [brandId], references: [id])
+  subBrand             SubBrand?             @relation(fields: [subBrandId], references: [id])
   purchaseInvoiceItems PurchaseInvoiceItem[]
   purchaseOrderItems   PurchaseOrderItem[]
   purchaseReturnItems  PurchaseReturnItem[]
@@ -406,7 +409,8 @@ model Invoice {
   invoiceDate       DateTime
   salesOrderId      String?
   orderNumber       String?
-  customerId        String
+  customerId        String?
+  customerName      String?
   shippingAddressId String?
   subtotal          Decimal                  @default(0.00) @db.Decimal(15, 2)
   cgst              Decimal                  @default(0.00) @db.Decimal(15, 2)
@@ -420,10 +424,11 @@ model Invoice {
   dueDate           DateTime?
   notes             String?                  @db.Text
   ref               String?
+  isImported        Boolean                  @default(false)
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
   items             InvoiceItem[]
-  customer          Customer                 @relation(fields: [customerId], references: [id])
+  customer          Customer?                @relation(fields: [customerId], references: [id])
   salesOrder        SalesOrder?              @relation(fields: [salesOrderId], references: [id])
   shippingAddress   CustomerShippingAddress? @relation(fields: [shippingAddressId], references: [id])
   allocations       PaymentAllocation[]
@@ -442,7 +447,8 @@ model Invoice {
 model InvoiceItem {
   id               String  @id @default(uuid())
   invoiceId        String
-  itemId           String
+  itemId           String?
+  itemName         String?
   salesOrderItemId String?
   quantity         Decimal @db.Decimal(15, 3)
   rate             Decimal @db.Decimal(15, 2)
@@ -451,7 +457,7 @@ model InvoiceItem {
   taxAmount        Decimal @default(0.00) @db.Decimal(15, 2)
   amount           Decimal @default(0.00) @db.Decimal(15, 2)
   invoice          Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  item             Item    @relation(fields: [itemId], references: [id])
+  item             Item?   @relation(fields: [itemId], references: [id])
 
   @@index([invoiceId])
   @@index([itemId])
@@ -609,7 +615,7 @@ model BankLedger {
 model PurchaseInvoice {
   id              String                @id @default(uuid())
   invoiceNumber   String                @unique
-  vendorId        String
+  vendorId        String?
   vendorName      String
   purchaseOrderId String?
   date            DateTime
@@ -622,11 +628,12 @@ model PurchaseInvoice {
   status          PurchaseInvoiceStatus @default(PENDING)
   notes           String?               @db.Text
   ref             String?
+  isImported      Boolean               @default(false)
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
   items           PurchaseInvoiceItem[]
   purchaseOrder   PurchaseOrder?        @relation(fields: [purchaseOrderId], references: [id])
-  vendor          Vendor                @relation(fields: [vendorId], references: [id])
+  vendor          Vendor?               @relation(fields: [vendorId], references: [id])
   purchaseReturns PurchaseReturn[]
   vendorPayments  VendorPayment[]
 
@@ -641,13 +648,14 @@ model PurchaseInvoice {
 model PurchaseInvoiceItem {
   id                String          @id @default(uuid())
   purchaseInvoiceId String
-  itemId            String
+  itemId            String?
+  itemName          String?
   quantity          Decimal         @db.Decimal(15, 3)
   rate              Decimal         @db.Decimal(15, 2)
   taxRate           Decimal         @default(0.00) @db.Decimal(5, 2)
   taxAmount         Decimal         @default(0.00) @db.Decimal(15, 2)
   amount            Decimal         @default(0.00) @db.Decimal(15, 2)
-  item              Item            @relation(fields: [itemId], references: [id])
+  item              Item?           @relation(fields: [itemId], references: [id])
   purchaseInvoice   PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
 
   @@index([purchaseInvoiceId])

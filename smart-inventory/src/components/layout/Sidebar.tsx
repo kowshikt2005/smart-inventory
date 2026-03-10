@@ -12,7 +12,6 @@ import {
   Users,
   Building2,
   UserCircle,
-  DollarSign,
   Package,
   ShoppingCart,
   FileText,
@@ -26,13 +25,6 @@ import {
   Landmark,
   Settings,
   Shield,
-  TrendingUp,
-  TrendingDown,
-  AlertCircle,
-  FileSpreadsheet,
-  Calculator,
-  GitCompareArrows,
-  CalendarDays,
 } from "lucide-react";
 import { useState, memo, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
@@ -89,7 +81,7 @@ export const Sidebar = memo(function Sidebar() {
   const [bankCashOpen, setBankCashOpen] = useState(false);
   const [mastersOpen, setMastersOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
-  const [reportsOpen, setReportsOpen] = useState(false);
+
 
   const permissions = session?.user?.permissions as RolePermissions | undefined;
 
@@ -138,25 +130,10 @@ export const Sidebar = memo(function Sidebar() {
     { icon: ClipboardList, label: "Stock Journal", href: "/ledger/stock-journal", permKey: "ledger_stock_journal" },
   ], []);
 
-  const reportItems: NavItem[] = useMemo(() => [
-    { icon: TrendingUp, label: "Sales Register", href: "/reports/sales-register", permKey: "reports" },
-    { icon: TrendingDown, label: "Purchase Register", href: "/reports/purchase-register", permKey: "reports" },
-    { icon: AlertCircle, label: "Outstanding", href: "/reports/outstanding", permKey: "reports" },
-    { icon: Package, label: "Claim Report", href: "/reports/claim-report", permKey: "reports" },
-    { icon: FileText, label: "Billed & Unbilled", href: "/reports/billed-unbilled", permKey: "reports" },
-    { icon: Database, label: "Closing Stock", href: "/reports/closing-stock", permKey: "reports" },
-    { icon: FileSpreadsheet, label: "GSTR-1", href: "/reports/gstr-1", permKey: "reports" },
-    { icon: Calculator, label: "GSTR-3B", href: "/reports/gstr-3b", permKey: "reports" },
-    { icon: GitCompareArrows, label: "GSTR-2", href: "/reports/gstr-2", permKey: "reports" },
-    { icon: CalendarDays, label: "GSTR-9", href: "/reports/gstr-9", permKey: "reports" },
-    { icon: ClipboardList, label: "Reorders", href: "/reports/reorders", permKey: "reports" },
-  ], []);
-
   const masterItems: NavItem[] = useMemo(() => [
     { icon: Users, label: "Customers", href: "/masters/customers", permKey: "masters_customers" },
     { icon: Building2, label: "Vendors", href: "/masters/vendors", permKey: "masters_vendors" },
     { icon: UserCircle, label: "Employees", href: "/masters/employees", permKey: "masters_employees" },
-    { icon: DollarSign, label: "Rate Sheets", href: "/masters/rate-sheets", permKey: "masters_rate_sheets" },
     { icon: Package, label: "Items", href: "/masters/items", permKey: "masters_items" },
     { icon: Shield, label: "Roles", href: "/masters/roles", permKey: "masters_roles" },
   ], []);
@@ -322,28 +299,10 @@ export const Sidebar = memo(function Sidebar() {
               Analytics
             </p>
             <div className="mb-0.5">
-              <button
-                onClick={() => setReportsOpen(!reportsOpen)}
-                className={sectionButtonClass(pathname.startsWith("/reports"))}
-              >
-                <div className="flex items-center gap-3">
-                  <BarChart3 className="h-5 w-5" strokeWidth={1.5} />
-                  <span>Reports</span>
-                </div>
-                <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", reportsOpen && "rotate-180")} />
-              </button>
-              <CollapsibleSection isOpen={reportsOpen}>
-                {reportItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                  return (
-                    <Link key={item.href} href={item.href} className={subLinkClass(isActive)}>
-                      <Icon className="h-4 w-4" strokeWidth={1.5} />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </CollapsibleSection>
+              <Link href="/reports" className={navLinkClass(pathname.startsWith("/reports"))}>
+                <BarChart3 className="h-5 w-5" strokeWidth={1.5} />
+                <span>Reports</span>
+              </Link>
             </div>
           </>
         )}

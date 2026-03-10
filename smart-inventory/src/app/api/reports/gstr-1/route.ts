@@ -87,7 +87,7 @@ export async function GET(request: Request) {
     const b2bMap = new Map<string, GovB2B>();
 
     for (const inv of invoices) {
-      if (!inv.customer.gstin) continue;
+      if (!inv.customer?.gstin) continue;
       const ctin = inv.customer.gstin;
       const custStateCode = getStateCode(ctin, inv.customer.state);
       const pos = custStateCode || companyStateCode;
@@ -130,6 +130,7 @@ export async function GET(request: Request) {
     const b2csMap = new Map<string, GovB2CS>();
 
     for (const inv of invoices) {
+      if (!inv.customer) continue;
       if (inv.customer.gstin) continue;
       const custStateCode = getStateCode(null, inv.customer.state);
       const pos = custStateCode || companyStateCode;
@@ -213,12 +214,13 @@ export async function GET(request: Request) {
     const hsnB2CMap = new Map<string, HSNAccum>();
 
     for (const inv of invoices) {
+      if (!inv.customer) continue;
       const custStateCode = getStateCode(inv.customer.gstin, inv.customer.state);
       const isB2B = !!inv.customer.gstin;
       const targetMap = isB2B ? hsnB2BMap : hsnB2CMap;
 
       for (const it of inv.items) {
-        const hsnCode = it.item.hsnCode || "99999999";
+        const hsnCode = it.item?.hsnCode || "99999999";
         const rate = Number(it.taxRate);
         const key = `${hsnCode}|${rate}`;
         const { igst, cgst, sgst } = splitGST(
@@ -227,7 +229,7 @@ export async function GET(request: Request) {
 
         if (!targetMap.has(key)) {
           targetMap.set(key, {
-            hsn_sc: hsnCode, uqc: toUQC(it.item.unit), rt: rate,
+            hsn_sc: hsnCode, uqc: toUQC(it.item?.unit), rt: rate,
             qty: 0, txval: 0, iamt: 0, camt: 0, samt: 0,
           });
         }
@@ -309,9 +311,9 @@ export async function GET(request: Request) {
     // Display data (flat arrays for UI tables)
     // ═══════════════════════════════════════════════════════════════════════
     const displayB2B = invoices
-      .filter((inv) => inv.customer.gstin)
+      .filter((inv) => inv.customer?.gstin)
       .map((inv) => {
-        const custStateCode = getStateCode(inv.customer.gstin, inv.customer.state);
+        const custStateCode = getStateCode(inv.customer!.gstin, inv.customer!.state);
         let txval = 0, igst = 0, cgst = 0, sgst = 0;
         for (const it of inv.items) {
           const t = splitGST(Number(it.taxAmount), companyStateCode, custStateCode);
@@ -319,8 +321,8 @@ export async function GET(request: Request) {
           igst += t.igst; cgst += t.cgst; sgst += t.sgst;
         }
         return {
-          ctin: inv.customer.gstin!,
-          name: inv.customer.name,
+          ctin: inv.customer!.gstin!,
+          name: inv.customer!.name,
           inum: inv.invoiceNumber,
           idt: fmtGovDate(inv.invoiceDate),
           pos: custStateCode || companyStateCode,

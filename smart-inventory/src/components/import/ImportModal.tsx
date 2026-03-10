@@ -23,6 +23,7 @@ import {
   type ImportField,
 } from "@/lib/import-utils";
 import * as XLSX from "xlsx";
+import { tryParseVendorInvoice } from "@/lib/vendor-invoice-parser";
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -63,6 +64,7 @@ export function ImportModal({
   const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [vendorInvoiceInfo, setVendorInvoiceInfo] = useState<string | null>(null);
 
   // Step 2: Mapping
   const [mapping, setMapping] = useState<Record<string, string>>({});
@@ -97,6 +99,7 @@ export function ImportModal({
       setSaveName("");
       setValidationResults([]);
       setImportResult(null);
+      setVendorInvoiceInfo(null);
       fetchSavedMappings();
     }
   }, [isOpen, entityType]);
@@ -132,6 +135,21 @@ export function ImportModal({
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: "array" });
+
+        // Auto-detect vendor invoice format (PDF-to-Excel)
+        const vendorResult = tryParseVendorInvoice(workbook);
+        if (vendorResult) {
+          setFileName(file.name);
+          setHeaders(vendorResult.headers);
+          setRawRows(vendorResult.rows);
+          setVendorInvoiceInfo(vendorResult.info);
+          const auto = autoMatchColumns(vendorResult.headers, entityType);
+          setMapping(auto);
+          setStep(1);
+          return;
+        }
+
+        // Normal flat file parsing
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
@@ -147,6 +165,7 @@ export function ImportModal({
         setFileName(file.name);
         setHeaders(hdrs);
         setRawRows(json);
+        setVendorInvoiceInfo(null);
 
         // Auto-match columns
         const auto = autoMatchColumns(hdrs, entityType);
@@ -422,6 +441,14 @@ export function ImportModal({
           {/* ── Step 1: Map Columns ── */}
           {step === 1 && (
             <div className="space-y-4">
+              {/* Vendor invoice auto-detection banner */}
+              {vendorInvoiceInfo && (
+                <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+                  <FileSpreadsheet className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <span className="text-blue-800">{vendorInvoiceInfo}</span>
+                </div>
+              )}
+
               {/* Saved mappings */}
               <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/30 rounded-lg">
                 <span className="text-sm font-medium">Saved Mappings:</span>

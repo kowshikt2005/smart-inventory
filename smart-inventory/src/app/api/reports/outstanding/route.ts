@@ -55,7 +55,7 @@ export async function GET(request: Request) {
             effectiveDueDate.setHours(0, 0, 0, 0);
           } else {
             effectiveDueDate = new Date(
-              invoiceDate.getTime() + inv.vendor.creditDays * 24 * 60 * 60 * 1000
+              invoiceDate.getTime() + (inv.vendor?.creditDays ?? 30) * 24 * 60 * 60 * 1000
             );
           }
 
@@ -73,12 +73,12 @@ export async function GET(request: Request) {
             paidAmount: Number(inv.paidAmount),
             daysOverdue,
             status: inv.status,
-            vendorId: inv.vendor.id,
-            vendorName: inv.vendor.name,
-            creditDays: inv.vendor.creditDays,
+            vendorId: inv.vendor?.id || '',
+            vendorName: inv.vendor?.name || inv.vendorName || 'Unknown Vendor',
+            creditDays: inv.vendor?.creditDays ?? 30,
             // Use common field names for UI
-            partyId: inv.vendor.id,
-            partyName: inv.vendor.name,
+            partyId: inv.vendor?.id || '',
+            partyName: inv.vendor?.name || inv.vendorName || 'Unknown Vendor',
           };
         })
         .sort((a, b) => b.daysOverdue - a.daysOverdue);
@@ -120,7 +120,7 @@ export async function GET(request: Request) {
           effectiveDueDate.setHours(0, 0, 0, 0);
         } else {
           effectiveDueDate = new Date(
-            invoiceDate.getTime() + inv.customer.creditDays * 24 * 60 * 60 * 1000
+            invoiceDate.getTime() + (inv.customer?.creditDays ?? 30) * 24 * 60 * 60 * 1000
           );
         }
 
@@ -138,12 +138,12 @@ export async function GET(request: Request) {
           paidAmount: Number(inv.paidAmount),
           daysOverdue,
           status: inv.paymentStatus,
-          customerId: inv.customer.id,
-          customerName: inv.customer.name,
-          creditDays: inv.customer.creditDays,
+          customerId: inv.customer?.id || '',
+          customerName: inv.customer?.name || inv.customerName || 'Unknown Customer',
+          creditDays: inv.customer?.creditDays ?? 30,
           // Use common field names for UI
-          partyId: inv.customer.id,
-          partyName: inv.customer.name,
+          partyId: inv.customer?.id || '',
+          partyName: inv.customer?.name || inv.customerName || 'Unknown Customer',
         };
       })
       .sort((a, b) => b.daysOverdue - a.daysOverdue);

@@ -43,22 +43,22 @@ export async function GET(request: Request) {
       orderBy: { date: "asc" },
     });
 
-    // Invoice details
-    const invoices = purchaseInvoices.map((pi) => {
+    // Invoice details — skip imported invoices without vendor linkage (no GSTIN available)
+    const invoices = purchaseInvoices.filter(pi => pi.vendor).map((pi) => {
       const { cgst, sgst } = splitTax(Number(pi.taxAmount));
       return {
-        vendorGstin: pi.vendor.gstin || "-",
-        vendorName: pi.vendor.name,
+        vendorGstin: pi.vendor!.gstin || "-",
+        vendorName: pi.vendor!.name,
         invoiceNumber: pi.invoiceNumber,
         date: pi.date,
-        placeOfSupply: getPlaceOfSupply(pi.vendor.gstin, pi.vendor.state),
+        placeOfSupply: getPlaceOfSupply(pi.vendor!.gstin, pi.vendor!.state),
         taxableValue: Number(pi.amount),
         cgst,
         sgst,
         total: Number(pi.totalAmount),
         items: pi.items.map((it) => ({
-          name: it.item.name,
-          hsnCode: it.item.hsnCode,
+          name: it.item?.name || it.itemName || '-',
+          hsnCode: it.item?.hsnCode,
           qty: Number(it.quantity),
           rate: Number(it.rate),
           taxableValue: Number(it.amount),
@@ -84,13 +84,13 @@ export async function GET(request: Request) {
     >();
     for (const pi of purchaseInvoices) {
       for (const it of pi.items) {
-        const hsnCode = it.item.hsnCode || "N/A";
+        const hsnCode = it.item?.hsnCode || "N/A";
         const rate = Number(it.taxRate);
         const key = `${hsnCode}|${rate}`;
         const existing = hsnMap.get(key) || {
           hsnCode,
-          description: it.item.name,
-          uqc: it.item.unit,
+          description: it.item?.name || it.itemName || '-',
+          uqc: it.item?.unit || 'PCS',
           qty: 0,
           taxableValue: 0,
           cgst: 0,

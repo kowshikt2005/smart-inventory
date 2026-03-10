@@ -75,7 +75,9 @@ interface Invoice {
   paymentStatus: string;
   effectiveStatus: string;
   ref: string | null;
-  customer: Customer;
+  isImported: boolean;
+  customerName: string | null;
+  customer: Customer | null;
 }
 
 const STATUS_FILTERS = [
@@ -407,7 +409,7 @@ export default function SalesInvoicesPage() {
                     fmtDateExport(i.invoiceDate),
                     i.invoiceNumber,
                     i.orderNumber || "-",
-                    i.customer.name,
+                    i.customer?.name || i.customerName || '-',
                     i.dueDate ? fmtDateExport(i.dueDate) : "-",
                     i.effectiveStatus,
                     Number(i.subtotal),
@@ -424,7 +426,7 @@ export default function SalesInvoicesPage() {
                   const rows = invoices.map((i) => [
                     fmtDateExport(i.invoiceDate),
                     i.invoiceNumber,
-                    i.customer.name,
+                    i.customer?.name || i.customerName || '-',
                     i.effectiveStatus,
                     fmtNum(Number(i.totalAmount)),
                     fmtNum(Number(i.balanceAmount)),
@@ -590,7 +592,7 @@ export default function SalesInvoicesPage() {
                   </TableRow>
                 ) : (
                   invoices.map((invoice) => (
-                    <TableRow key={invoice.id} className="hover:bg-gray-50">
+                    <TableRow key={invoice.id} className={invoice.isImported ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-gray-50"}>
                       <TableCell>
                         <input
                           type="checkbox"
@@ -618,8 +620,8 @@ export default function SalesInvoicesPage() {
                       <TableCell className="text-sm text-gray-600">{invoice.orderNumber || "-"}</TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{invoice.customer.name}</p>
-                          <p className="text-xs text-gray-500">{invoice.customer.customerNumber}</p>
+                          <p className="font-medium">{invoice.customer?.name || invoice.customerName || '-'}</p>
+                          <p className="text-xs text-gray-500">{invoice.customer?.customerNumber || ''}</p>
                         </div>
                       </TableCell>
                       <TableCell className="text-sm">{formatDate(invoice.dueDate)}</TableCell>
@@ -666,7 +668,7 @@ export default function SalesInvoicesPage() {
                             {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
                               <>
                                 <DropdownMenuItem
-                                  onClick={() => router.push(`/sales/receipts/new?customerId=${invoice.customer.id}`)}
+                                  onClick={() => invoice.customer && router.push(`/sales/receipts/new?customerId=${invoice.customer.id}`)}
                                 >
                                   <CreditCard className="h-4 w-4 mr-2" />
                                   Record Payment

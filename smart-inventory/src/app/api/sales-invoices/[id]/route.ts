@@ -249,24 +249,26 @@ export async function PUT(
           }
         }
 
-        // Update customer ledger
-        await tx.customerLedger.deleteMany({
-          where: { referenceType: 'SALES_INVOICE', referenceId: id },
-        });
+        // Update customer ledger (only if customer is linked)
+        if (invoice.customerId) {
+          await tx.customerLedger.deleteMany({
+            where: { referenceType: 'SALES_INVOICE', referenceId: id },
+          });
 
-        await tx.customerLedger.create({
-          data: {
-            customerId: invoice.customerId,
-            date: invoice.invoiceDate,
-            description: `Sales Invoice ${updated.invoiceNumber}`,
-            type: 'SALES_INVOICE',
-            debit: totalAmount,
-            credit: 0,
-            balance: 0,
-            referenceType: 'SALES_INVOICE',
-            referenceId: id,
-          },
-        });
+          await tx.customerLedger.create({
+            data: {
+              customerId: invoice.customerId,
+              date: invoice.invoiceDate,
+              description: `Sales Invoice ${updated.invoiceNumber}`,
+              type: 'SALES_INVOICE',
+              debit: totalAmount,
+              credit: 0,
+              balance: 0,
+              referenceType: 'SALES_INVOICE',
+              referenceId: id,
+            },
+          });
+        }
 
         return updated;
       }, { maxWait: 10000, timeout: 30000 });
@@ -354,7 +356,7 @@ export async function DELETE(
       const stockMovements: any[] = [];
 
       for (const invoiceItem of invoice.items) {
-        const inventory = invoiceItem.item.inventory;
+        const inventory = invoiceItem.item?.inventory;
         if (inventory) {
           // Restore physical stock
           inventoryUpdates.push(
@@ -391,28 +393,30 @@ export async function DELETE(
         });
       }
 
-      // Create reversal ledger entry
-      const lastLedgerEntry = await tx.customerLedger.findFirst({
-        where: { customerId: invoice.customerId },
-        orderBy: { date: 'desc' },
-      });
+      // Create reversal ledger entry (only if customer is linked)
+      if (invoice.customerId) {
+        const lastLedgerEntry = await tx.customerLedger.findFirst({
+          where: { customerId: invoice.customerId },
+          orderBy: { date: 'desc' },
+        });
 
-      const previousBalance = lastLedgerEntry ? Number(lastLedgerEntry.balance) : 0;
-      const newBalance = previousBalance - Number(invoice.totalAmount);
+        const previousBalance = lastLedgerEntry ? Number(lastLedgerEntry.balance) : 0;
+        const newBalance = previousBalance - Number(invoice.totalAmount);
 
-      await tx.customerLedger.create({
-        data: {
-          customerId: invoice.customerId,
-          date: new Date(),
-          description: `Invoice Cancelled - ${invoice.invoiceNumber}`,
-          type: 'ADJUSTMENT',
-          debit: 0,
-          credit: Number(invoice.totalAmount),
-          balance: newBalance,
-          referenceType: 'sales_invoice',
-          referenceId: invoice.id,
-        },
-      });
+        await tx.customerLedger.create({
+          data: {
+            customerId: invoice.customerId,
+            date: new Date(),
+            description: `Invoice Cancelled - ${invoice.invoiceNumber}`,
+            type: 'ADJUSTMENT',
+            debit: 0,
+            credit: Number(invoice.totalAmount),
+            balance: newBalance,
+            referenceType: 'sales_invoice',
+            referenceId: invoice.id,
+          },
+        });
+      }
     });
 
     return NextResponse.json({ message: 'Invoice cancelled successfully' });

@@ -59,46 +59,31 @@ export default function SubBrandsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const itemsPerPage = 10;
 
-  const fetchBrands = useCallback(async () => {
-    const response = await fetch("/api/brands");
-    if (!response.ok) {
-      throw new Error("Failed to fetch brands");
-    }
-    const data = await response.json();
-    setBrands(data.brands || []);
-    return data.brands || [];
-  }, []);
-
-  const fetchSubBrands = useCallback(async (brandsData?: Brand[]) => {
-    // Get all brands first, then fetch sub-brands for each
-    const brandsToUse = brandsData || await fetchBrands();
-    const allSubBrands: SubBrand[] = [];
-
-    for (const brand of brandsToUse) {
-      try {
-        const response = await fetch(`/api/brands/${brand.id}/sub-brands`);
-        if (response.ok) {
-          const data = await response.json();
-          const subBrandsWithBrand = data.subBrands.map((sb: SubBrand) => ({
-            ...sb,
-            brand: { name: brand.name },
-          }));
-          allSubBrands.push(...subBrandsWithBrand);
-        }
-      } catch (error) {
-        console.error(`Error fetching sub-brands for brand ${brand.id}:`, error);
-      }
-    }
-
-    setSubBrands(allSubBrands);
-  }, [fetchBrands]);
-
   const fetchAllData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const brandsData = await fetchBrands();
-      await fetchSubBrands(brandsData);
+      // Fetch brands and all sub-brands in parallel — single request each
+      const [brandsRes, subBrandsRes] = await Promise.all([
+        fetch("/api/brands"),
+        fetch("/api/sub-brands"),
+      ]);
+      if (!brandsRes.ok) throw new Error("Failed to fetch brands");
+      if (!subBrandsRes.ok) throw new Error("Failed to fetch sub-brands");
+
+      const brandsData = await brandsRes.json();
+      const subBrandsData = await subBrandsRes.json();
+
+      const brandsArr: Brand[] = brandsData.brands || [];
+      const brandMap = new Map(brandsArr.map((b: Brand) => [b.id, b.name]));
+
+      const subBrandsWithBrand = (subBrandsData.subBrands || []).map((sb: SubBrand) => ({
+        ...sb,
+        brand: { name: brandMap.get(sb.brandId) || "" },
+      }));
+
+      setBrands(brandsArr);
+      setSubBrands(subBrandsWithBrand);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       setError(errorMessage);
@@ -106,7 +91,7 @@ export default function SubBrandsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [fetchBrands, fetchSubBrands]);
+  }, []);
 
   // Fetch data from API
   useEffect(() => {
@@ -165,7 +150,7 @@ export default function SubBrandsPage() {
         setShowAddModal(false);
         setNewSubBrand({ name: "", brandId: "", discountPercent: "", logoUrl: "" });
         setModalError(null);
-        fetchSubBrands();
+        fetchAllData();
       } else {
         const data = await response.json();
         setModalError(data.error || "Failed to create sub-brand");
@@ -201,7 +186,7 @@ export default function SubBrandsPage() {
         setEditingSubBrand(null);
         setNewSubBrand({ name: "", brandId: "", discountPercent: "", logoUrl: "" });
         setModalError(null);
-        fetchSubBrands();
+        fetchAllData();
       } else {
         const data = await response.json();
         setModalError(data.error || "Failed to update sub-brand");

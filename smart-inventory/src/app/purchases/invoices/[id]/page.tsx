@@ -20,7 +20,7 @@ interface PurchaseInvoice {
   invoiceNumber: string;
   date: string;
   dueDate: string;
-  vendorId: string;
+  vendorId: string | null;
   vendorName: string;
   status: string;
   amount: number;
@@ -30,6 +30,7 @@ interface PurchaseInvoice {
   balanceAmount: number;
   notes: string | null;
   ref: string | null;
+  isImported?: boolean;
   vendor: {
     id: string;
     vendorNumber: string;
@@ -40,14 +41,15 @@ interface PurchaseInvoice {
     address: string | null;
     city: string | null;
     state: string | null;
-  };
+  } | null;
   purchaseOrder?: {
     id: string;
     orderNumber: string;
   } | null;
   items: {
     id: string;
-    itemId: string;
+    itemId: string | null;
+    itemName: string | null;
     quantity: number;
     rate: number;
     taxRate: number;
@@ -59,7 +61,7 @@ interface PurchaseInvoice {
       name: string;
       unit: string;
       hsnCode: string | null;
-    };
+    } | null;
   }[];
   vendorPayments: {
     id: string;
@@ -276,13 +278,13 @@ export default function PurchaseInvoiceDetailPage() {
                         <TableRow key={item.id}>
                           <TableCell>
                             <div>
-                              <p className="font-medium">{item.item.name}</p>
-                              <p className="text-xs text-gray-500">{item.item.itemCode}</p>
+                              <p className="font-medium">{item.item?.name || item.itemName || "-"}</p>
+                              <p className="text-xs text-gray-500">{item.item?.itemCode || ""}</p>
                             </div>
                           </TableCell>
-                          <TableCell className="text-sm">{item.item.hsnCode || "-"}</TableCell>
+                          <TableCell className="text-sm">{item.item?.hsnCode || "-"}</TableCell>
                           <TableCell className="text-right">
-                            {Number(item.quantity)} {item.item.unit}
+                            {Number(item.quantity)} {item.item?.unit || ""}
                           </TableCell>
                           <TableCell className="text-right">
                             {formatCurrency(Number(item.rate))}
@@ -361,26 +363,29 @@ export default function PurchaseInvoiceDetailPage() {
               <h2 className="text-lg font-semibold mb-4">Vendor</h2>
               <div className="space-y-3">
                 <div>
-                  <p className="font-medium">{invoice.vendor.name}</p>
-                  <p className="text-sm text-gray-500">{invoice.vendor.vendorNumber}</p>
+                  <p className="font-medium">{invoice.vendor?.name || invoice.vendorName}</p>
+                  <p className="text-sm text-gray-500">{invoice.vendor?.vendorNumber || ''}</p>
                 </div>
-                {invoice.vendor.gstin && (
+                {invoice.vendor?.gstin && (
                   <div>
                     <p className="text-sm text-gray-500">GSTIN</p>
                     <p className="font-medium">{invoice.vendor.gstin}</p>
                   </div>
                 )}
-                {invoice.vendor.email && (
+                {invoice.vendor?.email && (
                   <div>
                     <p className="text-sm text-gray-500">Email</p>
                     <p className="font-medium">{invoice.vendor.email}</p>
                   </div>
                 )}
-                {invoice.vendor.phone && (
+                {invoice.vendor?.phone && (
                   <div>
                     <p className="text-sm text-gray-500">Phone</p>
                     <p className="font-medium">{invoice.vendor.phone}</p>
                   </div>
+                )}
+                {!invoice.vendor && invoice.isImported && (
+                  <p className="text-xs text-amber-600">Imported invoice — vendor not linked to masters</p>
                 )}
               </div>
             </div>

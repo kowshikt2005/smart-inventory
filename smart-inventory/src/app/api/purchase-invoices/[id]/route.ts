@@ -242,38 +242,40 @@ export async function PUT(
           });
         }
 
-        // Update vendor ledger
-        await tx.vendorLedger.deleteMany({
-          where: { referenceType: 'purchase_invoice', referenceId: id },
-        });
+        // Update vendor ledger (only if vendor is linked)
+        if (vendorId) {
+          await tx.vendorLedger.deleteMany({
+            where: { referenceType: 'purchase_invoice', referenceId: id },
+          });
 
-        const vendor = await tx.vendor.findUnique({ where: { id: vendorId } });
-        const openingBalance = vendor ? Number(vendor.openingBalance) : 0;
-        const priorEntries = await tx.vendorLedger.findMany({
-          where: { vendorId },
-          orderBy: { createdAt: 'asc' },
-        });
+          const vendor = await tx.vendor.findUnique({ where: { id: vendorId } });
+          const openingBalance = vendor ? Number(vendor.openingBalance) : 0;
+          const priorEntries = await tx.vendorLedger.findMany({
+            where: { vendorId },
+            orderBy: { createdAt: 'asc' },
+          });
 
-        let runningBalance = openingBalance;
-        for (const entry of priorEntries) {
-          runningBalance = runningBalance + Number(entry.credit) - Number(entry.debit);
+          let runningBalance = openingBalance;
+          for (const entry of priorEntries) {
+            runningBalance = runningBalance + Number(entry.credit) - Number(entry.debit);
+          }
+
+          const newBalance = runningBalance + Math.round(totalAmount * 100) / 100;
+
+          await tx.vendorLedger.create({
+            data: {
+              vendorId,
+              date: body.date ? new Date(body.date) : existingInvoice.date,
+              description: `Purchase Invoice ${updated.invoiceNumber}`,
+              type: 'PURCHASE_INVOICE',
+              credit: Math.round(totalAmount * 100) / 100,
+              debit: 0,
+              balance: newBalance,
+              referenceType: 'purchase_invoice',
+              referenceId: id,
+            },
+          });
         }
-
-        const newBalance = runningBalance + Math.round(totalAmount * 100) / 100;
-
-        await tx.vendorLedger.create({
-          data: {
-            vendorId,
-            date: body.date ? new Date(body.date) : existingInvoice.date,
-            description: `Purchase Invoice ${updated.invoiceNumber}`,
-            type: 'PURCHASE_INVOICE',
-            credit: Math.round(totalAmount * 100) / 100,
-            debit: 0,
-            balance: newBalance,
-            referenceType: 'purchase_invoice',
-            referenceId: id,
-          },
-        });
 
         return updated;
       }, { maxWait: 10000, timeout: 30000 });
@@ -395,34 +397,35 @@ export async function DELETE(
         }
       }
 
-      // Delete the ledger entry
-      await tx.vendorLedger.deleteMany({
-        where: {
-          referenceType: 'purchase_invoice',
-          referenceId: id,
-        },
-      });
-
-      // Recalculate subsequent ledger balances
-      const remainingEntries = await tx.vendorLedger.findMany({
-        where: { vendorId: existingInvoice.vendorId },
-        orderBy: { createdAt: 'asc' },
-      });
-
-      let runningBalance = 0;
-      const vendor = await tx.vendor.findUnique({
-        where: { id: existingInvoice.vendorId },
-      });
-      if (vendor) {
-        runningBalance = Number(vendor.openingBalance);
-      }
-
-      for (const entry of remainingEntries) {
-        runningBalance = runningBalance + Number(entry.credit) - Number(entry.debit);
-        await tx.vendorLedger.update({
-          where: { id: entry.id },
-          data: { balance: runningBalance },
+      // Delete the ledger entry and recalculate (only if vendor is linked)
+      if (existingInvoice.vendorId) {
+        await tx.vendorLedger.deleteMany({
+          where: {
+            referenceType: 'purchase_invoice',
+            referenceId: id,
+          },
         });
+
+        const remainingEntries = await tx.vendorLedger.findMany({
+          where: { vendorId: existingInvoice.vendorId },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        let runningBalance = 0;
+        const vendor = await tx.vendor.findUnique({
+          where: { id: existingInvoice.vendorId },
+        });
+        if (vendor) {
+          runningBalance = Number(vendor.openingBalance);
+        }
+
+        for (const entry of remainingEntries) {
+          runningBalance = runningBalance + Number(entry.credit) - Number(entry.debit);
+          await tx.vendorLedger.update({
+            where: { id: entry.id },
+            data: { balance: runningBalance },
+          });
+        }
       }
 
       // Delete the invoice (items will be cascade deleted)

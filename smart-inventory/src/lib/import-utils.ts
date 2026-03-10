@@ -7,6 +7,7 @@ export interface ImportField {
   fkEntity?: string;
   fkMatchField?: string;
   maxLength?: number;
+  aliases?: string[]; // extra column-name aliases for auto-mapping
 }
 
 export type EntityType =
@@ -48,8 +49,8 @@ export const ENTITY_FIELDS: Record<EntityType, ImportField[]> = {
   ],
   ITEM: [
     { key: 'name', label: 'Item Name', required: true, type: 'string', maxLength: 255 },
-    { key: 'brandName', label: 'Brand Name', required: true, type: 'fk', fkEntity: 'brand', fkMatchField: 'name' },
-    { key: 'subBrandName', label: 'Sub-Brand Name', required: true, type: 'fk', fkEntity: 'subBrand', fkMatchField: 'name' },
+    { key: 'brandName', label: 'Brand Name', required: true, type: 'fk', fkEntity: 'brand', fkMatchField: 'name', aliases: ['catbrand', 'brand', 'companyname', 'manufacturer'] },
+    { key: 'subBrandName', label: 'Sub-Brand Name', required: false, type: 'fk', fkEntity: 'subBrand', fkMatchField: 'name', aliases: ['category', 'cat', 'subcategory', 'subbrand', 'productline', 'segment'] },
     { key: 'userCode', label: 'User Code', required: false, type: 'string' },
     { key: 'hsnCode', label: 'HSN Code', required: false, type: 'string', maxLength: 8 },
     { key: 'gstRate', label: 'GST Rate (%)', required: false, type: 'decimal' },
@@ -102,7 +103,7 @@ export const ENTITY_FIELDS: Record<EntityType, ImportField[]> = {
   PURCHASE_INVOICE: [
     { key: 'invoiceNumber', label: 'Invoice Number', required: true, type: 'string' },
     { key: 'date', label: 'Date', required: true, type: 'date' },
-    { key: 'dueDate', label: 'Due Date', required: true, type: 'date' },
+    { key: 'dueDate', label: 'Due Date', required: false, type: 'date' },
     { key: 'vendorName', label: 'Vendor Name', required: true, type: 'fk', fkEntity: 'vendor', fkMatchField: 'name' },
     { key: 'itemName', label: 'Item Name', required: true, type: 'fk', fkEntity: 'item', fkMatchField: 'name' },
     { key: 'quantity', label: 'Quantity', required: true, type: 'decimal' },
@@ -144,11 +145,13 @@ export function autoMatchColumns(
   for (const field of fields) {
     const fieldLabel = field.label.toLowerCase().replace(/[_\-.\s]+/g, '');
     const fieldKey = field.key.toLowerCase().replace(/[_\-.\s]+/g, '');
+    const fieldAliases = (field.aliases || []).map(a => a.toLowerCase().replace(/[_\-.\s]+/g, ''));
     let bestMatch: string | null = null;
 
     for (const header of headers) {
       const normalised = header.trim().toLowerCase().replace(/[_\-.\s]+/g, '');
-      if (normalised === fieldLabel || normalised === fieldKey) {
+      // Exact match on label, key, or any alias — highest priority
+      if (normalised === fieldLabel || normalised === fieldKey || fieldAliases.includes(normalised)) {
         bestMatch = header;
         break;
       }

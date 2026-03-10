@@ -1,6 +1,5 @@
 "use client";
 
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import Link from "next/link";
 import {
   FileText,
@@ -132,7 +131,6 @@ const reports = [
 
 export default function ReportsPage() {
   return (
-    <DashboardLayout>
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-8">
@@ -180,6 +178,5 @@ export default function ReportsPage() {
         })}
       </div>
     </div>
-    </DashboardLayout>
   );
 }

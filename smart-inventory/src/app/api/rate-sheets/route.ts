@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
     const activeOnly = searchParams.get('activeOnly') === 'true';
+    const customerId = searchParams.get('customerId') || '';
     const skip = (page - 1) * limit;
 
     // Build where clause
@@ -20,6 +21,10 @@ export async function GET(request: Request) {
 
     if (activeOnly) {
       where.isActive = true;
+    }
+
+    if (customerId) {
+      where.customers = { some: { customerId } };
     }
 
     if (search) {

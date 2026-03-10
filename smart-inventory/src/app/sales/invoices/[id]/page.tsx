@@ -33,7 +33,8 @@ interface Customer {
 
 interface InvoiceItem {
   id: string;
-  itemId: string;
+  itemId: string | null;
+  itemName: string | null;
   quantity: number;
   rate: number;
   discountPercent: number;
@@ -49,7 +50,7 @@ interface InvoiceItem {
     gstRate: number;
     sellingPrice: number;
     mrp: number;
-  };
+  } | null;
 }
 
 interface Payment {
@@ -93,10 +94,13 @@ interface Invoice {
   effectiveStatus: string;
   notes: string | null;
   ref: string | null;
-  customer: Customer;
+  isImported?: boolean;
+  customerName?: string | null;
+  customer: Customer | null;
   items: InvoiceItem[];
   allocations: PaymentAllocation[];
   shippingAddress: ShippingAddress | null;
+  salesReturns?: { id: string; returnNumber: string; status: string; returnDate: string }[];
 }
 
 export default function InvoiceDetailPage() {
@@ -152,7 +156,27 @@ export default function InvoiceDetailPage() {
     setIsPdfLoading(true);
     try {
       const { company, bank } = await fetchCompanySettings();
-      generateInvoicePDF(invoice, company, bank);
+      generateInvoicePDF({
+        ...invoice,
+        customer: {
+          name: invoice.customer?.name || invoice.customerName || "Unknown Customer",
+          gstin: invoice.customer?.gstin || null,
+          address: invoice.customer?.address || null,
+          city: invoice.customer?.city || null,
+          state: invoice.customer?.state || null,
+          pincode: invoice.customer?.pincode || null,
+        },
+        items: invoice.items.map((item) => ({
+          ...item,
+          item: item.item ?? {
+            name: item.itemName || "Unknown Item",
+            hsnCode: null,
+            unit: "",
+            sellingPrice: Number(item.rate),
+            mrp: Number(item.rate),
+          },
+        })),
+      }, company, bank);
     } catch (err) {
       console.error("Error generating PDF:", err);
       alert("Failed to generate PDF. Please try again.");
@@ -277,27 +301,34 @@ export default function InvoiceDetailPage() {
             <div className="space-y-2 text-sm">
               <div>
                 <p className="text-gray-600">Name</p>
-                <p className="font-medium">{invoice.customer.name}</p>
+                <p className="font-medium">{invoice.customer?.name || invoice.customerName || '-'}</p>
               </div>
-              <div>
-                <p className="text-gray-600">Customer #</p>
-                <p className="font-medium">{invoice.customer.customerNumber}</p>
-              </div>
-              {invoice.customer.gstin && (
-                <div>
-                  <p className="text-gray-600">GSTIN</p>
-                  <p className="font-medium">{invoice.customer.gstin}</p>
-                </div>
+              {invoice.customer && (
+                <>
+                  <div>
+                    <p className="text-gray-600">Customer #</p>
+                    <p className="font-medium">{invoice.customer.customerNumber}</p>
+                  </div>
+                  {invoice.customer.gstin && (
+                    <div>
+                      <p className="text-gray-600">GSTIN</p>
+                      <p className="font-medium">{invoice.customer.gstin}</p>
+                    </div>
+                  )}
+                  {invoice.customer.address && (
+                    <div>
+                      <p className="text-gray-600">Address</p>
+                      <p className="font-medium">{invoice.customer.address}</p>
+                      <p className="text-gray-500">
+                        {invoice.customer.city}, {invoice.customer.state} -{" "}
+                        {invoice.customer.pincode}
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
-              {invoice.customer.address && (
-                <div>
-                  <p className="text-gray-600">Address</p>
-                  <p className="font-medium">{invoice.customer.address}</p>
-                  <p className="text-gray-500">
-                    {invoice.customer.city}, {invoice.customer.state} -{" "}
-                    {invoice.customer.pincode}
-                  </p>
-                </div>
+              {!invoice.customer && invoice.isImported && (
+                <p className="text-xs text-amber-600">Imported invoice — customer not linked to masters</p>
               )}
             </div>
           </div>
@@ -316,7 +347,7 @@ export default function InvoiceDetailPage() {
               </div>
               <div>
                 <p className="text-gray-600">Credit Days</p>
-                <p className="font-medium">{invoice.customer.creditDays} days</p>
+                <p className="font-medium">{invoice.customer?.creditDays ?? '-'} days</p>
               </div>
               {invoice.shippingAddress && (
                 <div className="pt-2 border-t border-gray-100">
@@ -367,17 +398,17 @@ export default function InvoiceDetailPage() {
                     <TableRow key={item.id}>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{item.item.name}</p>
+                          <p className="font-medium">{item.item?.name || item.itemName || "-"}</p>
                           <p className="text-xs text-gray-500">
-                            {item.item.itemCode}
+                            {item.item?.itemCode || ""}
                           </p>
                         </div>
                       </TableCell>
                       <TableCell className="text-sm">
-                        {item.item.hsnCode || "-"}
+                        {item.item?.hsnCode || "-"}
                       </TableCell>
                       <TableCell className="text-right">
-                        {Number(item.quantity)} {item.item.unit}
+                        {Number(item.quantity)} {item.item?.unit || ""}
                       </TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(Number(item.rate))}
