@@ -13,6 +13,7 @@ import {
   Search,
   X,
   Calculator,
+  Copy,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -62,6 +63,7 @@ function NewPurchaseInvoicePageContent() {
   const searchParams = useSearchParams();
   const purchaseOrderId = searchParams.get("purchaseOrderId");
   const editId = searchParams.get("edit");
+  const copyId = searchParams.get("copy");
 
   // Form state
   const [invoiceDate, setInvoiceDate] = useState(
@@ -216,6 +218,48 @@ function NewPurchaseInvoicePageContent() {
     }
   }, []);
 
+  // Load invoice data for copy (pre-fills vendor + items, creates a new invoice)
+  const loadInvoiceForCopy = useCallback(async (invoiceId: string) => {
+    try {
+      const response = await fetch(`/api/purchase-invoices/${invoiceId}`);
+      if (response.ok) {
+        const invoice = await response.json();
+        setNotes(invoice.notes || "");
+        setTerms(invoice.terms || "");
+        setSelectedVendor(invoice.vendor);
+
+        if (invoice.vendor?.creditDays) {
+          const due = new Date();
+          due.setDate(due.getDate() + invoice.vendor.creditDays);
+          setDueDate(due.toISOString().split("T")[0]);
+        }
+
+        if (invoice.items && invoice.items.length > 0) {
+          setInvoiceItems(
+            invoice.items.map((item: {
+              itemId: string;
+              quantity: number;
+              rate: number;
+              taxRate: number;
+              taxAmount: number;
+              amount: number;
+            }) => ({
+              id: generateId(),
+              itemId: item.itemId,
+              quantity: Number(item.quantity),
+              rate: Number(item.rate),
+              taxRate: Number(item.taxRate),
+              taxAmount: Number(item.taxAmount),
+              amount: Number(item.amount),
+            }))
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Error loading invoice for copy:", err);
+    }
+  }, []);
+
   // Fetch next invoice number for new invoices
   const fetchNextInvoiceNumber = useCallback(async () => {
     try {
@@ -241,11 +285,15 @@ function NewPurchaseInvoicePageContent() {
       fetchNextInvoiceNumber();
       if (purchaseOrderId) {
         loadPurchaseOrder(purchaseOrderId);
+      } else if (copyId) {
+        loadInvoiceForCopy(copyId);
       }
     }
   }, [
     editId,
+    copyId,
     loadInvoiceForEdit,
+    loadInvoiceForCopy,
     fetchNextInvoiceNumber,
     purchaseOrderId,
     loadPurchaseOrder,
@@ -436,323 +484,247 @@ function NewPurchaseInvoicePageContent() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.push("/purchases/invoices")}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Invoices
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {editId ? "Edit Purchase Invoice" : "New Purchase Invoice"}
-              </h1>
-              <p className="text-sm text-gray-600">
-                Invoice #: {invoiceNumber}
-              </p>
+      <div className="min-h-screen bg-gray-50">
+        {/* Sticky action bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-3 sticky top-0 z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => router.push("/purchases/invoices")} className="text-gray-500 -ml-2">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+              <div className="h-4 w-px bg-gray-200" />
+              <div>
+                <span className="text-base font-bold text-gray-900">
+                  {editId ? "Edit Purchase Invoice" : copyId ? "Duplicate Purchase Invoice" : "New Purchase Invoice"}
+                </span>
+                <span className="ml-2 text-sm text-gray-400">#{invoiceNumber}</span>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => router.push("/purchases/invoices")}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  {editId ? "Update Invoice" : "Create Invoice"}
-                </>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => router.push("/purchases/invoices")}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleSubmit} disabled={isSubmitting} className="bg-teal-500 hover:bg-teal-600 text-white">
+                {isSubmitting ? (
+                  <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Saving...</>
+                ) : (
+                  <><Save className="h-4 w-4 mr-1.5" />{editId ? "Update Invoice" : "Create Invoice"}</>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* Error Display */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
+        <div className="p-6 space-y-4">
+          {copyId && (
+            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-700 text-sm flex items-center gap-2">
+              <Copy className="h-4 w-4 shrink-0" />
+              Duplicating from an existing invoice — review and save to create a new invoice.
+            </div>
+          )}
 
-        {/* Form */}
-        <div className="space-y-6">
-          {/* Invoice Details */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Invoice Details
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Invoice Date <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="date"
-                  value={invoiceDate}
-                  onChange={(e) => setInvoiceDate(e.target.value)}
-                  max={new Date().toISOString().split("T")[0]}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Due Date <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
-              </div>
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
+          )}
 
-              {/* Vendor Selection */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Vendor <span className="text-red-500">*</span>
-                </label>
-                {isLoadingVendors ? (
-                  <div className="flex items-center gap-2 text-gray-500 p-3">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading vendors...
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {!selectedVendor && (
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <Input
-                          type="text"
-                          placeholder="Search vendors by name, number, or GSTIN..."
-                          value={vendorSearch}
-                          onChange={(e) => setVendorSearch(e.target.value)}
-                          className="pl-10"
-                        />
-                      </div>
-                    )}
-                    {vendorSearch && !selectedVendor && (
-                      <div className="border rounded-lg max-h-48 overflow-y-auto">
-                        {filteredVendors.length === 0 ? (
-                          <p className="p-3 text-gray-500 text-sm">
-                            No vendors found
-                          </p>
-                        ) : (
-                          filteredVendors.map((vendor) => (
-                            <button
-                              key={vendor.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedVendor(vendor);
-                                setVendorSearch("");
-                              }}
-                              className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b last:border-b-0"
-                            >
-                              <p className="font-medium">{vendor.name}</p>
-                              <p className="text-xs text-gray-500">
-                                {vendor.vendorNumber}
-                                {vendor.gstin && ` | GSTIN: ${vendor.gstin}`}
-                                {vendor.city && ` | ${vendor.city}`}
-                              </p>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
-                    {selectedVendor && (
-                      <div className="flex items-center justify-between p-4 bg-teal-50 border border-teal-200 rounded-lg">
-                        <div>
-                          <p className="font-medium text-teal-900">
-                            {selectedVendor.name}
-                          </p>
-                          <p className="text-sm text-teal-700">
-                            {selectedVendor.vendorNumber}
-                            {selectedVendor.gstin &&
-                              ` | GSTIN: ${selectedVendor.gstin}`}
-                          </p>
-                        </div>
-                        {!purchaseOrderId && (
+          {/* Row 1: Dates (left) + Vendor (right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Invoice Details</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Invoice Date <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={invoiceDate}
+                    onChange={(e) => setInvoiceDate(e.target.value)}
+                    max={new Date().toISOString().split("T")[0]}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Due Date <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
+                Vendor <span className="text-red-400">*</span>
+              </p>
+              {isLoadingVendors ? (
+                <div className="flex items-center gap-2 text-gray-500 py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Loading vendors...</span>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {!selectedVendor && (
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="text"
+                        placeholder="Search by name, vendor number, or GSTIN..."
+                        value={vendorSearch}
+                        onChange={(e) => setVendorSearch(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  )}
+                  {vendorSearch && !selectedVendor && (
+                    <div className="border rounded-lg max-h-44 overflow-y-auto bg-white shadow-sm">
+                      {filteredVendors.length === 0 ? (
+                        <p className="p-3 text-gray-500 text-sm">No vendors found</p>
+                      ) : (
+                        filteredVendors.map((vendor) => (
                           <button
+                            key={vendor.id}
                             type="button"
-                            onClick={() => setSelectedVendor(null)}
-                            className="text-teal-600 hover:text-teal-800"
+                            onClick={() => { setSelectedVendor(vendor); setVendorSearch(""); }}
+                            className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b last:border-b-0"
                           >
-                            <X className="h-5 w-5" />
+                            <p className="text-sm font-medium">{vendor.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {vendor.vendorNumber}
+                              {vendor.gstin && ` · GSTIN: ${vendor.gstin}`}
+                              {vendor.city && ` · ${vendor.city}`}
+                            </p>
                           </button>
-                        )}
+                        ))
+                      )}
+                    </div>
+                  )}
+                  {selectedVendor && (
+                    <div className="flex items-center justify-between px-4 py-3 bg-teal-50 border border-teal-200 rounded-lg">
+                      <div>
+                        <p className="font-medium text-teal-900">{selectedVendor.name}</p>
+                        <p className="text-sm text-teal-600">
+                          {selectedVendor.vendorNumber}
+                          {selectedVendor.gstin && ` · GSTIN: ${selectedVendor.gstin}`}
+                        </p>
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                      {!purchaseOrderId && (
+                        <button type="button" onClick={() => setSelectedVendor(null)} className="text-teal-500 hover:text-teal-700 ml-3">
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Items Section */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Invoice Items
-            </h2>
+          {/* Row 2: Items table */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">Line Items</p>
+              <Button type="button" variant="outline" size="sm" onClick={handleAddItem} className="h-8">
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add Item
+              </Button>
+            </div>
             {isLoadingItems ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                <span className="ml-2 text-gray-500">Loading items...</span>
+              <div className="flex items-center justify-center py-10 gap-2 text-gray-400">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Loading items...</span>
               </div>
             ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-gray-50">
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          Item
-                        </th>
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          HSN
-                        </th>
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          Qty
-                        </th>
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          Unit
-                        </th>
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          Rate
-                        </th>
-                        <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
-                          GST %
-                        </th>
-                        <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
-                          Tax Amt
-                        </th>
-                        <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
-                          Total
-                        </th>
-                        <th className="px-3 py-3 w-12"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {invoiceItems.map((item, index) => (
-                        <PurchaseOrderItemRow
-                          key={item.id}
-                          item={item}
-                          items={items}
-                          selectedItemIds={selectedItemIds}
-                          onUpdate={(updatedItem) =>
-                            handleUpdateItem(index, updatedItem)
-                          }
-                          onRemove={() => handleRemoveItem(index)}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddItem}
-                  className="mt-4"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Item
-                </Button>
-              </>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Item</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">HSN</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-20">Qty</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-12">Unit</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Rate</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">GST %</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Tax</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Total</th>
+                      <th className="px-3 py-2.5 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoiceItems.map((item, index) => (
+                      <PurchaseOrderItemRow
+                        key={item.id}
+                        item={item}
+                        items={items}
+                        selectedItemIds={selectedItemIds}
+                        onUpdate={(updatedItem) => handleUpdateItem(index, updatedItem)}
+                        onRemove={() => handleRemoveItem(index)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
 
-          {/* Notes and Terms */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Notes
-              </label>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Internal notes about this invoice..."
-                rows={3}
-              />
+          {/* Row 3: Notes/Terms (left) + Summary (right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-3 space-y-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Notes</p>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Internal notes about this invoice..."
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
+              <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Terms & Conditions</p>
+                <Textarea
+                  value={terms}
+                  onChange={(e) => setTerms(e.target.value)}
+                  placeholder="Terms and conditions..."
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
             </div>
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Terms & Conditions
-              </label>
-              <Textarea
-                value={terms}
-                onChange={(e) => setTerms(e.target.value)}
-                placeholder="Terms and conditions..."
-                rows={3}
-              />
-            </div>
-          </div>
-
-          {/* Summary Panel */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex justify-end">
-              <div className="w-full max-w-sm space-y-3">
-                <div className="flex items-center gap-2 mb-4">
-                  <Calculator className="h-5 w-5 text-gray-500" />
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Invoice Summary
-                  </h3>
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Calculator className="h-4 w-4 text-gray-400" />
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Summary</p>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Taxable Value</span>
+                  <span className="font-medium">{formatCurrency(totals.subtotal)}</span>
                 </div>
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Taxable Value</span>
-                  <span className="font-medium">
-                    {formatCurrency(totals.subtotal)}
-                  </span>
-                </div>
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">CGST</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">CGST</span>
                   <span>{formatCurrency(totals.cgst)}</span>
                 </div>
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">SGST</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">SGST</span>
                   <span>{formatCurrency(totals.sgst)}</span>
                 </div>
-
-                <div className="flex justify-between text-sm items-center">
-                  <span className="text-gray-600">Round Off</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Round Off</span>
                   <Input
-                    type="number"
-                    step="0.01"
-                    min="-1"
-                    max="1"
+                    type="number" step="0.01" min="-1" max="1"
                     value={roundOff}
-                    onChange={(e) =>
-                      setRoundOff(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setRoundOff(parseFloat(e.target.value) || 0)}
                     className="w-24 text-right h-8"
                   />
                 </div>
-
-                <div className="border-t pt-3">
-                  <div className="flex justify-between">
-                    <span className="text-lg font-semibold text-gray-900">
-                      Total
-                    </span>
-                    <span className="text-lg font-bold text-teal-600">
-                      {formatCurrency(totals.totalAmount)}
-                    </span>
-                  </div>
+                <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
+                  <span>Total</span>
+                  <span className="text-teal-600">{formatCurrency(totals.totalAmount)}</span>
                 </div>
               </div>
             </div>

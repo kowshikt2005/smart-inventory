@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, Loader2, Ban, FileDown, MapPin } from "lucide-react";
+import { ArrowLeft, Loader2, Ban, FileDown, MapPin, Edit } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { generateInvoicePDF } from "@/lib/invoice-pdf";
@@ -232,310 +232,309 @@ export default function InvoiceDetailPage() {
     );
   }
 
+  const hasLeftContent = invoice.allocations.length > 0 || !!invoice.notes;
+
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.back()}
-            className="mb-2"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
+      <div className="min-h-screen bg-gray-50">
+        {/* Sticky action bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-3 sticky top-0 z-10">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => router.back()} className="text-gray-500 -ml-2">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+              <div className="h-4 w-px bg-gray-200" />
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-gray-900">
-                  {invoice.invoiceNumber}
-                </h1>
+                <h1 className="text-base font-bold text-gray-900">{invoice.invoiceNumber}</h1>
                 {invoice.ref && (
                   <span className="inline-flex items-center rounded bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-200">
                     {invoice.ref}
                   </span>
                 )}
+                {invoice.orderNumber && (
+                  <span className="text-sm text-gray-400">· Order {invoice.orderNumber}</span>
+                )}
               </div>
-              {invoice.orderNumber && (
-                <p className="text-gray-600">
-                  Order: {invoice.orderNumber}
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
               <InvoiceStatusBadge status={invoice.effectiveStatus} />
-              <Button
-                onClick={handleDownloadPDF}
-                variant="outline"
-                disabled={isPdfLoading}
-              >
-                {isPdfLoading ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <FileDown className="h-4 w-4 mr-2" />
-                )}
-                Download PDF
+            </div>
+            <div className="flex items-center gap-2">
+              {invoice.effectiveStatus === "PENDING" && invoice.allocations.length === 0 && (
+                <Button size="sm" variant="outline" onClick={() => router.push(`/sales/invoices/new?edit=${invoice.id}`)}>
+                  <Edit className="h-4 w-4 mr-1.5" />
+                  Edit
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={handleDownloadPDF} disabled={isPdfLoading}>
+                {isPdfLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <FileDown className="h-4 w-4 mr-1.5" />}
+                PDF
               </Button>
-              {invoice.effectiveStatus !== "PAID" &&
-                invoice.effectiveStatus !== "CANCELLED" && (
-                  <Button
-                    onClick={handleCancel}
-                    variant="outline"
-                    className="text-red-600 border-red-600 hover:bg-red-50"
-                  >
-                    <Ban className="h-4 w-4 mr-2" />
-                    Cancel Invoice
-                  </Button>
-                )}
+              {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
+                <Button size="sm" variant="outline" onClick={handleCancel} className="text-red-600 border-red-200 hover:bg-red-50">
+                  <Ban className="h-4 w-4 mr-1.5" />
+                  Cancel
+                </Button>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Invoice Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          {/* Customer Info */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Customer Details</h2>
-            <div className="space-y-2 text-sm">
-              <div>
-                <p className="text-gray-600">Name</p>
-                <p className="font-medium">{invoice.customer?.name || invoice.customerName || '-'}</p>
-              </div>
+        <div className="p-6 space-y-4">
+          {/* Row 1: Bill To + Invoice Meta */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            {/* Customer — 3/5 width */}
+            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Bill To</p>
+              <p className="text-base font-semibold text-gray-900">
+                {invoice.customer?.name || invoice.customerName || "—"}
+              </p>
               {invoice.customer && (
-                <>
-                  <div>
-                    <p className="text-gray-600">Customer #</p>
-                    <p className="font-medium">{invoice.customer.customerNumber}</p>
-                  </div>
+                <div className="mt-2 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
+                  <span className="text-gray-400">Customer #</span>
+                  <span className="text-gray-700">{invoice.customer.customerNumber}</span>
                   {invoice.customer.gstin && (
-                    <div>
-                      <p className="text-gray-600">GSTIN</p>
-                      <p className="font-medium">{invoice.customer.gstin}</p>
-                    </div>
+                    <>
+                      <span className="text-gray-400">GSTIN</span>
+                      <span className="text-gray-700 font-mono text-xs">{invoice.customer.gstin}</span>
+                    </>
                   )}
                   {invoice.customer.address && (
-                    <div>
-                      <p className="text-gray-600">Address</p>
-                      <p className="font-medium">{invoice.customer.address}</p>
-                      <p className="text-gray-500">
-                        {invoice.customer.city}, {invoice.customer.state} -{" "}
-                        {invoice.customer.pincode}
-                      </p>
-                    </div>
+                    <>
+                      <span className="text-gray-400">Address</span>
+                      <span className="text-gray-700">
+                        {invoice.customer.address}
+                        {(invoice.customer.city || invoice.customer.state) && (
+                          <span className="block text-gray-500">
+                            {[invoice.customer.city, invoice.customer.state, invoice.customer.pincode].filter(Boolean).join(", ")}
+                          </span>
+                        )}
+                      </span>
+                    </>
                   )}
-                </>
+                </div>
               )}
               {!invoice.customer && invoice.isImported && (
-                <p className="text-xs text-amber-600">Imported invoice — customer not linked to masters</p>
+                <p className="text-xs text-amber-600 mt-2">Imported invoice — customer not linked to masters</p>
               )}
-            </div>
-          </div>
-
-          {/* Invoice Info */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Invoice Details</h2>
-            <div className="space-y-2 text-sm">
-              <div>
-                <p className="text-gray-600">Invoice Date</p>
-                <p className="font-medium">{formatDate(invoice.invoiceDate)}</p>
-              </div>
-              <div>
-                <p className="text-gray-600">Due Date</p>
-                <p className="font-medium">{formatDate(invoice.dueDate)}</p>
-              </div>
-              <div>
-                <p className="text-gray-600">Credit Days</p>
-                <p className="font-medium">{invoice.customer?.creditDays ?? '-'} days</p>
-              </div>
               {invoice.shippingAddress && (
-                <div className="pt-2 border-t border-gray-100">
-                  <p className="text-gray-600 flex items-center gap-1">
-                    <MapPin className="h-3.5 w-3.5" />
-                    Shipping Address
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
+                    <MapPin className="h-3 w-3" /> Ship To
                   </p>
-                  <p className="font-medium mt-0.5">{invoice.shippingAddress.label}</p>
-                  <p className="text-gray-600">{invoice.shippingAddress.address}</p>
-                  {(invoice.shippingAddress.city || invoice.shippingAddress.state || invoice.shippingAddress.pincode) && (
-                    <p className="text-gray-500">
+                  <p className="text-sm font-medium text-gray-800">{invoice.shippingAddress.label}</p>
+                  <p className="text-sm text-gray-600">{invoice.shippingAddress.address}</p>
+                  {(invoice.shippingAddress.city || invoice.shippingAddress.state) && (
+                    <p className="text-sm text-gray-500">
                       {[invoice.shippingAddress.city, invoice.shippingAddress.state, invoice.shippingAddress.pincode].filter(Boolean).join(", ")}
                     </p>
                   )}
                 </div>
               )}
             </div>
-          </div>
-        </div>
 
-        {/* Items Table */}
-        <div className="bg-white rounded-lg border border-gray-200 mb-6">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-lg font-semibold">Items</h2>
+            {/* Invoice meta — 2/5 width */}
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5 flex flex-col">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Invoice Details</p>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm flex-1">
+                <dt className="text-gray-400">Invoice Date</dt>
+                <dd className="text-gray-900 font-medium text-right">{formatDate(invoice.invoiceDate)}</dd>
+                <dt className="text-gray-400">Due Date</dt>
+                <dd className="text-gray-900 font-medium text-right">{formatDate(invoice.dueDate)}</dd>
+                <dt className="text-gray-400">Credit Days</dt>
+                <dd className="text-gray-900 font-medium text-right">{invoice.customer?.creditDays ?? "—"} days</dd>
+              </dl>
+              {/* Quick totals strip */}
+              <div className="mt-4 pt-3 border-t border-gray-100 space-y-1.5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Total</span>
+                  <span className="font-semibold text-gray-900">{formatCurrency(Number(invoice.totalAmount))}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Paid</span>
+                  <span className="font-medium text-green-600">{formatCurrency(Number(invoice.paidAmount))}</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold">
+                  <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>Balance Due</span>
+                  <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>
+                    {formatCurrency(Number(invoice.balanceAmount))}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50">
-                  <TableHead className="font-semibold">Item</TableHead>
-                  <TableHead className="font-semibold">HSN</TableHead>
-                  <TableHead className="font-semibold text-right">Qty</TableHead>
-                  <TableHead className="font-semibold text-right">Rate</TableHead>
-                  <TableHead className="font-semibold text-right">Disc %</TableHead>
-                  <TableHead className="font-semibold text-right">Taxable Amt</TableHead>
-                  <TableHead className="font-semibold text-right">GST %</TableHead>
-                  <TableHead className="font-semibold text-right">Tax Amt</TableHead>
-                  <TableHead className="font-semibold text-right">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoice.items.map((item) => {
-                  const taxableAmount = Number(item.amount);
-                  const taxAmount = Number(item.taxAmount);
-                  const totalAmount = taxableAmount + taxAmount;
 
-                  return (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{item.item?.name || item.itemName || "-"}</p>
-                          <p className="text-xs text-gray-500">
-                            {item.item?.itemCode || ""}
-                          </p>
+          {/* Row 2: Items table — full width */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">Line Items</p>
+              <span className="text-xs text-gray-400">{invoice.items.length} item{invoice.items.length !== 1 ? "s" : ""}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50">
+                    <TableHead className="font-semibold">Item</TableHead>
+                    <TableHead className="font-semibold">HSN</TableHead>
+                    <TableHead className="font-semibold text-right">Qty</TableHead>
+                    <TableHead className="font-semibold text-right">Rate</TableHead>
+                    <TableHead className="font-semibold text-right">Disc %</TableHead>
+                    <TableHead className="font-semibold text-right">Taxable</TableHead>
+                    <TableHead className="font-semibold text-right">GST %</TableHead>
+                    <TableHead className="font-semibold text-right">Tax</TableHead>
+                    <TableHead className="font-semibold text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {invoice.items.map((item) => {
+                    const taxableAmount = Number(item.amount);
+                    const taxAmount = Number(item.taxAmount);
+                    const totalAmount = taxableAmount + taxAmount;
+                    return (
+                      <TableRow key={item.id} className="hover:bg-gray-50">
+                        <TableCell>
+                          <p className="font-medium text-gray-900">{item.item?.name || item.itemName || "—"}</p>
+                          <p className="text-xs text-gray-400">{item.item?.itemCode || ""}</p>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-500">{item.item?.hsnCode || "—"}</TableCell>
+                        <TableCell className="text-right text-sm">{Number(item.quantity)} {item.item?.unit || ""}</TableCell>
+                        <TableCell className="text-right text-sm">{formatCurrency(Number(item.rate))}</TableCell>
+                        <TableCell className="text-right text-sm">
+                          {Number(item.discountPercent) > 0 ? (
+                            <span className="text-orange-600">{Number(item.discountPercent)}%</span>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">{formatCurrency(taxableAmount)}</TableCell>
+                        <TableCell className="text-right text-sm">{Number(item.taxRate)}%</TableCell>
+                        <TableCell className="text-right text-sm">{formatCurrency(taxAmount)}</TableCell>
+                        <TableCell className="text-right font-semibold">{formatCurrency(totalAmount)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          {/* Row 3: Payments/Notes (left) + Summary (right) */}
+          {hasLeftContent ? (
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+              <div className="lg:col-span-3 space-y-4">
+                {invoice.allocations.length > 0 && (
+                  <div className="bg-white rounded-lg border border-gray-200 p-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Payments Received</p>
+                    <div className="space-y-0">
+                      {invoice.allocations.map((alloc) => (
+                        <div key={alloc.id} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{alloc.payment.paymentNumber}</p>
+                            <p className="text-xs text-gray-400">{formatDate(alloc.payment.paymentDate)} · {alloc.payment.mode}</p>
+                          </div>
+                          <span className="text-sm font-semibold text-green-600">{formatCurrency(Number(alloc.amount))}</span>
                         </div>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {item.item?.hsnCode || "-"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {Number(item.quantity)} {item.item?.unit || ""}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(Number(item.rate))}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {Number(item.discountPercent) > 0 ? (
-                          <span className="text-orange-600">
-                            {Number(item.discountPercent)}%
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(taxableAmount)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {Number(item.taxRate)}%
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(taxAmount)}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(totalAmount)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
-
-        {/* Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Payments */}
-          {invoice.allocations.length > 0 && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold mb-4">Payments Received</h2>
-              <div className="space-y-3">
-                {invoice.allocations.map((alloc) => (
-                  <div
-                    key={alloc.id}
-                    className="flex justify-between text-sm border-b pb-2"
-                  >
-                    <div>
-                      <p className="font-medium">
-                        {alloc.payment.paymentNumber}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {formatDate(alloc.payment.paymentDate)} -{" "}
-                        {alloc.payment.mode}
-                      </p>
+                      ))}
                     </div>
-                    <p className="font-medium text-green-600">
-                      {formatCurrency(Number(alloc.amount))}
-                    </p>
                   </div>
-                ))}
+                )}
+                {invoice.notes && (
+                  <div className="bg-white rounded-lg border border-gray-200 p-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Notes</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{invoice.notes}</p>
+                  </div>
+                )}
+              </div>
+              <div className="lg:col-span-2">
+                <div className="bg-white rounded-lg border border-gray-200 p-5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Summary</p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Subtotal (Taxable)</span>
+                      <span className="font-medium">{formatCurrency(Number(invoice.subtotal))}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">CGST</span>
+                      <span>{formatCurrency(Number(invoice.cgst))}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">SGST</span>
+                      <span>{formatCurrency(Number(invoice.sgst))}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Total Tax</span>
+                      <span>{formatCurrency(Number(invoice.taxAmount))}</span>
+                    </div>
+                    {Number(invoice.roundOff) !== 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Round Off</span>
+                        <span>{formatCurrency(Number(invoice.roundOff))}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
+                      <span>Total</span>
+                      <span>{formatCurrency(Number(invoice.totalAmount))}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Paid</span>
+                      <span className="font-medium text-green-600">{formatCurrency(Number(invoice.paidAmount))}</span>
+                    </div>
+                    <div className="flex justify-between text-base font-bold pt-1 border-t border-gray-100">
+                      <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>Balance Due</span>
+                      <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>
+                        {formatCurrency(Number(invoice.balanceAmount))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-end">
+              <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Summary</p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Subtotal (Taxable)</span>
+                    <span className="font-medium">{formatCurrency(Number(invoice.subtotal))}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">CGST</span>
+                    <span>{formatCurrency(Number(invoice.cgst))}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">SGST</span>
+                    <span>{formatCurrency(Number(invoice.sgst))}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Total Tax</span>
+                    <span>{formatCurrency(Number(invoice.taxAmount))}</span>
+                  </div>
+                  {Number(invoice.roundOff) !== 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Round Off</span>
+                      <span>{formatCurrency(Number(invoice.roundOff))}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
+                    <span>Total</span>
+                    <span>{formatCurrency(Number(invoice.totalAmount))}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Paid</span>
+                    <span className="font-medium text-green-600">{formatCurrency(Number(invoice.paidAmount))}</span>
+                  </div>
+                  <div className="flex justify-between text-base font-bold pt-1 border-t border-gray-100">
+                    <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>Balance Due</span>
+                    <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>
+                      {formatCurrency(Number(invoice.balanceAmount))}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
-
-          {/* Totals */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Summary</h2>
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Subtotal (Taxable Amount)</span>
-                <span className="font-medium">
-                  {formatCurrency(Number(invoice.subtotal))}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">CGST</span>
-                <span className="font-medium">
-                  {formatCurrency(Number(invoice.cgst))}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">SGST</span>
-                <span className="font-medium">
-                  {formatCurrency(Number(invoice.sgst))}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Total Tax</span>
-                <span className="font-medium">
-                  {formatCurrency(Number(invoice.taxAmount))}
-                </span>
-              </div>
-              {Number(invoice.roundOff) !== 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Round Off</span>
-                  <span className="font-medium">
-                    {formatCurrency(Number(invoice.roundOff))}
-                  </span>
-                </div>
-              )}
-              <hr />
-              <div className="flex justify-between font-semibold text-lg">
-                <span>Total Amount</span>
-                <span>{formatCurrency(Number(invoice.totalAmount))}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Paid</span>
-                <span className="font-medium text-green-600">
-                  {formatCurrency(Number(invoice.paidAmount))}
-                </span>
-              </div>
-              <div className="flex justify-between font-semibold text-lg">
-                <span className="text-red-600">Balance</span>
-                <span className="text-red-600">
-                  {formatCurrency(Number(invoice.balanceAmount))}
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
-
-        {/* Notes */}
-        {invoice.notes && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
-            <h2 className="text-lg font-semibold mb-2">Notes</h2>
-            <p className="text-gray-700 whitespace-pre-wrap">{invoice.notes}</p>
-          </div>
-        )}
       </div>
     </DashboardLayout>
   );

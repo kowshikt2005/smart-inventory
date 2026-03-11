@@ -13,6 +13,7 @@ import {
   Search,
   X,
   Calculator,
+  Copy,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -60,6 +61,7 @@ function NewPurchaseOrderPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
+  const copyId = searchParams.get("copy");
 
   // Form state
   const [orderDate, setOrderDate] = useState(
@@ -186,6 +188,50 @@ function NewPurchaseOrderPageContent() {
     [router]
   );
 
+  // Load order data for copy (pre-fills vendor + items, creates a new order)
+  const loadOrderForCopy = useCallback(async (id: string) => {
+    try {
+      const response = await fetch(`/api/purchase-orders/${id}`);
+      if (response.ok) {
+        const order = await response.json();
+        setNotes(order.notes || "");
+        setTerms(order.terms || "");
+        setRoundOff(Number(order.discountAmount) || 0);
+
+        if (order.vendor) {
+          setSelectedVendor(order.vendor);
+        }
+
+        if (order.items && order.items.length > 0) {
+          interface ApiOrderItem {
+            id: string;
+            itemId: string;
+            quantity: number;
+            rate: number;
+            taxRate: number;
+            taxAmount: number;
+            amount: number;
+          }
+          setOrderItems(
+            order.items.map((item: ApiOrderItem) => ({
+              id: generateId(),
+              itemId: item.itemId,
+              quantity: Number(item.quantity),
+              rate: Number(item.rate),
+              taxRate: Number(item.taxRate),
+              taxAmount: Number(item.taxAmount),
+              amount: Number(item.amount),
+            }))
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Error loading order for copy:", err);
+      alert("Failed to load order data");
+      router.push("/purchases/orders");
+    }
+  }, [router]);
+
   // Fetch next order number for new orders
   const fetchNextOrderNumber = useCallback(async () => {
     try {
@@ -205,14 +251,17 @@ function NewPurchaseOrderPageContent() {
     fetchItems();
   }, [fetchVendors, fetchItems]);
 
-  // Load order for editing OR fetch next order number for new order
+  // Load order for editing/copying OR fetch next order number for new order
   useEffect(() => {
     if (editId) {
       loadOrderForEdit(editId);
     } else {
       fetchNextOrderNumber();
+      if (copyId) {
+        loadOrderForCopy(copyId);
+      }
     }
-  }, [editId, loadOrderForEdit, fetchNextOrderNumber]);
+  }, [editId, copyId, loadOrderForEdit, loadOrderForCopy, fetchNextOrderNumber]);
 
   // Filter vendors based on search
   const filteredVendors = useMemo(() => {
@@ -396,7 +445,7 @@ function NewPurchaseOrderPageContent() {
             </Button>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                {editId ? "Edit Purchase Order" : "New Purchase Order"}
+                {editId ? "Edit Purchase Order" : copyId ? "Duplicate Purchase Order" : "New Purchase Order"}
               </h1>
               <p className="text-sm text-gray-600">Order #: {orderNumber}</p>
             </div>
@@ -427,6 +476,14 @@ function NewPurchaseOrderPageContent() {
             </Button>
           </div>
         </div>
+
+        {/* Copy mode notice */}
+        {copyId && (
+          <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-700 text-sm flex items-center gap-2">
+            <Copy className="h-4 w-4 shrink-0" />
+            Duplicating from an existing order — review and save to create a new order.
+          </div>
+        )}
 
         {/* Error Display */}
         {error && (

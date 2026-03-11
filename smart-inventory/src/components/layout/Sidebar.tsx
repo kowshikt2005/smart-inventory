@@ -23,6 +23,10 @@ import {
   Truck,
   BarChart3,
   Landmark,
+  FileSpreadsheet,
+  Calculator,
+  GitCompareArrows,
+  CalendarDays,
   Settings,
   Shield,
 } from "lucide-react";
@@ -81,6 +85,7 @@ export const Sidebar = memo(function Sidebar() {
   const [bankCashOpen, setBankCashOpen] = useState(false);
   const [mastersOpen, setMastersOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [gstOpen, setGstOpen] = useState(false);
 
 
   const permissions = session?.user?.permissions as RolePermissions | undefined;
@@ -97,6 +102,7 @@ export const Sidebar = memo(function Sidebar() {
   const showLedger = canViewAny(permissions, ['ledger_customers', 'ledger_stock', 'ledger_stock_journal']);
   const showFinance = showBankCash || showLedger;
   const showReports = canView(permissions, 'reports');
+  const showGST = canView(permissions, 'gst');
   const showMasters = canViewAny(permissions, [
     'masters_customers', 'masters_vendors', 'masters_employees', 'masters_rate_sheets', 'masters_items', 'masters_roles',
   ]);
@@ -128,6 +134,13 @@ export const Sidebar = memo(function Sidebar() {
     { icon: Users, label: "Customer Ledger", href: "/ledger/customers", permKey: "ledger_customers" },
     { icon: Package, label: "Stock Ledger", href: "/ledger/items", permKey: "ledger_stock" },
     { icon: ClipboardList, label: "Stock Journal", href: "/ledger/stock-journal", permKey: "ledger_stock_journal" },
+  ], []);
+
+  const gstItems: NavItem[] = useMemo(() => [
+    { icon: FileSpreadsheet,  label: "GSTR-1",  href: "/gst/gstr-1",  permKey: "gst" },
+    { icon: GitCompareArrows, label: "GSTR-2",  href: "/gst/gstr-2",  permKey: "gst" },
+    { icon: Calculator,       label: "GSTR-3B", href: "/gst/gstr-3b", permKey: "gst" },
+    { icon: CalendarDays,     label: "GSTR-9",  href: "/gst/gstr-9",  permKey: "gst" },
   ], []);
 
   const masterItems: NavItem[] = useMemo(() => [
@@ -292,18 +305,37 @@ export const Sidebar = memo(function Sidebar() {
         )}
 
         {/* ANALYTICS section */}
-        {showReports && (
+        {(showReports || showGST) && (
           <>
             <div className="mx-3 my-3 h-px bg-white/[0.12]" />
             <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
               Analytics
             </p>
-            <div className="mb-0.5">
-              <Link href="/reports" className={navLinkClass(pathname.startsWith("/reports"))}>
-                <BarChart3 className="h-5 w-5" strokeWidth={1.5} />
-                <span>Reports</span>
-              </Link>
-            </div>
+            {showReports && (
+              <div className="mb-0.5">
+                <Link href="/reports" className={navLinkClass(pathname.startsWith("/reports"))}>
+                  <BarChart3 className="h-5 w-5" strokeWidth={1.5} />
+                  <span>Reports</span>
+                </Link>
+              </div>
+            )}
+            {showGST && (
+              <div className="mb-0.5">
+                <button
+                  onClick={() => setGstOpen(!gstOpen)}
+                  className={sectionButtonClass(pathname.startsWith("/gst"))}
+                >
+                  <div className="flex items-center gap-3">
+                    <FileSpreadsheet className="h-5 w-5" strokeWidth={1.5} />
+                    <span>GST</span>
+                  </div>
+                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", gstOpen && "rotate-180")} />
+                </button>
+                <CollapsibleSection isOpen={gstOpen}>
+                  {renderNavItems(gstItems)}
+                </CollapsibleSection>
+              </div>
+            )}
           </>
         )}
 

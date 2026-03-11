@@ -90,7 +90,8 @@ export default function ClaimReportPage() {
 
   // Fetch claim report data
   const { data, error, isLoading } = useSWR(
-    `/api/reports/claim-report?${queryString}`
+    `/api/reports/claim-report?${queryString}`,
+    { revalidateIfStale: false }
   );
 
   const claims: ClaimRecord[] = useMemo(() => data?.claims || [], [data]);

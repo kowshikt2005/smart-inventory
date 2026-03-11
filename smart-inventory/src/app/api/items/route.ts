@@ -95,8 +95,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate unique item code
-    const itemCode = `item-${Date.now()}`;
+    // Generate sequential item code (item-1, item-2, ...)
+    const lastItem = await db.item.findFirst({
+      where: { itemCode: { startsWith: 'item-' } },
+      orderBy: { createdAt: 'desc' },
+      select: { itemCode: true },
+    });
+    const lastNum = lastItem ? parseInt(lastItem.itemCode.replace('item-', ''), 10) || 0 : 0;
+    const itemCode = `item-${lastNum + 1}`;
 
     // Create item with inventory record in transaction (without includes for speed)
     const newItem = await transaction(async (tx) => {

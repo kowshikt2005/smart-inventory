@@ -290,244 +290,229 @@ function EditSalesInvoiceContent() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-6xl mx-auto">
-        <div className="mb-6">
-          <Button variant="ghost" size="sm" onClick={() => router.push("/sales/invoices")} className="mb-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Invoices
-          </Button>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Edit Sales Invoice{invoiceNumber ? ` - ${invoiceNumber}` : ""}
-          </h1>
-          <p className="text-gray-600">
-            Update invoice details for {customerName}
-          </p>
-        </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">{error}</div>
-        )}
-
-        <div className="space-y-6">
-          {/* Invoice Details */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Invoice Details</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="min-h-screen bg-gray-50">
+        {/* Sticky action bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-3 sticky top-0 z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => router.push("/sales/invoices")} className="text-gray-500 -ml-2">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+              <div className="h-4 w-px bg-gray-200" />
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Number</label>
-                <Input value={invoiceNumber} disabled className="bg-gray-50" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
-                <Input value={customerName} disabled className="bg-gray-50" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Due Date *</label>
-                <Input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
+                <span className="text-base font-bold text-gray-900">
+                  Edit Sales Invoice{invoiceNumber ? ` — ${invoiceNumber}` : ""}
+                </span>
+                {customerName && (
+                  <span className="ml-2 text-sm text-gray-400">{customerName}</span>
+                )}
               </div>
             </div>
-          </div>
-
-          {/* Items */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Items</h2>
-              <Button variant="outline" size="sm" onClick={handleAddItem}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Item
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => router.push("/sales/invoices")}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleSubmit} disabled={isSubmitting} className="bg-teal-500 hover:bg-teal-600 text-white">
+                {isSubmitting ? (
+                  <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Updating...</>
+                ) : (
+                  <><Save className="h-4 w-4 mr-1.5" />Update Invoice</>
+                )}
               </Button>
             </div>
+          </div>
+        </div>
 
-            {/* Brand / Sub-brand filter */}
-            {uniqueBrands.length > 0 && (
-              <div className="flex gap-3 mb-4">
-                <select
-                  value={filterBrandId}
-                  onChange={(e) => { setFilterBrandId(e.target.value); setFilterSubBrandId(""); }}
-                  className="flex-1 h-9 rounded-md border border-gray-200 px-3 text-sm bg-white"
-                >
-                  <option value="">All Brands</option>
-                  {uniqueBrands.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-                <select
-                  value={filterSubBrandId}
-                  onChange={(e) => setFilterSubBrandId(e.target.value)}
-                  disabled={filteredSubBrands.length === 0}
-                  className="flex-1 h-9 rounded-md border border-gray-200 px-3 text-sm bg-white disabled:opacity-50"
-                >
-                  <option value="">All Sub-brands</option>
-                  {filteredSubBrands.map((sb) => (
-                    <option key={sb.id} value={sb.id}>{sb.name}</option>
-                  ))}
-                </select>
+        <div className="p-6 space-y-4">
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
+          )}
+
+          {/* Row 1: Invoice meta (read-only left) + Due date (editable right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Invoice Info</p>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-sm">
+                <span className="text-gray-400">Invoice #</span>
+                <span className="font-medium text-gray-900">{invoiceNumber}</span>
+                <span className="text-gray-400">Customer</span>
+                <span className="font-medium text-gray-900">{customerName || "—"}</span>
               </div>
-            )}
+            </div>
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Edit Details</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Due Date <span className="text-red-500">*</span>
+                </label>
+                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              </div>
+            </div>
+          </div>
 
-            <div className="space-y-3">
-              {invoiceItems.map((invoiceItem, index) => {
-                // Show filtered items but always include the currently selected item
-                const rowItems = filterBrandId || filterSubBrandId
-                  ? [
-                      ...filteredItems,
-                      ...(invoiceItem.itemId && !filteredItems.find(i => i.id === invoiceItem.itemId)
-                        ? items.filter(i => i.id === invoiceItem.itemId)
-                        : []),
-                    ]
-                  : items;
-                return (
-                <div key={invoiceItem.id} className="grid grid-cols-12 gap-2 items-end">
-                  <div className="col-span-4">
-                    {index === 0 && (
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Item</label>
-                    )}
+          {/* Row 2: Items table */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">Line Items</p>
+              <div className="flex items-center gap-3">
+                {uniqueBrands.length > 0 && (
+                  <>
                     <select
-                      value={invoiceItem.itemId}
-                      onChange={(e) => handleItemChange(index, "itemId", e.target.value)}
-                      className="w-full h-10 rounded-md border border-gray-200 px-3 text-sm"
+                      value={filterBrandId}
+                      onChange={(e) => { setFilterBrandId(e.target.value); setFilterSubBrandId(""); }}
+                      className="h-8 rounded-md border border-gray-200 px-2 text-xs bg-white"
                     >
-                      <option value="">Select item...</option>
-                      {rowItems.map((item) => (
-                        <option
-                          key={item.id}
-                          value={item.id}
-                          disabled={usedItemIds.has(item.id) && invoiceItem.itemId !== item.id}
-                        >
-                          {item.itemCode} - {item.name}
-                        </option>
+                      <option value="">All Brands</option>
+                      {uniqueBrands.map((b) => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
                       ))}
                     </select>
-                  </div>
-                  <div className="col-span-2">
-                    {index === 0 && (
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Qty</label>
-                    )}
-                    <Input
-                      type="number"
-                      step="0.001"
-                      min="0"
-                      value={invoiceItem.quantity || ""}
-                      onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    {index === 0 && (
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Rate</label>
-                    )}
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={invoiceItem.rate || ""}
-                      onChange={(e) => handleItemChange(index, "rate", e.target.value)}
-                    />
-                  </div>
-                  <div className="col-span-1">
-                    {index === 0 && (
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Tax %</label>
-                    )}
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={invoiceItem.taxRate || ""}
-                      onChange={(e) => handleItemChange(index, "taxRate", e.target.value)}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    {index === 0 && (
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Amount</label>
-                    )}
-                    <Input
-                      value={(invoiceItem.amount + invoiceItem.taxAmount).toFixed(2)}
-                      disabled
-                      className="bg-gray-50 text-right"
-                    />
-                  </div>
-                  <div className="col-span-1">
-                    {index === 0 && (
-                      <label className="block text-xs font-medium text-gray-600 mb-1">&nbsp;</label>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveItem(index)}
-                      disabled={invoiceItems.length === 1}
-                      className="text-red-500 hover:text-red-700"
+                    <select
+                      value={filterSubBrandId}
+                      onChange={(e) => setFilterSubBrandId(e.target.value)}
+                      disabled={filteredSubBrands.length === 0}
+                      className="h-8 rounded-md border border-gray-200 px-2 text-xs bg-white disabled:opacity-40"
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
+                      <option value="">All Sub-brands</option>
+                      {filteredSubBrands.map((sb) => (
+                        <option key={sb.id} value={sb.id}>{sb.name}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
+                <Button variant="outline" size="sm" onClick={handleAddItem} className="h-8">
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add Item
+                </Button>
+              </div>
             </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Item</th>
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Qty</th>
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Rate</th>
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-20">Tax %</th>
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-32">Amount</th>
+                    <th className="px-3 py-2.5 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {invoiceItems.map((invoiceItem, index) => {
+                    const rowItems = filterBrandId || filterSubBrandId
+                      ? [
+                          ...filteredItems,
+                          ...(invoiceItem.itemId && !filteredItems.find(i => i.id === invoiceItem.itemId)
+                            ? items.filter(i => i.id === invoiceItem.itemId)
+                            : []),
+                        ]
+                      : items;
+                    return (
+                      <tr key={invoiceItem.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-2">
+                          <select
+                            value={invoiceItem.itemId}
+                            onChange={(e) => handleItemChange(index, "itemId", e.target.value)}
+                            className="w-full h-9 rounded-md border border-gray-200 px-3 text-sm bg-white"
+                          >
+                            <option value="">Select item...</option>
+                            {rowItems.map((item) => (
+                              <option
+                                key={item.id}
+                                value={item.id}
+                                disabled={usedItemIds.has(item.id) && invoiceItem.itemId !== item.id}
+                              >
+                                {item.itemCode} - {item.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Input
+                            type="number" step="0.001" min="0"
+                            value={invoiceItem.quantity || ""}
+                            onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
+                            className="text-right h-9"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <Input
+                            type="number" step="0.01" min="0"
+                            value={invoiceItem.rate || ""}
+                            onChange={(e) => handleItemChange(index, "rate", e.target.value)}
+                            className="text-right h-9"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <Input
+                            type="number" step="0.01" min="0"
+                            value={invoiceItem.taxRate || ""}
+                            onChange={(e) => handleItemChange(index, "taxRate", e.target.value)}
+                            className="text-right h-9"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <Input
+                            value={(invoiceItem.amount + invoiceItem.taxAmount).toFixed(2)}
+                            disabled
+                            className="bg-gray-50 text-right h-9 font-medium"
+                          />
+                        </td>
+                        <td className="px-2 py-2">
+                          <Button
+                            variant="ghost" size="sm"
+                            onClick={() => handleRemoveItem(index)}
+                            disabled={invoiceItems.length === 1}
+                            className="h-9 w-9 p-0 text-gray-400 hover:text-red-500"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-            {/* Totals */}
-            <div className="mt-6 border-t pt-4">
-              <div className="flex justify-end">
-                <div className="w-64 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Subtotal:</span>
-                    <span className="font-medium">{totals.subtotal.toFixed(2)}</span>
+          {/* Row 3: Notes (left) + Summary (right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Notes</p>
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Add notes..."
+                rows={4}
+                className="resize-none"
+              />
+            </div>
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Summary</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Subtotal</span>
+                  <span className="font-medium">{totals.subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Tax</span>
+                  <span className="font-medium">{totals.totalTax.toFixed(2)}</span>
+                </div>
+                {totals.roundOff !== 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Round Off</span>
+                    <span className="font-medium">{totals.roundOff.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Tax:</span>
-                    <span className="font-medium">{totals.totalTax.toFixed(2)}</span>
-                  </div>
-                  {totals.roundOff !== 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Round Off:</span>
-                      <span className="font-medium">{totals.roundOff.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-lg font-bold border-t pt-2">
-                    <span>Total:</span>
-                    <span>{totals.totalAmount.toFixed(2)}</span>
-                  </div>
+                )}
+                <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
+                  <span>Total</span>
+                  <span className="text-teal-600">{totals.totalAmount.toFixed(2)}</span>
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Notes */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Notes</h2>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add notes..."
-              rows={3}
-            />
-          </div>
-
-          {/* Submit */}
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => router.push("/sales/invoices")}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="bg-teal-500 hover:bg-teal-600"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Updating...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Update Invoice
-                </>
-              )}
-            </Button>
           </div>
         </div>
       </div>

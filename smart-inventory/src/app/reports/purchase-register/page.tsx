@@ -87,7 +87,8 @@ export default function PurchaseRegisterPage() {
   }, [startDate, endDate, vendorId]);
 
   const { data, isLoading } = useSWR(
-    startDate && endDate ? `/api/reports/purchase-register?${queryString}` : null
+    startDate && endDate ? `/api/reports/purchase-register?${queryString}` : null,
+    { revalidateIfStale: false }
   );
 
   // Process months data to include year and month index

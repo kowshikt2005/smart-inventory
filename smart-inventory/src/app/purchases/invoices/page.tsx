@@ -10,13 +10,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -28,7 +21,6 @@ import {
 import { PurchaseInvoiceStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
 import {
   Plus,
-  MoreHorizontal,
   Edit,
   Trash2,
   Loader2,
@@ -40,11 +32,12 @@ import {
   CreditCard,
   AlertCircle,
   Filter,
+  Copy,
 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { ExportButtons } from "@/components/ui/ExportButtons";
 import { exportToExcel, exportToPDF, fmtDateExport, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -99,6 +92,33 @@ export default function PurchaseInvoicesPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+
+  // Clipboard copy/paste
+  const [copiedInvoiceId, setCopiedInvoiceId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
+
+  const handleCopyInvoice = (id: string) => {
+    setCopiedInvoiceId(id);
+    setContextMenu(null);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (!copiedInvoiceId) return;
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [contextMenu]);
 
   const debouncedSearch = useDebounce(searchQuery, 300);
 
@@ -421,8 +441,35 @@ export default function PurchaseInvoicesPage() {
           )}
         </div>
 
+        {/* Clipboard copy banner */}
+        {copiedInvoiceId && (
+          <div className="mb-3 flex items-center gap-3 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-800">
+            <Copy className="h-4 w-4 shrink-0" />
+            <span>Invoice copied — right-click anywhere in the table to paste.</span>
+            <button onClick={() => setCopiedInvoiceId(null)} className="ml-auto text-indigo-400 hover:text-indigo-600">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Context menu */}
+        {contextMenu && (
+          <div
+            className="fixed z-50 min-w-[140px] rounded-lg border border-gray-200 bg-white shadow-lg py-1 text-sm"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+          >
+            <button
+              onClick={() => { router.push(`/purchases/invoices/new?copy=${copiedInvoiceId}`); setCopiedInvoiceId(null); setContextMenu(null); }}
+              className="flex w-full items-center gap-2 px-3 py-2 hover:bg-indigo-50 text-gray-700 hover:text-indigo-700"
+            >
+              <Copy className="h-4 w-4" />
+              Paste Invoice
+            </button>
+          </div>
+        )}
+
         {/* Invoices Table */}
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div ref={tableRef} onContextMenu={handleContextMenu} className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -434,7 +481,7 @@ export default function PurchaseInvoicesPage() {
                   <TableHead className="font-semibold text-center">Status</TableHead>
                   <TableHead className="font-semibold text-right">Total</TableHead>
                   <TableHead className="font-semibold text-right">Balance</TableHead>
-                  <TableHead className="font-semibold">Actions</TableHead>
+                  <TableHead className="font-semibold w-28">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -508,54 +555,59 @@ export default function PurchaseInvoicesPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => router.push(`/purchases/invoices/${invoice.id}`)}
+                        <div className="flex items-center gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-gray-500 hover:text-teal-600"
+                            onClick={() => router.push(`/purchases/invoices/${invoice.id}`)}
+                            title="View Details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {invoice.effectiveStatus === "PENDING" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-gray-500 hover:text-blue-600"
+                              onClick={() => router.push(`/purchases/invoices/new?edit=${invoice.id}`)}
+                              title="Edit Invoice"
                             >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-
-                            {invoice.effectiveStatus === "PENDING" && (
-                              <DropdownMenuItem
-                                onClick={() => router.push(`/purchases/invoices/new?edit=${invoice.id}`)}
-                              >
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit Invoice
-                              </DropdownMenuItem>
-                            )}
-
-                            {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    router.push(`/purchases/payments/new?purchaseInvoiceId=${invoice.id}`)
-                                  }
-                                >
-                                  <CreditCard className="h-4 w-4 mr-2" />
-                                  Make Payment
-                                </DropdownMenuItem>
-                              </>
-                            )}
-
-                            {invoice.effectiveStatus === "PENDING" && (
-                              <DropdownMenuItem
-                                onClick={() => handleDelete(invoice.id)}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete Invoice
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className={`h-8 w-8 p-0 hover:text-indigo-600 ${copiedInvoiceId === invoice.id ? "text-indigo-600 bg-indigo-50" : "text-gray-500"}`}
+                            onClick={() => handleCopyInvoice(invoice.id)}
+                            title="Copy Invoice (then right-click to paste)"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-gray-500 hover:text-green-600"
+                              onClick={() => router.push(`/purchases/payments/new?purchaseInvoiceId=${invoice.id}`)}
+                              title="Make Payment"
+                            >
+                              <CreditCard className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {invoice.effectiveStatus === "PENDING" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
+                              onClick={() => handleDelete(invoice.id)}
+                              title="Delete Invoice"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))

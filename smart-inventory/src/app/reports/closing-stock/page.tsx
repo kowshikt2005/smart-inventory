@@ -79,7 +79,8 @@ export default function ClosingStockPage() {
 
   // Fetch closing stock data
   const { data, error, isLoading } = useSWR(
-    `/api/reports/closing-stock?${queryString}`
+    `/api/reports/closing-stock?${queryString}`,
+    { revalidateIfStale: false }
   );
 
   const items: StockItem[] = useMemo(() => data?.items || [], [data]);

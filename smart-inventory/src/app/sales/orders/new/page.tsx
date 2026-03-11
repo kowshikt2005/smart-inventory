@@ -15,6 +15,7 @@ import {
   X,
   Calculator,
   Settings2,
+  Copy,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -111,6 +112,7 @@ function NewSalesOrderPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
+  const copyId = searchParams.get("copy");
 
   // Form state
   const [orderDate, setOrderDate] = useState(
@@ -282,6 +284,73 @@ function NewSalesOrderPageContent() {
     }
   }, [router]);
 
+  // Load order data for copy (pre-fills form but creates a new order)
+  const loadOrderForCopy = useCallback(async (id: string) => {
+    try {
+      const response = await fetch(`/api/sales-orders/${id}`);
+      if (response.ok) {
+        const order = await response.json();
+
+        setReferenceNumber(order.referenceNumber || "");
+        setNotes(order.notes || "");
+        setTerms(order.terms || "");
+        setRoundOff(Number(order.discountAmount) || 0);
+
+        // Set customer
+        if (order.customer) {
+          try {
+            const customerResponse = await fetch(`/api/customers/${order.customer.id}`);
+            if (customerResponse.ok) {
+              const raw = await customerResponse.json();
+              const entries: Array<{ rateSheet: Customer["rateSheet"] & { createdAt?: string } }> = raw.rateSheets || [];
+              const sorted = [...entries].sort((a, b) => {
+                const aDate = new Date(a.rateSheet?.createdAt || 0).getTime();
+                const bDate = new Date(b.rateSheet?.createdAt || 0).getTime();
+                return bDate - aDate;
+              });
+              setSelectedCustomer({ ...raw, rateSheet: sorted.length > 0 ? sorted[0].rateSheet : null });
+            } else {
+              setSelectedCustomer(order.customer);
+            }
+          } catch {
+            setSelectedCustomer(order.customer);
+          }
+        }
+
+        // Set order items
+        if (order.items && order.items.length > 0) {
+          interface ApiOrderItem {
+            id: string;
+            itemId: string;
+            quantity: number;
+            rate: number;
+            discountPercent?: number;
+            taxRate: number;
+            taxAmount: number;
+            amount: number;
+          }
+          setOrderItems(
+            order.items.map((item: ApiOrderItem) => ({
+              id: generateId(),
+              itemId: item.itemId,
+              quantity: Number(item.quantity),
+              rate: Number(item.rate),
+              discountPercent: Number(item.discountPercent) || 0,
+              taxRate: Number(item.taxRate),
+              taxAmount: Number(item.taxAmount),
+              amount: Number(item.amount),
+              isGstInclusive: Number(item.discountPercent) > 0,
+            }))
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Error loading order for copy:", err);
+      alert("Failed to load order data");
+      router.push("/sales/orders");
+    }
+  }, [router]);
+
   // Fetch next order number for new orders
   const fetchNextOrderNumber = useCallback(async () => {
     try {
@@ -302,15 +371,17 @@ function NewSalesOrderPageContent() {
     fetchBrandsAndSubBrands();
   }, [fetchCustomers, fetchItems, fetchBrandsAndSubBrands]);
 
-  // Load order for editing OR fetch next order number for new order
+  // Load order for editing/copying OR fetch next order number for new order
   useEffect(() => {
     if (editId) {
       loadOrderForEdit(editId);
     } else {
-      // Fetch next order number for new orders
       fetchNextOrderNumber();
+      if (copyId) {
+        loadOrderForCopy(copyId);
+      }
     }
-  }, [editId, loadOrderForEdit, fetchNextOrderNumber]);
+  }, [editId, copyId, loadOrderForEdit, loadOrderForCopy, fetchNextOrderNumber]);
 
   // Filter customers based on search
   const filteredCustomers = useMemo(() => {
@@ -745,7 +816,7 @@ function NewSalesOrderPageContent() {
             </Button>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                {editId ? "Edit Sales Order" : "New Sales Order"}
+                {editId ? "Edit Sales Order" : copyId ? "Duplicate Sales Order" : "New Sales Order"}
               </h1>
               <p className="text-sm text-gray-600">
                 Order #: {orderNumber}
@@ -778,6 +849,14 @@ function NewSalesOrderPageContent() {
             </Button>
           </div>
         </div>
+
+        {/* Copy mode notice */}
+        {copyId && (
+          <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-700 text-sm flex items-center gap-2">
+            <Copy className="h-4 w-4 shrink-0" />
+            Duplicating from an existing order — review and save to create a new order.
+          </div>
+        )}
 
         {/* Error Display */}
         {error && (

@@ -10,7 +10,7 @@ import { checkPermission } from "@/lib/api-auth";
 
 export async function GET(request: Request) {
   try {
-    const { error } = await checkPermission('reports', 'view');
+    const { error } = await checkPermission('gst', 'view');
     if (error) return error;
 
     const { searchParams } = new URL(request.url);

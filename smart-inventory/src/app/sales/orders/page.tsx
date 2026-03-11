@@ -40,8 +40,9 @@ import {
   ArrowRight,
   FileText,
   Filter,
+  Copy,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -123,6 +124,33 @@ export default function SalesOrdersPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+
+  // Clipboard copy/paste
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
+
+  const handleCopyOrder = (id: string) => {
+    setCopiedOrderId(id);
+    setContextMenu(null);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (!copiedOrderId) return;
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [contextMenu]);
 
   // Fetch brands and customers for filters
   const { data: brandsData } = useSWR("/api/brands");
@@ -483,8 +511,35 @@ export default function SalesOrdersPage() {
           )}
         </div>
 
+        {/* Clipboard copy banner */}
+        {copiedOrderId && (
+          <div className="mb-3 flex items-center gap-3 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-800">
+            <Copy className="h-4 w-4 shrink-0" />
+            <span>Order copied — right-click anywhere in the table to paste.</span>
+            <button onClick={() => setCopiedOrderId(null)} className="ml-auto text-indigo-400 hover:text-indigo-600">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Context menu */}
+        {contextMenu && (
+          <div
+            className="fixed z-50 min-w-[140px] rounded-lg border border-gray-200 bg-white shadow-lg py-1 text-sm"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+          >
+            <button
+              onClick={() => { router.push(`/sales/orders/new?copy=${copiedOrderId}`); setCopiedOrderId(null); setContextMenu(null); }}
+              className="flex w-full items-center gap-2 px-3 py-2 hover:bg-indigo-50 text-gray-700 hover:text-indigo-700"
+            >
+              <Copy className="h-4 w-4" />
+              Paste Order
+            </button>
+          </div>
+        )}
+
         {/* Orders Table */}
-        <div className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
+        <div ref={tableRef} onContextMenu={handleContextMenu} className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <Table aria-label="Sales orders list">
               <TableHeader>
@@ -639,6 +694,12 @@ export default function SalesOrdersPage() {
                                 Edit Order
                               </DropdownMenuItem>
                             )}
+
+                            {/* Copy */}
+                            <DropdownMenuItem onClick={() => handleCopyOrder(order.id)}>
+                              <Copy className="h-4 w-4 mr-2" />
+                              {copiedOrderId === order.id ? "Copied!" : "Copy Order"}
+                            </DropdownMenuItem>
 
                             {/* Create Invoice - for all non-rejected orders */}
                             {order.status !== "REJECTED" && (

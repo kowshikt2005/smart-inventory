@@ -185,7 +185,8 @@ export default function OutstandingReportPage() {
   }, [tab, customerId, vendorId, fromDate, toDate]);
 
   const { data, isLoading } = useSWR(
-    `/api/reports/outstanding?${queryString}`
+    `/api/reports/outstanding?${queryString}`,
+    { revalidateIfStale: false }
   );
 
   const invoices: OutstandingInvoice[] = data?.invoices || [];

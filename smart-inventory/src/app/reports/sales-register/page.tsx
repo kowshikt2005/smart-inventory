@@ -87,7 +87,8 @@ export default function SalesRegisterPage() {
   }, [startDate, endDate, customerId]);
 
   const { data, isLoading } = useSWR(
-    startDate && endDate ? `/api/reports/sales-register?${queryString}` : null
+    startDate && endDate ? `/api/reports/sales-register?${queryString}` : null,
+    { revalidateIfStale: false }
   );
 
   // Process months data to include year and month index

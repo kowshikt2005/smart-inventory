@@ -16,9 +16,9 @@ export function SWRProvider({ children }: { children: ReactNode }) {
   const swrConfig = useMemo(
     () => ({
       fetcher,
-      revalidateOnFocus: true, // Refetch when window regains focus (e.g. navigating back)
+      revalidateOnFocus: false, // Don't refetch on window focus — reports are heavy queries
       revalidateOnReconnect: true, // Refetch when reconnecting
-      revalidateIfStale: true, // Revalidate stale data automatically
+      revalidateIfStale: true, // Revalidate stale data on mount
       dedupingInterval: 5000, // Dedupe requests within 5 seconds
       refreshInterval: 0, // Don't auto-refresh
       shouldRetryOnError: false, // Don't retry on error

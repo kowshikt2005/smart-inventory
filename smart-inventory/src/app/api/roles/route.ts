@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { Prisma } from '@/generated/prisma';
 import { checkPermission } from '@/lib/api-auth';
-import { ALL_PERMISSION_KEYS } from '@/types/permissions';
+import { ALL_PERMISSION_KEYS, fillMissingPermissions } from '@/types/permissions';
 import type { RolePermissions, PagePermission } from '@/types/permissions';
 
 // GET /api/roles — list all roles
@@ -22,7 +22,13 @@ export async function GET(request: Request) {
       },
     });
 
-    return NextResponse.json(roles);
+    // Normalize: fill missing permission keys so the Roles UI always shows every key
+    const normalized = roles.map((role: typeof roles[number]) => ({
+      ...role,
+      permissions: fillMissingPermissions((role.permissions ?? {}) as Partial<RolePermissions>),
+    }));
+
+    return NextResponse.json(normalized);
   } catch (err) {
     console.error('Error fetching roles:', err);
     return NextResponse.json({ error: 'Failed to fetch roles' }, { status: 500 });

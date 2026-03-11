@@ -22,6 +22,7 @@ export const PERMISSION_PAGES = {
   ledger_stock:         { label: 'Stock Ledger',       section: 'Ledger' },
   ledger_stock_journal: { label: 'Stock Journal',      section: 'Ledger' },
   reports:              { label: 'Reports',            section: 'Analytics' },
+  gst:                  { label: 'GST',                section: 'Analytics' },
   masters_customers:    { label: 'Customers',          section: 'Masters' },
   masters_vendors:      { label: 'Vendors',            section: 'Masters' },
   masters_employees:    { label: 'Employees',          section: 'Masters' },
@@ -42,6 +43,15 @@ export type RolePermissions = Record<PermissionKey, PagePermission>;
 
 /** All permission keys as an array (useful for iteration) */
 export const ALL_PERMISSION_KEYS = Object.keys(PERMISSION_PAGES) as PermissionKey[];
+
+/** Fill any missing permission keys with {view:false,edit:false}. Safe to call on stored DB JSON. */
+export function fillMissingPermissions(stored: Partial<RolePermissions>): RolePermissions {
+  const full = { ...stored } as RolePermissions;
+  for (const key of ALL_PERMISSION_KEYS) {
+    if (!full[key]) full[key] = { view: false, edit: false };
+  }
+  return full;
+}
 
 /** Get unique sections for grouping in UI */
 export function getPermissionSections(): { section: string; keys: PermissionKey[] }[] {
@@ -73,6 +83,11 @@ export const PATH_TO_PERMISSION: Record<string, PermissionKey> = {
   '/ledger/items': 'ledger_stock',
   '/ledger/stock-journal': 'ledger_stock_journal',
   '/reports': 'reports',
+  '/gst': 'gst',
+  '/gst/gstr-1': 'gst',
+  '/gst/gstr-2': 'gst',
+  '/gst/gstr-3b': 'gst',
+  '/gst/gstr-9': 'gst',
   '/masters/customers': 'masters_customers',
   '/masters/vendors': 'masters_vendors',
   '/masters/employees': 'masters_employees',
@@ -110,6 +125,10 @@ export const API_TO_PERMISSION: Record<string, PermissionKey> = {
   '/api/ledger/items': 'ledger_stock',
   '/api/ledger/bank-accounts': 'bank_ledger',
   '/api/reports': 'reports',
+  '/api/reports/gstr-1': 'gst',
+  '/api/reports/gstr-2': 'gst',
+  '/api/reports/gstr-3b': 'gst',
+  '/api/reports/gstr-9': 'gst',
   '/api/dashboard': 'dashboard',
   '/api/roles': 'masters_roles',
   '/api/settings': 'settings',

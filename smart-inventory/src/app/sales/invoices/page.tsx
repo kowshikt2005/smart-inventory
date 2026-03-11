@@ -10,13 +10,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { InvoiceStatusBadge } from "@/components/invoices/InvoiceStatusBadge";
 import {
@@ -27,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  MoreHorizontal,
   Edit,
   Loader2,
   X,
@@ -40,12 +32,13 @@ import {
   Ban,
   Filter,
   FileDown,
+  Copy,
 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { ExportButtons } from "@/components/ui/ExportButtons";
 import { exportToExcel, exportToPDF, fmtDateExport, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
 import { generateInvoicePDF } from "@/lib/invoice-pdf";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 
@@ -123,6 +116,11 @@ export default function SalesInvoicesPage() {
   const [bulkPdfLoading, setBulkPdfLoading] = useState(false);
   // Per-row PDF loading
   const [rowPdfLoading, setRowPdfLoading] = useState<string | null>(null);
+  // Clipboard-style copy/paste
+  const [copiedInvoiceId, setCopiedInvoiceId] = useState<string | null>(null);
+  const [isPasting, setIsPasting] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
 
   // Fetch brands and customers for filters
   const { data: brandsData } = useSWR("/api/brands");
@@ -248,6 +246,52 @@ export default function SalesInvoicesPage() {
       setBulkPdfLoading(false);
     }
   };
+
+  // ── Clipboard copy / paste ────────────────────────────────────
+  const handleCopyInvoice = (invoiceId: string) => {
+    setCopiedInvoiceId(invoiceId);
+    setContextMenu(null);
+  };
+
+  const handlePasteInvoice = async () => {
+    if (!copiedInvoiceId) return;
+    setContextMenu(null);
+    setIsPasting(true);
+    try {
+      const response = await fetch("/api/sales-invoices/copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceInvoiceId: copiedInvoiceId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to paste invoice");
+      setCopiedInvoiceId(null);
+      router.push(`/sales/invoices/${data.id}`);
+    } catch (err) {
+      console.error("Error pasting invoice:", err);
+      alert(err instanceof Error ? err.message : "Failed to create copy");
+    } finally {
+      setIsPasting(false);
+    }
+  };
+
+  // Right-click context menu
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (!copiedInvoiceId) return;
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [contextMenu]);
 
   // ── Selection helpers ────────────────────────────────────────
   const toggleSelect = (id: string) => {
@@ -538,8 +582,37 @@ export default function SalesInvoicesPage() {
           </div>
         )}
 
+        {/* Clipboard copy banner */}
+        {copiedInvoiceId && (
+          <div className="mb-3 flex items-center gap-3 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-800">
+            <Copy className="h-4 w-4 shrink-0" />
+            <span>Invoice copied — right-click anywhere in the table to paste.</span>
+            {isPasting && <Loader2 className="h-4 w-4 animate-spin ml-1" />}
+            <button onClick={() => setCopiedInvoiceId(null)} className="ml-auto text-indigo-400 hover:text-indigo-600">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Context menu */}
+        {contextMenu && (
+          <div
+            className="fixed z-50 min-w-[140px] rounded-lg border border-gray-200 bg-white shadow-lg py-1 text-sm"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+          >
+            <button
+              onClick={handlePasteInvoice}
+              disabled={isPasting}
+              className="flex w-full items-center gap-2 px-3 py-2 hover:bg-indigo-50 text-gray-700 hover:text-indigo-700 disabled:opacity-50"
+            >
+              {isPasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
+              Paste Invoice
+            </button>
+          </div>
+        )}
+
         {/* Invoices Table */}
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div ref={tableRef} onContextMenu={handleContextMenu} className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <Table aria-label="Sales invoices list">
               <TableHeader>
@@ -560,7 +633,7 @@ export default function SalesInvoicesPage() {
                   <TableHead scope="col" className="font-semibold text-center">Status</TableHead>
                   <TableHead scope="col" className="font-semibold text-right">Total</TableHead>
                   <TableHead scope="col" className="font-semibold text-right">Balance</TableHead>
-                  <TableHead scope="col" className="font-semibold">Actions</TableHead>
+                  <TableHead scope="col" className="font-semibold w-36">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -637,51 +710,73 @@ export default function SalesInvoicesPage() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" aria-label="Actions">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => router.push(`/sales/invoices/${invoice.id}`)}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleRowPDF(invoice.id)}
-                              disabled={rowPdfLoading === invoice.id}
+                        <div className="flex items-center gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-gray-500 hover:text-teal-600"
+                            onClick={() => router.push(`/sales/invoices/${invoice.id}`)}
+                            title="View Details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {invoice.effectiveStatus === "PENDING" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-gray-500 hover:text-blue-600"
+                              onClick={() => router.push(`/sales/invoices/new?edit=${invoice.id}`)}
+                              title="Edit Invoice"
                             >
-                              {rowPdfLoading === invoice.id ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              ) : (
-                                <FileDown className="h-4 w-4 mr-2" />
-                              )}
-                              Download PDF
-                            </DropdownMenuItem>
-                            {invoice.effectiveStatus === "PENDING" && (
-                              <DropdownMenuItem onClick={() => router.push(`/sales/invoices/new?edit=${invoice.id}`)}>
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit Invoice
-                              </DropdownMenuItem>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-gray-500 hover:text-gray-800"
+                            onClick={() => handleRowPDF(invoice.id)}
+                            disabled={rowPdfLoading === invoice.id}
+                            title="Download PDF"
+                          >
+                            {rowPdfLoading === invoice.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <FileDown className="h-4 w-4" />
                             )}
-                            {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
-                              <>
-                                <DropdownMenuItem
-                                  onClick={() => invoice.customer && router.push(`/sales/receipts/new?customerId=${invoice.customer.id}`)}
-                                >
-                                  <CreditCard className="h-4 w-4 mr-2" />
-                                  Record Payment
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => handleCancel(invoice.id)} className="text-red-600">
-                                  <Ban className="h-4 w-4 mr-2" />
-                                  Cancel Invoice
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className={`h-8 w-8 p-0 hover:text-indigo-600 ${copiedInvoiceId === invoice.id ? "text-indigo-600 bg-indigo-50" : "text-gray-500"}`}
+                            onClick={() => handleCopyInvoice(invoice.id)}
+                            title="Copy Invoice (then right-click to paste)"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-gray-500 hover:text-green-600"
+                              onClick={() => invoice.customer && router.push(`/sales/receipts/new?customerId=${invoice.customer.id}`)}
+                              title="Record Payment"
+                            >
+                              <CreditCard className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
+                              onClick={() => handleCancel(invoice.id)}
+                              title="Cancel Invoice"
+                            >
+                              <Ban className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))

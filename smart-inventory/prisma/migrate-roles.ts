@@ -6,37 +6,25 @@
  */
 
 import { PrismaClient } from '../src/generated/prisma';
+import { ALL_PERMISSION_KEYS, type PagePermission } from '../src/types/permissions';
 
 const prisma = new PrismaClient();
 
-// Permission keys for all pages
-type PagePerm = { view: boolean; edit: boolean };
-type Perms = Record<string, PagePerm>;
+const none: PagePermission     = { view: false, edit: false };
+const viewOnly: PagePermission = { view: true,  edit: false };
+const full: PagePermission     = { view: true,  edit: true  };
 
-const none: PagePerm = { view: false, edit: false };
-const viewOnly: PagePerm = { view: true, edit: false };
-const full: PagePerm = { view: true, edit: true };
+function buildPermissions(overrides: Record<string, PagePermission>): Record<string, PagePermission> {
+  const allKeys = ALL_PERMISSION_KEYS;
 
-function buildPermissions(overrides: Record<string, PagePerm>): Perms {
-  const allKeys = [
-    'dashboard',
-    'sales_orders', 'sales_invoices', 'sales_dummy_invoices', 'sales_receipts', 'sales_returns',
-    'purchases_orders', 'purchases_reorders', 'purchases_invoices', 'purchases_payments', 'purchases_returns',
-    'bank_accounts', 'bank_ledger',
-    'ledger_customers', 'ledger_vendors', 'ledger_stock', 'ledger_stock_journal',
-    'reports',
-    'masters_customers', 'masters_vendors', 'masters_employees', 'masters_rate_sheets', 'masters_items', 'masters_roles',
-    'settings',
-  ];
-
-  const perms: Perms = {};
+  const perms: Record<string, PagePermission> = {};
   for (const key of allKeys) {
     perms[key] = overrides[key] ?? none;
   }
   return perms;
 }
 
-const DEFAULT_ROLES: { name: string; description: string; permissions: Perms }[] = [
+const DEFAULT_ROLES: { name: string; description: string; permissions: Record<string, PagePermission> }[] = [
   {
     name: 'ADMIN',
     description: 'Full system access — all permissions',
@@ -46,7 +34,7 @@ const DEFAULT_ROLES: { name: string; description: string; permissions: Perms }[]
       purchases_orders: full, purchases_reorders: full, purchases_invoices: full, purchases_payments: full, purchases_returns: full,
       bank_accounts: full, bank_ledger: full,
       ledger_customers: full, ledger_vendors: full, ledger_stock: full, ledger_stock_journal: full,
-      reports: full,
+      reports: full, gst: full,
       masters_customers: full, masters_vendors: full, masters_employees: full, masters_rate_sheets: full, masters_items: full, masters_roles: full,
       settings: full,
     }),
@@ -60,7 +48,7 @@ const DEFAULT_ROLES: { name: string; description: string; permissions: Perms }[]
       purchases_orders: full, purchases_reorders: full, purchases_invoices: full, purchases_payments: full, purchases_returns: full,
       bank_accounts: full, bank_ledger: full,
       ledger_customers: full, ledger_vendors: full, ledger_stock: full, ledger_stock_journal: full,
-      reports: full,
+      reports: full, gst: full,
       masters_customers: full, masters_vendors: full, masters_employees: viewOnly, masters_rate_sheets: full, masters_items: full,
       settings: full,
     }),
@@ -73,7 +61,7 @@ const DEFAULT_ROLES: { name: string; description: string; permissions: Perms }[]
       sales_orders: viewOnly, sales_invoices: full, sales_dummy_invoices: full, sales_receipts: full, sales_returns: full,
       bank_accounts: full, bank_ledger: full,
       ledger_customers: full, ledger_vendors: full, ledger_stock: full, ledger_stock_journal: full,
-      reports: full,
+      reports: full, gst: full,
       masters_customers: viewOnly, masters_vendors: viewOnly, masters_rate_sheets: viewOnly, masters_items: viewOnly,
     }),
   },
@@ -107,7 +95,7 @@ async function main() {
   for (const roleDef of DEFAULT_ROLES) {
     const role = await prisma.role.upsert({
       where: { name: roleDef.name },
-      update: {},
+      update: { permissions: roleDef.permissions, description: roleDef.description },
       create: {
         name: roleDef.name,
         description: roleDef.description,

@@ -15,6 +15,7 @@ import {
   Save,
   Trash2,
   FileSpreadsheet,
+  Download,
 } from "lucide-react";
 import {
   ENTITY_FIELDS,
@@ -48,6 +49,32 @@ interface RowValidation {
 }
 
 const STEPS = ["Upload", "Map Columns", "Preview", "Results"];
+
+// Sample row values keyed by field key — shown in the downloadable template
+const SAMPLE_VALUES: Record<string, Record<string, string>> = {
+  CUSTOMER: { name: "Ramesh Traders", gstin: "29ABCDE1234F1Z5", email: "ramesh@example.com", phone: "9876543210", address: "12 Market Road", city: "Bangalore", state: "Karnataka", pincode: "560001", openingBalance: "0", creditLimit: "50000", creditDays: "30" },
+  VENDOR: { name: "Sunrise Supplies", gstin: "27FGHIJ5678K2Y4", email: "sunrise@example.com", phone: "9123456789", address: "45 Industrial Area", city: "Mumbai", state: "Maharashtra", pincode: "400001", openingBalance: "0", creditDays: "15" },
+  ITEM: { name: "Premium Basmati Rice 5kg", brandName: "Fortune", subBrandName: "Basmati", userCode: "BAS5KG", hsnCode: "10063020", gstRate: "5", purchasePrice: "320", mrp: "450", sellingPrice: "430", unit: "BAG", minStock: "10", description: "Premium quality basmati rice" },
+  EMPLOYEE: { name: "Anita Sharma", email: "anita@company.com", phone: "9988776655", designation: "Sales Executive", department: "Sales", salary: "25000", joinDate: "2024-01-15" },
+  STOCK_JOURNAL: { itemName: "Premium Basmati Rice 5kg", date: "2024-03-01", quantity: "50", type: "ADJUSTMENT_IN", reason: "Opening stock" },
+  PAYMENT: { customerName: "Ramesh Traders", paymentDate: "2024-03-01", amount: "15000", mode: "BANK_TRANSFER", bankAccountName: "HDFC Business", referenceNumber: "TXN123456", notes: "March payment" },
+  VENDOR_PAYMENT: { vendorName: "Sunrise Supplies", date: "2024-03-01", amount: "20000", mode: "CHEQUE", paidFrom: "HDFC Business", bankAccountName: "HDFC Business", reference: "CHQ001234", notes: "" },
+  SALES_INVOICE: { invoiceNumber: "SI-001", invoiceDate: "2024-03-01", customerName: "Ramesh Traders", dueDate: "2024-03-31", itemName: "Premium Basmati Rice 5kg", quantity: "10", rate: "430", discountPercent: "0", taxRate: "5", notes: "", ref: "" },
+  PURCHASE_INVOICE: { invoiceNumber: "PI-001", date: "2024-03-01", dueDate: "2024-03-15", vendorName: "Sunrise Supplies", itemName: "Premium Basmati Rice 5kg", quantity: "50", rate: "320", taxRate: "5", notes: "", ref: "" },
+};
+
+function downloadSampleFile(entityType: EntityType, entityLabel: string) {
+  const fields = ENTITY_FIELDS[entityType];
+  const sample = SAMPLE_VALUES[entityType] || {};
+  const headers = fields.map((f) => f.label);
+  const row = fields.map((f) => sample[f.key] ?? "");
+  const ws = XLSX.utils.aoa_to_sheet([headers, row]);
+  // Style header row width
+  ws["!cols"] = headers.map(() => ({ wch: 20 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, entityLabel);
+  XLSX.writeFile(wb, `${entityLabel}-sample.xlsx`);
+}
 
 export function ImportModal({
   isOpen,
@@ -421,13 +448,23 @@ export function ImportModal({
                   onChange={handleFileSelect}
                   className="hidden"
                 />
-                <Button
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Choose File
-                </Button>
+                <div className="flex items-center justify-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Choose File
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => downloadSampleFile(entityType, entityLabel)}
+                    className="text-teal-700 border-teal-200 hover:bg-teal-50"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Sample
+                  </Button>
+                </div>
               </div>
               {fileName && (
                 <p className="text-sm text-muted-foreground">

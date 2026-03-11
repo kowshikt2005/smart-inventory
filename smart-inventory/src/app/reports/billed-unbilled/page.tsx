@@ -103,7 +103,8 @@ export default function BilledUnbilledReportPage() {
   }, [type, brandId, fromDate, toDate]);
 
   const { data, isLoading } = useSWR(
-    `/api/reports/billed-unbilled?${queryString}`
+    `/api/reports/billed-unbilled?${queryString}`,
+    { revalidateIfStale: false }
   );
 
   const orders: Order[] = data?.orders || [];

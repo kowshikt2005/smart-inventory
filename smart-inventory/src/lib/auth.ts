@@ -4,7 +4,7 @@ import GoogleProvider from "next-auth/providers/google";
 import { db } from "@/lib/db";
 import { verifyPassword } from "@/lib/auth-utils";
 import { verifyOTP } from "@/lib/otp";
-import type { RolePermissions } from "@/types/permissions";
+import { fillMissingPermissions, type RolePermissions } from "@/types/permissions";
 
 /**
  * Load role data (id, name, permissions) for a user record.
@@ -21,7 +21,7 @@ async function loadUserRole(user: { roleId?: string | null; role?: string }) {
       return {
         roleId: role.id,
         roleName: role.name,
-        permissions: role.permissions as unknown as RolePermissions,
+        permissions: fillMissingPermissions(role.permissions as unknown as Partial<RolePermissions>),
       };
     }
   }
@@ -36,7 +36,7 @@ async function loadUserRole(user: { roleId?: string | null; role?: string }) {
       return {
         roleId: role.id,
         roleName: role.name,
-        permissions: role.permissions as unknown as RolePermissions,
+        permissions: fillMissingPermissions(role.permissions as unknown as Partial<RolePermissions>),
       };
     }
   }
