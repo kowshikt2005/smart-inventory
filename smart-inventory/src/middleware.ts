@@ -25,7 +25,8 @@ export async function middleware(request: NextRequest) {
 
   // Permission-based page access check (defense-in-depth)
   // Only applies to page routes, not API routes (those have their own checks)
-  if (!pathname.startsWith("/api/")) {
+  // Admin role bypasses all page permission checks
+  if (!pathname.startsWith("/api/") && token.roleName !== "ADMIN") {
     const permissionKey = PATH_TO_PERMISSION[pathname];
     if (permissionKey) {
       const permissions = token.permissions as RolePermissions | undefined;

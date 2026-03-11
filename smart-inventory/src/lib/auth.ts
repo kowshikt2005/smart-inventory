@@ -4,12 +4,21 @@ import GoogleProvider from "next-auth/providers/google";
 import { db } from "@/lib/db";
 import { verifyPassword } from "@/lib/auth-utils";
 import { verifyOTP } from "@/lib/otp";
-import { fillMissingPermissions, type RolePermissions } from "@/types/permissions";
+import { fillMissingPermissions, ALL_PERMISSION_KEYS, type RolePermissions } from "@/types/permissions";
 
 /**
  * Load role data (id, name, permissions) for a user record.
  * Handles both migration states: roleId set or falling back to role enum.
  */
+/** Build full permissions object with all keys set to view+edit true */
+function buildAdminPermissions(): RolePermissions {
+  const perms = {} as RolePermissions;
+  for (const key of ALL_PERMISSION_KEYS) {
+    perms[key] = { view: true, edit: true };
+  }
+  return perms;
+}
+
 async function loadUserRole(user: { roleId?: string | null; role?: string }) {
   // Primary: use roleId FK
   if (user.roleId) {
@@ -21,7 +30,10 @@ async function loadUserRole(user: { roleId?: string | null; role?: string }) {
       return {
         roleId: role.id,
         roleName: role.name,
-        permissions: fillMissingPermissions(role.permissions as unknown as Partial<RolePermissions>),
+        // ADMIN always gets all permissions regardless of DB state
+        permissions: role.name === 'ADMIN'
+          ? buildAdminPermissions()
+          : fillMissingPermissions(role.permissions as unknown as Partial<RolePermissions>),
       };
     }
   }
@@ -36,7 +48,9 @@ async function loadUserRole(user: { roleId?: string | null; role?: string }) {
       return {
         roleId: role.id,
         roleName: role.name,
-        permissions: fillMissingPermissions(role.permissions as unknown as Partial<RolePermissions>),
+        permissions: role.name === 'ADMIN'
+          ? buildAdminPermissions()
+          : fillMissingPermissions(role.permissions as unknown as Partial<RolePermissions>),
       };
     }
   }

@@ -22,6 +22,12 @@ export async function checkPermission(permissionKey: PermissionKey, level: Permi
     };
   }
 
+  // Admin role bypasses all permission checks
+  const roleName = (session.user as { roleName?: string }).roleName;
+  if (roleName === 'ADMIN') {
+    return { error: null, session };
+  }
+
   const permissions = session.user.permissions as RolePermissions | undefined;
 
   if (!permissions?.[permissionKey]?.view) {
