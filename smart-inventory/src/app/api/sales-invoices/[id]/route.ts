@@ -258,27 +258,30 @@ export async function PUT(
 
         // Re-apply inventory changes - reduce stock for new items
         for (const newItem of newItems) {
-          const inventory = await tx.inventory.findUnique({
+          const inv = await tx.inventory.upsert({
             where: { itemId: newItem.itemId },
+            create: {
+              itemId: newItem.itemId,
+              physicalStock: -newItem.quantity,
+              reservedQuantity: 0,
+              minStockLevel: 0,
+            },
+            update: {
+              physicalStock: { decrement: newItem.quantity },
+            },
           });
-          if (inventory) {
-            await tx.inventory.update({
-              where: { itemId: newItem.itemId },
-              data: { physicalStock: { decrement: newItem.quantity } },
-            });
 
-            await tx.stockMovement.create({
-              data: {
-                inventoryId: inventory.id,
-                itemId: newItem.itemId,
-                type: 'SALE',
-                quantity: newItem.quantity,
-                referenceType: 'INVOICE',
-                referenceId: id,
-                notes: `Sales Invoice ${updated.invoiceNumber} (edited)`,
-              },
-            });
-          }
+          await tx.stockMovement.create({
+            data: {
+              inventoryId: inv.id,
+              itemId: newItem.itemId,
+              type: 'SALE',
+              quantity: newItem.quantity,
+              referenceType: 'INVOICE',
+              referenceId: id,
+              notes: `Sales Invoice ${updated.invoiceNumber} (edited)`,
+            },
+          });
         }
 
         // Update customer ledger (only if customer is linked)
@@ -332,7 +335,7 @@ export async function PUT(
   }
 }
 
-// DELETE /api/sales-invoices/[id] - Cancel invoice
+// DELETE /api/sales-invoices/[id] - Delete invoice
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -346,15 +349,8 @@ export async function DELETE(
       where: { id },
       include: {
         allocations: true,
-        items: {
-          include: {
-            item: {
-              include: {
-                inventory: true,
-              },
-            },
-          },
-        },
+        items: true,
+        salesReturns: true,
       },
     });
 
@@ -365,98 +361,59 @@ export async function DELETE(
       );
     }
 
-    // Cannot cancel if payments have been made
+    // Cannot delete if payments have been made
     if (invoice.allocations.length > 0 || Number(invoice.paidAmount) > 0) {
       return NextResponse.json(
-        { error: 'Cannot cancel invoice with payments. Reverse payments first.' },
+        { error: 'Cannot delete invoice with payments. Reverse payments first.' },
         { status: 400 }
       );
     }
 
-    // Cancel invoice, restore inventory, and reverse ledger entry in transaction
+    // Cannot delete if returns exist
+    if (invoice.salesReturns.length > 0) {
+      return NextResponse.json(
+        { error: 'Cannot delete invoice with returns. Delete returns first.' },
+        { status: 400 }
+      );
+    }
+
+    // Delete invoice, restore inventory, and remove ledger entry in transaction
     await transaction(async (tx) => {
-      // Update invoice status to cancelled
-      await tx.invoice.update({
-        where: { id },
-        data: {
-          paymentStatus: 'CANCELLED',
-        },
+      // Restore physical stock for each item
+      for (const invoiceItem of invoice.items) {
+        if (!invoiceItem.itemId) continue;
+        await tx.inventory.updateMany({
+          where: { itemId: invoiceItem.itemId },
+          data: { physicalStock: { increment: Number(invoiceItem.quantity) } },
+        });
+      }
+
+      // Delete stock movements
+      await tx.stockMovement.deleteMany({
+        where: { referenceType: 'INVOICE', referenceId: id },
       });
 
-      // Restore inventory for each item
-      const inventoryUpdates: Promise<any>[] = [];
-      const stockMovements: any[] = [];
-
-      for (const invoiceItem of invoice.items) {
-        const inventory = invoiceItem.item?.inventory;
-        if (inventory) {
-          // Restore physical stock
-          inventoryUpdates.push(
-            tx.inventory.update({
-              where: { id: inventory.id },
-              data: {
-                physicalStock: {
-                  increment: Number(invoiceItem.quantity),
-                },
-              },
-            })
-          );
-
-          // Create stock movement entry for the restoration
-          stockMovements.push({
-            inventoryId: inventory.id,
-            itemId: invoiceItem.itemId,
-            quantity: Number(invoiceItem.quantity),
-            type: 'ADJUSTMENT_IN',
-            referenceType: 'INVOICE_CANCELLED',
-            referenceId: invoice.id,
-            notes: `Invoice cancelled - ${invoice.invoiceNumber}`,
-          });
-        }
-      }
-
-      // Execute all inventory updates in parallel
-      await Promise.all(inventoryUpdates);
-
-      // Batch create all stock movements
-      if (stockMovements.length > 0) {
-        await tx.stockMovement.createMany({
-          data: stockMovements,
-        });
-      }
-
-      // Create reversal ledger entry (only if customer is linked)
+      // Delete customer ledger entries
       if (invoice.customerId) {
-        const lastLedgerEntry = await tx.customerLedger.findFirst({
-          where: { customerId: invoice.customerId },
-          orderBy: { date: 'desc' },
-        });
-
-        const previousBalance = lastLedgerEntry ? Number(lastLedgerEntry.balance) : 0;
-        const newBalance = previousBalance - Number(invoice.totalAmount);
-
-        await tx.customerLedger.create({
-          data: {
-            customerId: invoice.customerId,
-            date: new Date(),
-            description: `Invoice Cancelled - ${invoice.invoiceNumber}`,
-            type: 'ADJUSTMENT',
-            debit: 0,
-            credit: Number(invoice.totalAmount),
-            balance: newBalance,
-            referenceType: 'sales_invoice',
-            referenceId: invoice.id,
-          },
+        await tx.customerLedger.deleteMany({
+          where: { referenceType: 'SALES_INVOICE', referenceId: id },
         });
       }
+
+      // Hard delete the invoice (items cascade deleted)
+      await tx.invoice.delete({ where: { id } });
     });
 
-    return NextResponse.json({ message: 'Invoice cancelled successfully' });
-  } catch (error) {
-    console.error('Error cancelling invoice:', error);
-    return NextResponse.json(
-      { error: 'Failed to cancel invoice' },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: 'Invoice deleted successfully' });
+  } catch (error: unknown) {
+    console.error('Error deleting invoice:', error);
+
+    const prismaError = error as { code?: string };
+    if (prismaError.code === 'P2025') {
+      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+    }
+
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete invoice';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

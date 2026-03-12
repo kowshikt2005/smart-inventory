@@ -369,14 +369,6 @@ export async function DELETE(
       );
     }
 
-    // Only allow deleting PENDING invoices with no payments
-    if (existingInvoice.status !== 'PENDING') {
-      return NextResponse.json(
-        { error: 'Only PENDING invoices can be deleted' },
-        { status: 400 }
-      );
-    }
-
     // Check if there are payments
     if (existingInvoice.vendorPayments.length > 0) {
       return NextResponse.json(

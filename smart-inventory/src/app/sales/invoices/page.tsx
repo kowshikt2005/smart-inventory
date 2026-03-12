@@ -36,7 +36,7 @@ import {
   AlertCircle,
   Eye,
   CreditCard,
-  Ban,
+  Trash2,
   Filter,
   FileDown,
   Copy,
@@ -197,18 +197,18 @@ export default function SalesInvoicesPage() {
     setCurrentPage(1);
   };
 
-  const handleCancel = async (invoiceId: string) => {
-    if (!confirm("Are you sure you want to cancel this invoice? This will reverse the ledger entry.")) return;
+  const handleDelete = async (invoiceId: string) => {
+    if (!confirm("Are you sure you want to delete this invoice? This will restore stock and cannot be undone.")) return;
     try {
       const response = await fetch(`/api/sales-invoices/${invoiceId}`, { method: "DELETE" });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || "Failed to cancel invoice");
+        throw new Error(data.error || "Failed to delete invoice");
       }
       fetchInvoices();
     } catch (err) {
-      console.error("Error cancelling invoice:", err);
-      alert(err instanceof Error ? err.message : "Failed to cancel invoice");
+      console.error("Error deleting invoice:", err);
+      alert(err instanceof Error ? err.message : "Failed to delete invoice");
     }
   };
 
@@ -762,18 +762,16 @@ export default function SalesInvoicesPage() {
                                 Record Payment
                               </DropdownMenuItem>
                             )}
-                            {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() => handleCancel(invoice.id)}
-                                  className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                                >
-                                  <Ban className="h-4 w-4 mr-2" />
-                                  Cancel Invoice
-                                </DropdownMenuItem>
-                              </>
-                            )}
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleDelete(invoice.id)}
+                                className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete Invoice
+                              </DropdownMenuItem>
+                            </>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

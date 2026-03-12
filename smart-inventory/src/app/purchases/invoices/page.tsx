@@ -594,18 +594,16 @@ export default function PurchaseInvoicesPage() {
                                 Make Payment
                               </DropdownMenuItem>
                             )}
-                            {invoice.effectiveStatus === "PENDING" && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() => handleDelete(invoice.id)}
-                                  className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete Invoice
-                                </DropdownMenuItem>
-                              </>
-                            )}
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleDelete(invoice.id)}
+                                className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete Invoice
+                              </DropdownMenuItem>
+                            </>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
