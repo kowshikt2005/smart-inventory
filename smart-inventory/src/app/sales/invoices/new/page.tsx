@@ -153,6 +153,13 @@ function EditSalesInvoiceContent() {
     };
   }, []);
 
+  // Merge active items with items loaded from invoice (handles inactive items)
+  const allItems = useMemo(() => {
+    const ids = new Set(items.map((i) => i.id));
+    const extras = invoiceLoadedItems.filter((i) => !ids.has(i.id));
+    return [...items, ...extras];
+  }, [items, invoiceLoadedItems]);
+
   const handleItemChange = useCallback(
     (index: number, field: string, value: string | number) => {
       setInvoiceItems((prev) => {
@@ -277,13 +284,6 @@ function EditSalesInvoiceContent() {
   };
 
   const usedItemIds = useMemo(() => new Set(invoiceItems.map((item) => item.itemId).filter(Boolean)), [invoiceItems]);
-
-  // Merge active items with items loaded from invoice (handles inactive items)
-  const allItems = useMemo(() => {
-    const ids = new Set(items.map((i) => i.id));
-    const extras = invoiceLoadedItems.filter((i) => !ids.has(i.id));
-    return [...items, ...extras];
-  }, [items, invoiceLoadedItems]);
 
   // Derive unique brands from allItems
   const uniqueBrands = useMemo(() => {
