@@ -125,29 +125,54 @@ export async function PUT(
       );
     }
 
-    if (existingInvoice.vendorPayments.length > 0) {
-      return NextResponse.json(
-        { error: 'Cannot edit invoice with payments' },
-        { status: 400 }
-      );
-    }
-
     // If items are provided, do a full update with item replacement
     if (body.items && Array.isArray(body.items) && body.items.length > 0) {
+      // Reject duplicate itemIds
+      const incomingItemIds = body.items.map((i: any) => i.itemId).filter(Boolean);
+      if (new Set(incomingItemIds).size !== incomingItemIds.length) {
+        return NextResponse.json(
+          { error: 'Duplicate items found. Each item must appear only once per invoice.' },
+          { status: 400 }
+        );
+      }
+
       const updatedInvoice = await transaction(async (tx) => {
+        // Calculate new items first (needed for validation)
+        const newItemsPreview: Record<string, number> = {};
+        for (const item of body.items) {
+          if (item.itemId) newItemsPreview[item.itemId] = Number(item.quantity);
+        }
+
+        // Pre-validate: ensure no item's physicalStock goes negative after this edit
+        for (const oldItem of existingInvoice.items) {
+          if (!oldItem.itemId) continue;
+          const oldQty = Number(oldItem.quantity);
+          const newQty = newItemsPreview[oldItem.itemId] ?? 0;
+          const netChange = newQty - oldQty;
+          if (netChange < 0) {
+            const inv = await tx.inventory.findUnique({ where: { itemId: oldItem.itemId } });
+            const currentStock = inv ? Number(inv.physicalStock) : 0;
+            if (currentStock + netChange < 0) {
+              const itm = await tx.item.findUnique({
+                where: { id: oldItem.itemId },
+                select: { name: true, itemCode: true },
+              });
+              throw new Error(
+                `Cannot reduce quantity for "${itm?.name || oldItem.itemId}": ` +
+                `current stock is ${currentStock}, reducing by ${Math.abs(netChange)} would make it negative. ` +
+                `Minimum quantity for this item is ${Math.max(0, oldQty - currentStock)}.`
+              );
+            }
+          }
+        }
+
         // Reverse old inventory changes
         for (const oldItem of existingInvoice.items) {
-          const inventory = await tx.inventory.findUnique({
+          if (!oldItem.itemId) continue; // skip items without catalog link
+          await tx.inventory.updateMany({
             where: { itemId: oldItem.itemId },
+            data: { physicalStock: { decrement: Number(oldItem.quantity) } },
           });
-          if (inventory) {
-            await tx.inventory.update({
-              where: { itemId: oldItem.itemId },
-              data: {
-                physicalStock: { decrement: Number(oldItem.quantity) },
-              },
-            });
-          }
         }
 
         // Delete old stock movements
@@ -178,6 +203,12 @@ export async function PUT(
         const totalTax = newItems.reduce((sum: number, item: any) => sum + item.taxAmount, 0);
         const totalAmount = subtotal + totalTax;
 
+        // Validate new total covers already paid amount
+        const paidAmount = Number(existingInvoice.paidAmount || 0);
+        if (paidAmount > 0 && Math.round(totalAmount * 100) / 100 < paidAmount) {
+          throw new Error(`New total (₹${(Math.round(totalAmount * 100) / 100).toFixed(2)}) cannot be less than already paid amount (₹${paidAmount.toFixed(2)})`);
+        }
+
         // Look up vendor for name
         let vendorName = existingInvoice.vendorName;
         const vendorId = body.vendorId || existingInvoice.vendorId;
@@ -198,7 +229,7 @@ export async function PUT(
             amount: Math.round(subtotal * 100) / 100,
             taxAmount: Math.round(totalTax * 100) / 100,
             totalAmount: Math.round(totalAmount * 100) / 100,
-            balanceAmount: Math.round(totalAmount * 100) / 100,
+            balanceAmount: Math.round((totalAmount - paidAmount) * 100) / 100,
             items: { create: newItems },
           },
           include: {
@@ -209,25 +240,18 @@ export async function PUT(
 
         // Re-apply inventory changes for new items
         for (const newItem of newItems) {
-          const inventory = await tx.inventory.findUnique({
+          const inv = await tx.inventory.upsert({
             where: { itemId: newItem.itemId },
+            create: {
+              itemId: newItem.itemId,
+              physicalStock: newItem.quantity,
+              reservedQuantity: 0,
+              minStockLevel: 0,
+            },
+            update: {
+              physicalStock: { increment: newItem.quantity },
+            },
           });
-          let inv = inventory;
-          if (inv) {
-            await tx.inventory.update({
-              where: { itemId: newItem.itemId },
-              data: {
-                physicalStock: { increment: newItem.quantity },
-              },
-            });
-          } else {
-            inv = await tx.inventory.create({
-              data: {
-                itemId: newItem.itemId,
-                physicalStock: newItem.quantity,
-              },
-            });
-          }
 
           await tx.stockMovement.create({
             data: {

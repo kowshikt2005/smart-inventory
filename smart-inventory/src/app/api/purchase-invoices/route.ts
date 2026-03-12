@@ -283,8 +283,17 @@ export async function POST(request: Request) {
       }
     }
 
-    // Validate all items exist
+    // Reject duplicate itemIds — same item must not appear in multiple rows
     const itemIds = body.items.map((item: any) => item.itemId);
+    const uniqueItemIds = new Set(itemIds);
+    if (uniqueItemIds.size !== itemIds.length) {
+      return NextResponse.json(
+        { error: 'Duplicate items found. Each item must appear only once per invoice.' },
+        { status: 400 }
+      );
+    }
+
+    // Validate all items exist
     const items = await db.item.findMany({
       where: { id: { in: itemIds } },
       include: { inventory: true },
@@ -386,48 +395,32 @@ export async function POST(request: Request) {
 
       // Update inventory - increase physical stock for each item
       for (const invoiceItem of invoiceItems) {
-        const item = items.find((i) => i.id === invoiceItem.itemId)!;
-
-        if (item.inventory) {
-          // Update existing inventory
-          await tx.inventory.update({
-            where: { itemId: invoiceItem.itemId },
-            data: {
-              physicalStock: {
-                increment: invoiceItem.quantity,
-              },
-            },
-          });
-        } else {
-          // Create inventory record if it doesn't exist
-          await tx.inventory.create({
-            data: {
-              itemId: invoiceItem.itemId,
-              physicalStock: invoiceItem.quantity,
-              reservedQuantity: 0,
-              minStockLevel: 0,
-            },
-          });
-        }
-
-        // Create stock movement record
-        const inventory = await tx.inventory.findUnique({
+        // Use upsert to safely increment stock regardless of pre-fetch state
+        const inventory = await tx.inventory.upsert({
           where: { itemId: invoiceItem.itemId },
+          create: {
+            itemId: invoiceItem.itemId,
+            physicalStock: invoiceItem.quantity,
+            reservedQuantity: 0,
+            minStockLevel: 0,
+          },
+          update: {
+            physicalStock: { increment: invoiceItem.quantity },
+          },
         });
 
-        if (inventory) {
-          await tx.stockMovement.create({
-            data: {
-              inventoryId: inventory.id,
-              itemId: invoiceItem.itemId,
-              quantity: invoiceItem.quantity,
-              type: 'PURCHASE',
-              referenceType: 'PURCHASE_INVOICE',
-              referenceId: invoice.id,
-              notes: `Purchase invoice ${invoiceNumber}`,
-            },
-          });
-        }
+        // Create stock movement record
+        await tx.stockMovement.create({
+          data: {
+            inventoryId: inventory.id,
+            itemId: invoiceItem.itemId,
+            quantity: invoiceItem.quantity,
+            type: 'PURCHASE',
+            referenceType: 'PURCHASE_INVOICE',
+            referenceId: invoice.id,
+            notes: `Purchase invoice ${invoiceNumber}`,
+          },
+        });
       }
 
       // Get the last ledger entry for this vendor to calculate running balance

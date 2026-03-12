@@ -146,26 +146,52 @@ export async function PUT(
 
     // If items are provided, do a full update
     if (body.items && Array.isArray(body.items) && body.items.length > 0) {
-      // Check no payments have been made
-      if (invoice.allocations.length > 0 || Number(invoice.paidAmount) > 0) {
+      // Reject duplicate itemIds
+      const incomingItemIds = body.items.map((i: { itemId: string }) => i.itemId).filter(Boolean);
+      if (new Set(incomingItemIds).size !== incomingItemIds.length) {
         return NextResponse.json(
-          { error: 'Cannot edit invoice with payments' },
+          { error: 'Duplicate items found. Each item must appear only once per invoice.' },
           { status: 400 }
         );
       }
 
       const updatedInvoice = await transaction(async (tx) => {
+        // Check if negative billing is enabled
+        const negativeBillingSetting = await tx.appSetting.findUnique({ where: { key: 'negative_billing' } });
+        const negativeBillingEnabled = negativeBillingSetting?.value === 'true';
+
+        if (!negativeBillingEnabled) {
+          // Pre-validate: after restoring old sale quantities, ensure new quantities can be fulfilled
+          const oldQtyMap: Record<string, number> = {};
+          for (const oldItem of invoice.items) {
+            if (oldItem.itemId) oldQtyMap[oldItem.itemId] = Number(oldItem.quantity);
+          }
+          for (const newItem of body.items) {
+            const newQty = Number(newItem.quantity);
+            const oldQty = oldQtyMap[newItem.itemId] ?? 0;
+            const inv = await tx.inventory.findUnique({ where: { itemId: newItem.itemId } });
+            const currentStock = inv ? Number(inv.physicalStock) : 0;
+            const stockAfterRestore = currentStock + oldQty;
+            if (newQty > stockAfterRestore) {
+              const itm = await tx.item.findUnique({
+                where: { id: newItem.itemId },
+                select: { name: true, itemCode: true },
+              });
+              throw new Error(
+                `Insufficient stock for "${itm?.name || newItem.itemId}": ` +
+                `available after restoring old sale is ${stockAfterRestore}, but new quantity is ${newQty}.`
+              );
+            }
+          }
+        }
+
         // Reverse old inventory changes - restore stock
         for (const oldItem of invoice.items) {
-          const inventory = await tx.inventory.findUnique({
+          if (!oldItem.itemId) continue; // skip items without catalog link
+          await tx.inventory.updateMany({
             where: { itemId: oldItem.itemId },
+            data: { physicalStock: { increment: Number(oldItem.quantity) } },
           });
-          if (inventory) {
-            await tx.inventory.update({
-              where: { itemId: oldItem.itemId },
-              data: { physicalStock: { increment: Number(oldItem.quantity) } },
-            });
-          }
         }
 
         // Delete old stock movements for this invoice
@@ -204,6 +230,12 @@ export async function PUT(
         const roundOff = Math.round(rawTotal) - rawTotal;
         const totalAmount = Math.round(rawTotal);
 
+        // Validate new total covers already paid amount
+        const paidAmount = Number(invoice.paidAmount || 0);
+        if (paidAmount > 0 && totalAmount < paidAmount) {
+          throw new Error(`New total (₹${totalAmount.toFixed(2)}) cannot be less than already paid amount (₹${paidAmount.toFixed(2)})`);
+        }
+
         // Update invoice
         const updated = await tx.invoice.update({
           where: { id },
@@ -216,7 +248,7 @@ export async function PUT(
             taxAmount: Math.round(totalTax * 100) / 100,
             roundOff: Math.round(roundOff * 100) / 100,
             totalAmount,
-            balanceAmount: totalAmount,
+            balanceAmount: totalAmount - paidAmount,
             items: { create: newItems },
           },
           include: {

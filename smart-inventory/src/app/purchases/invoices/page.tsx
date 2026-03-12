@@ -20,6 +20,13 @@ import {
 } from "@/components/ui/select";
 import { PurchaseInvoiceStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Plus,
   Edit,
   Trash2,
@@ -33,6 +40,7 @@ import {
   AlertCircle,
   Filter,
   Copy,
+  MoreVertical,
 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { ExportButtons } from "@/components/ui/ExportButtons";
@@ -481,7 +489,7 @@ export default function PurchaseInvoicesPage() {
                   <TableHead className="font-semibold text-center">Status</TableHead>
                   <TableHead className="font-semibold text-right">Total</TableHead>
                   <TableHead className="font-semibold text-right">Balance</TableHead>
-                  <TableHead className="font-semibold w-28">Actions</TableHead>
+                  <TableHead className="font-semibold w-12"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -555,59 +563,51 @@ export default function PurchaseInvoicesPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-0.5">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-gray-500 hover:text-teal-600"
-                            onClick={() => router.push(`/purchases/invoices/${invoice.id}`)}
-                            title="View Details"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {invoice.effectiveStatus === "PENDING" && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-8 w-8 p-0 text-gray-500 hover:text-blue-600"
-                              onClick={() => router.push(`/purchases/invoices/new?edit=${invoice.id}`)}
-                              title="Edit Invoice"
+                              className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600"
                             >
-                              <Edit className="h-4 w-4" />
+                              <MoreVertical className="h-4 w-4" />
                             </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`h-8 w-8 p-0 hover:text-indigo-600 ${copiedInvoiceId === invoice.id ? "text-indigo-600 bg-indigo-50" : "text-gray-500"}`}
-                            onClick={() => handleCopyInvoice(invoice.id)}
-                            title="Copy Invoice (then right-click to paste)"
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                          {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-gray-500 hover:text-green-600"
-                              onClick={() => router.push(`/purchases/payments/new?purchaseInvoiceId=${invoice.id}`)}
-                              title="Make Payment"
-                            >
-                              <CreditCard className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {invoice.effectiveStatus === "PENDING" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
-                              onClick={() => handleDelete(invoice.id)}
-                              title="Delete Invoice"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem onClick={() => router.push(`/purchases/invoices/${invoice.id}`)}>
+                              <Eye className="h-4 w-4 mr-2 text-teal-600" />
+                              View Details
+                            </DropdownMenuItem>
+                            {(invoice.effectiveStatus === "PENDING" || invoice.effectiveStatus === "OVERDUE") && (
+                              <DropdownMenuItem onClick={() => router.push(`/purchases/invoices/new?edit=${invoice.id}`)}>
+                                <Edit className="h-4 w-4 mr-2 text-blue-600" />
+                                Edit Invoice
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => handleCopyInvoice(invoice.id)}>
+                              <Copy className="h-4 w-4 mr-2 text-indigo-600" />
+                              Copy Invoice
+                            </DropdownMenuItem>
+                            {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
+                              <DropdownMenuItem onClick={() => router.push(`/purchases/payments/new?purchaseInvoiceId=${invoice.id}`)}>
+                                <CreditCard className="h-4 w-4 mr-2 text-green-600" />
+                                Make Payment
+                              </DropdownMenuItem>
+                            )}
+                            {invoice.effectiveStatus === "PENDING" && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleDelete(invoice.id)}
+                                  className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Invoice
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))

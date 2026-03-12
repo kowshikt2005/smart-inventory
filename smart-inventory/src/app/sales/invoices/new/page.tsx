@@ -4,7 +4,16 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ArrowLeft, Loader2, Plus, Save, Trash2, Lock } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { mutate } from "swr";
@@ -46,6 +55,8 @@ function EditSalesInvoiceContent() {
   const [notes, setNotes] = useState("");
 
   const [items, setItems] = useState<Item[]>([]);
+  // Items loaded from invoice (may be inactive, not returned by activeOnly fetch)
+  const [invoiceLoadedItems, setInvoiceLoadedItems] = useState<Item[]>([]);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItemData[]>([]);
   const [, setIsLoadingItems] = useState(false);
   const [isLoadingInvoice, setIsLoadingInvoice] = useState(true);
@@ -55,6 +66,7 @@ function EditSalesInvoiceContent() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isEditBlocked, setIsEditBlocked] = useState(false);
 
   // Redirect if no edit param
   useEffect(() => {
@@ -84,12 +96,24 @@ function EditSalesInvoiceContent() {
       const response = await fetch(`/api/sales-invoices/${invoiceId}`);
       if (response.ok) {
         const invoice = await response.json();
+        // Block editing if invoice is fully paid or cancelled
+        if (invoice.paymentStatus === 'PAID' || invoice.paymentStatus === 'CANCELLED') {
+          setIsEditBlocked(true);
+          setInvoiceNumber(invoice.invoiceNumber || "");
+          return;
+        }
         setInvoiceNumber(invoice.invoiceNumber || "");
         setCustomerName(invoice.customer?.name || "");
         setDueDate(invoice.dueDate ? new Date(invoice.dueDate).toISOString().split("T")[0] : "");
         setNotes(invoice.notes || "");
 
         if (invoice.items && invoice.items.length > 0) {
+          // Extract item details from invoice so inactive items still display
+          const loadedItems: Item[] = invoice.items
+            .filter((inv: { item?: Item }) => inv.item)
+            .map((inv: { item: Item }) => inv.item);
+          setInvoiceLoadedItems(loadedItems);
+
           setInvoiceItems(
             invoice.items.map((item: { itemId?: string; item?: { id: string }; quantity: number; rate: number; taxRate: number; taxAmount: number; amount: number }) => ({
               id: generateId(),
@@ -137,7 +161,7 @@ function EditSalesInvoiceContent() {
 
         if (field === "itemId") {
           item.itemId = value as string;
-          const selectedItem = items.find((i) => i.id === value);
+          const selectedItem = allItems.find((i) => i.id === value);
           if (selectedItem) {
             item.rate = Number(selectedItem.sellingPrice) || 0;
             item.taxRate = Number(selectedItem.gstRate) || 0;
@@ -158,7 +182,7 @@ function EditSalesInvoiceContent() {
         return updated;
       });
     },
-    [items, calculateLineItem]
+    [allItems, calculateLineItem]
   );
 
   const handleAddItem = () => {
@@ -202,6 +226,21 @@ function EditSalesInvoiceContent() {
       return;
     }
 
+    // Check for duplicate items
+    const itemIdCounts = validItems.reduce((acc, item) => {
+      acc[item.itemId] = (acc[item.itemId] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    const duplicateIds = Object.keys(itemIdCounts).filter((id) => itemIdCounts[id] > 1);
+    if (duplicateIds.length > 0) {
+      const dupNames = duplicateIds.map((id) => {
+        const found = allItems.find((i: { id: string; name: string }) => i.id === id);
+        return found ? found.name : id;
+      });
+      setError(`Duplicate items found: ${dupNames.join(", ")}. Please merge them into one row.`);
+      return;
+    }
+
     try {
       setIsSubmitting(true);
 
@@ -239,24 +278,31 @@ function EditSalesInvoiceContent() {
 
   const usedItemIds = useMemo(() => new Set(invoiceItems.map((item) => item.itemId).filter(Boolean)), [invoiceItems]);
 
-  // Derive unique brands from items
+  // Merge active items with items loaded from invoice (handles inactive items)
+  const allItems = useMemo(() => {
+    const ids = new Set(items.map((i) => i.id));
+    const extras = invoiceLoadedItems.filter((i) => !ids.has(i.id));
+    return [...items, ...extras];
+  }, [items, invoiceLoadedItems]);
+
+  // Derive unique brands from allItems
   const uniqueBrands = useMemo(() => {
     const seen = new Set<string>();
     const brands: { id: string; name: string }[] = [];
-    for (const item of items) {
+    for (const item of allItems) {
       if (item.brand && !seen.has(item.brand.id)) {
         seen.add(item.brand.id);
         brands.push(item.brand);
       }
     }
     return brands.sort((a, b) => a.name.localeCompare(b.name));
-  }, [items]);
+  }, [allItems]);
 
   // Sub-brands for selected brand
   const filteredSubBrands = useMemo(() => {
     const seen = new Set<string>();
     const subBrands: { id: string; name: string }[] = [];
-    for (const item of items) {
+    for (const item of allItems) {
       if (filterBrandId && item.brandId !== filterBrandId) continue;
       if (item.subBrand && !seen.has(item.subBrand.id)) {
         seen.add(item.subBrand.id);
@@ -264,15 +310,15 @@ function EditSalesInvoiceContent() {
       }
     }
     return subBrands.sort((a, b) => a.name.localeCompare(b.name));
-  }, [items, filterBrandId]);
+  }, [allItems, filterBrandId]);
 
   // Items filtered by brand/sub-brand selection
   const filteredItems = useMemo(() => {
-    let result = items;
+    let result = allItems;
     if (filterBrandId) result = result.filter((i) => i.brandId === filterBrandId);
     if (filterSubBrandId) result = result.filter((i) => i.subBrandId === filterSubBrandId);
     return result;
-  }, [items, filterBrandId, filterSubBrandId]);
+  }, [allItems, filterBrandId, filterSubBrandId]);
 
   if (!editId) {
     return null;
@@ -290,6 +336,27 @@ function EditSalesInvoiceContent() {
 
   return (
     <DashboardLayout>
+      {/* Blocked edit popup */}
+      <AlertDialog open={isEditBlocked} onOpenChange={() => {}}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5 text-red-500" />
+              Cannot Edit Invoice
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Invoice <strong>#{invoiceNumber}</strong> has been fully paid and cannot be edited.
+              Paid invoices are locked to preserve accurate financial records.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => router.push("/sales/invoices")} className="bg-teal-500 hover:bg-teal-600">
+              Go Back to Invoices
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="min-h-screen bg-gray-50">
         {/* Sticky action bar */}
         <div className="bg-white border-b border-gray-200 px-6 py-3 sticky top-0 z-10">
@@ -313,7 +380,7 @@ function EditSalesInvoiceContent() {
               <Button variant="outline" size="sm" onClick={() => router.push("/sales/invoices")}>
                 Cancel
               </Button>
-              <Button size="sm" onClick={handleSubmit} disabled={isSubmitting} className="bg-teal-500 hover:bg-teal-600 text-white">
+              <Button size="sm" onClick={handleSubmit} disabled={isSubmitting || isEditBlocked} className="bg-teal-500 hover:bg-teal-600 text-white">
                 {isSubmitting ? (
                   <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Updating...</>
                 ) : (
@@ -405,10 +472,10 @@ function EditSalesInvoiceContent() {
                       ? [
                           ...filteredItems,
                           ...(invoiceItem.itemId && !filteredItems.find(i => i.id === invoiceItem.itemId)
-                            ? items.filter(i => i.id === invoiceItem.itemId)
+                            ? allItems.filter(i => i.id === invoiceItem.itemId)
                             : []),
                         ]
-                      : items;
+                      : allItems;
                     return (
                       <tr key={invoiceItem.id} className="hover:bg-gray-50">
                         <td className="px-4 py-2">

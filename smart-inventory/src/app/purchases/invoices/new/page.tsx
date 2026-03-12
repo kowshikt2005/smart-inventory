@@ -4,6 +4,15 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PurchaseOrderItemRow } from "@/components/purchase-orders/PurchaseOrderItemRow";
 import {
   ArrowLeft,
@@ -14,6 +23,7 @@ import {
   X,
   Calculator,
   Copy,
+  Lock,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -82,6 +92,8 @@ function NewPurchaseInvoicePageContent() {
 
   // Items state
   const [items, setItems] = useState<Item[]>([]);
+  // Extra items loaded from an existing invoice (may be inactive, not returned by activeOnly fetch)
+  const [invoiceLoadedItems, setInvoiceLoadedItems] = useState<Item[]>([]);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItemData[]>([
     {
       id: generateId(),
@@ -99,6 +111,7 @@ function NewPurchaseInvoicePageContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [invoiceNumber, setInvoiceNumber] = useState("Loading...");
+  const [isEditBlocked, setIsEditBlocked] = useState(false);
 
   const fetchVendors = useCallback(async () => {
     try {
@@ -176,6 +189,12 @@ function NewPurchaseInvoicePageContent() {
       const response = await fetch(`/api/purchase-invoices/${invoiceId}`);
       if (response.ok) {
         const invoice = await response.json();
+        // Block editing if invoice is fully paid or cancelled
+        if (invoice.status === 'PAID' || invoice.status === 'CANCELLED') {
+          setIsEditBlocked(true);
+          setInvoiceNumber(invoice.invoiceNumber || "");
+          return;
+        }
         setInvoiceNumber(invoice.invoiceNumber || "");
         setInvoiceDate(
           invoice.date
@@ -191,6 +210,13 @@ function NewPurchaseInvoicePageContent() {
         setSelectedVendor(invoice.vendor);
 
         if (invoice.items && invoice.items.length > 0) {
+          // Extract item details from invoice response (includes inactive items)
+          // so PurchaseOrderItemRow can display names even if item is now inactive
+          const loadedItems: Item[] = invoice.items
+            .filter((inv: { item?: Item }) => inv.item)
+            .map((inv: { item: Item }) => inv.item);
+          setInvoiceLoadedItems(loadedItems);
+
           setInvoiceItems(
             invoice.items.map(
               (item: {
@@ -235,6 +261,11 @@ function NewPurchaseInvoicePageContent() {
         }
 
         if (invoice.items && invoice.items.length > 0) {
+          const loadedItems: Item[] = invoice.items
+            .filter((inv: { item?: Item }) => inv.item)
+            .map((inv: { item: Item }) => inv.item);
+          setInvoiceLoadedItems(loadedItems);
+
           setInvoiceItems(
             invoice.items.map((item: {
               itemId: string;
@@ -321,6 +352,14 @@ function NewPurchaseInvoicePageContent() {
       )
       .slice(0, 10);
   }, [vendors, vendorSearch]);
+
+  // Merge fetched items with items loaded from existing invoice (for edit/copy)
+  // so items that are now inactive still display correctly
+  const allItems = useMemo(() => {
+    const ids = new Set(items.map((i) => i.id));
+    const extras = invoiceLoadedItems.filter((i) => !ids.has(i.id));
+    return [...items, ...extras];
+  }, [items, invoiceLoadedItems]);
 
   // Get selected item IDs
   const selectedItemIds = useMemo(
@@ -432,6 +471,21 @@ function NewPurchaseInvoicePageContent() {
       return;
     }
 
+    // Check for duplicate items
+    const itemIdCounts = validItems.reduce((acc, item) => {
+      acc[item.itemId] = (acc[item.itemId] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    const duplicateIds = Object.keys(itemIdCounts).filter((id) => itemIdCounts[id] > 1);
+    if (duplicateIds.length > 0) {
+      const dupNames = duplicateIds.map((id) => {
+        const found = allItems.find((i) => i.id === id);
+        return found ? found.name : id;
+      });
+      setError(`Duplicate items found: ${dupNames.join(", ")}. Please merge them into one row.`);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -484,6 +538,27 @@ function NewPurchaseInvoicePageContent() {
 
   return (
     <DashboardLayout>
+      {/* Blocked edit popup */}
+      <AlertDialog open={isEditBlocked} onOpenChange={() => {}}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5 text-red-500" />
+              Cannot Edit Invoice
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Invoice <strong>#{invoiceNumber}</strong> has been fully paid and cannot be edited.
+              Paid invoices are locked to preserve accurate financial records.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => router.push("/purchases/invoices")} className="bg-teal-500 hover:bg-teal-600">
+              Go Back to Invoices
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="min-h-screen bg-gray-50">
         {/* Sticky action bar */}
         <div className="bg-white border-b border-gray-200 px-6 py-3 sticky top-0 z-10">
@@ -505,7 +580,7 @@ function NewPurchaseInvoicePageContent() {
               <Button variant="outline" size="sm" onClick={() => router.push("/purchases/invoices")}>
                 Cancel
               </Button>
-              <Button size="sm" onClick={handleSubmit} disabled={isSubmitting} className="bg-teal-500 hover:bg-teal-600 text-white">
+              <Button size="sm" onClick={handleSubmit} disabled={isSubmitting || isEditBlocked} className="bg-teal-500 hover:bg-teal-600 text-white">
                 {isSubmitting ? (
                   <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Saving...</>
                 ) : (
@@ -659,7 +734,7 @@ function NewPurchaseInvoicePageContent() {
                       <PurchaseOrderItemRow
                         key={item.id}
                         item={item}
-                        items={items}
+                        items={allItems}
                         selectedItemIds={selectedItemIds}
                         onUpdate={(updatedItem) => handleUpdateItem(index, updatedItem)}
                         onRemove={() => handleRemoveItem(index)}

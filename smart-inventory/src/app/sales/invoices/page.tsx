@@ -20,6 +20,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Edit,
   Loader2,
   X,
@@ -33,6 +40,7 @@ import {
   Filter,
   FileDown,
   Copy,
+  MoreVertical,
 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { ExportButtons } from "@/components/ui/ExportButtons";
@@ -633,7 +641,7 @@ export default function SalesInvoicesPage() {
                   <TableHead scope="col" className="font-semibold text-center">Status</TableHead>
                   <TableHead scope="col" className="font-semibold text-right">Total</TableHead>
                   <TableHead scope="col" className="font-semibold text-right">Balance</TableHead>
-                  <TableHead scope="col" className="font-semibold w-36">Actions</TableHead>
+                  <TableHead scope="col" className="font-semibold w-12"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -710,73 +718,64 @@ export default function SalesInvoicesPage() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-0.5">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-gray-500 hover:text-teal-600"
-                            onClick={() => router.push(`/sales/invoices/${invoice.id}`)}
-                            title="View Details"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {invoice.effectiveStatus === "PENDING" && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-8 w-8 p-0 text-gray-500 hover:text-blue-600"
-                              onClick={() => router.push(`/sales/invoices/new?edit=${invoice.id}`)}
-                              title="Edit Invoice"
+                              className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600"
                             >
-                              <Edit className="h-4 w-4" />
+                              <MoreVertical className="h-4 w-4" />
                             </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-gray-500 hover:text-gray-800"
-                            onClick={() => handleRowPDF(invoice.id)}
-                            disabled={rowPdfLoading === invoice.id}
-                            title="Download PDF"
-                          >
-                            {rowPdfLoading === invoice.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <FileDown className="h-4 w-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem onClick={() => router.push(`/sales/invoices/${invoice.id}`)}>
+                              <Eye className="h-4 w-4 mr-2 text-teal-600" />
+                              View Details
+                            </DropdownMenuItem>
+                            {(invoice.effectiveStatus === "PENDING" || invoice.effectiveStatus === "OVERDUE" || invoice.effectiveStatus === "PARTIAL") && (
+                              <DropdownMenuItem onClick={() => router.push(`/sales/invoices/new?edit=${invoice.id}`)}>
+                                <Edit className="h-4 w-4 mr-2 text-blue-600" />
+                                Edit Invoice
+                              </DropdownMenuItem>
                             )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`h-8 w-8 p-0 hover:text-indigo-600 ${copiedInvoiceId === invoice.id ? "text-indigo-600 bg-indigo-50" : "text-gray-500"}`}
-                            onClick={() => handleCopyInvoice(invoice.id)}
-                            title="Copy Invoice (then right-click to paste)"
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                          {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-gray-500 hover:text-green-600"
-                              onClick={() => invoice.customer && router.push(`/sales/receipts/new?customerId=${invoice.customer.id}`)}
-                              title="Record Payment"
+                            <DropdownMenuItem
+                              onClick={() => handleRowPDF(invoice.id)}
+                              disabled={rowPdfLoading === invoice.id}
                             >
-                              <CreditCard className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
-                              onClick={() => handleCancel(invoice.id)}
-                              title="Cancel Invoice"
-                            >
-                              <Ban className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
+                              {rowPdfLoading === invoice.id ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <FileDown className="h-4 w-4 mr-2 text-gray-600" />
+                              )}
+                              Download PDF
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleCopyInvoice(invoice.id)}>
+                              <Copy className="h-4 w-4 mr-2 text-indigo-600" />
+                              Copy Invoice
+                            </DropdownMenuItem>
+                            {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
+                              <DropdownMenuItem
+                                onClick={() => invoice.customer && router.push(`/sales/receipts/new?customerId=${invoice.customer.id}`)}
+                              >
+                                <CreditCard className="h-4 w-4 mr-2 text-green-600" />
+                                Record Payment
+                              </DropdownMenuItem>
+                            )}
+                            {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleCancel(invoice.id)}
+                                  className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                                >
+                                  <Ban className="h-4 w-4 mr-2" />
+                                  Cancel Invoice
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))
