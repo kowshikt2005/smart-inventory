@@ -116,7 +116,7 @@ function NewPurchaseOrderPageContent() {
   const fetchItems = useCallback(async () => {
     try {
       setIsLoadingItems(true);
-      const response = await fetch("/api/items?limit=1000&activeOnly=true");
+      const response = await fetch("/api/items?limit=9999&activeOnly=true");
       if (response.ok) {
         const data = await response.json();
         setItems(data.items || []);
@@ -431,111 +431,88 @@ function NewPurchaseOrderPageContent() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.push("/purchases/orders")}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Orders
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {editId ? "Edit Purchase Order" : copyId ? "Duplicate Purchase Order" : "New Purchase Order"}
-              </h1>
-              <p className="text-sm text-gray-600">Order #: {orderNumber}</p>
+      <div className="min-h-screen bg-gray-50">
+        {/* Sticky action bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-3 sticky top-0 z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => router.push("/purchases/orders")} className="text-gray-500 -ml-2">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+              <div className="h-4 w-px bg-gray-200" />
+              <div>
+                <span className="text-base font-bold text-gray-900">
+                  {editId ? "Edit Purchase Order" : copyId ? "Duplicate Purchase Order" : "New Purchase Order"}
+                </span>
+                <span className="ml-2 text-sm text-gray-400">#{orderNumber}</span>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => router.push("/purchases/orders")}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  {editId ? "Update Order" : "Create Order"}
-                </>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => router.push("/purchases/orders")}>Cancel</Button>
+              <Button size="sm" onClick={handleSubmit} disabled={isSubmitting} className="bg-teal-500 hover:bg-teal-600 text-white">
+                {isSubmitting ? (
+                  <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Saving...</>
+                ) : (
+                  <><Save className="h-4 w-4 mr-1.5" />{editId ? "Update Order" : "Create Order"}</>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* Copy mode notice */}
-        {copyId && (
-          <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-700 text-sm flex items-center gap-2">
-            <Copy className="h-4 w-4 shrink-0" />
-            Duplicating from an existing order — review and save to create a new order.
-          </div>
-        )}
+        <div className="p-6 space-y-4">
+          {copyId && (
+            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-700 text-sm flex items-center gap-2">
+              <Copy className="h-4 w-4 shrink-0" />
+              Duplicating from an existing order — review and save to create a new order.
+            </div>
+          )}
 
-        {/* Error Display */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
+          )}
 
-        {/* Form */}
-        <div className="space-y-6">
-          {/* Header Fields */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Order Details
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Order Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Order Date <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="date"
-                  value={orderDate}
-                  onChange={(e) => setOrderDate(e.target.value)}
-                  max={new Date().toISOString().split("T")[0]}
-                />
+          {/* Row 1: Order details + Vendor */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Order Details</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Order Date <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={orderDate}
+                    onChange={(e) => setOrderDate(e.target.value)}
+                    max={new Date().toISOString().split("T")[0]}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Expected Delivery
+                  </label>
+                  <Input
+                    type="date"
+                    value={expectedDelivery}
+                    onChange={(e) => setExpectedDelivery(e.target.value)}
+                  />
+                </div>
               </div>
+            </div>
 
-              {/* Expected Delivery */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Expected Delivery
-                </label>
-                <Input
-                  type="date"
-                  value={expectedDelivery}
-                  onChange={(e) => setExpectedDelivery(e.target.value)}
-                />
-              </div>
-
-              {/* Vendor Selection */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Vendor <span className="text-red-500">*</span>
-                </label>
-                {isLoadingVendors ? (
-                  <div className="flex items-center gap-2 text-gray-500 p-3">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading vendors...
-                  </div>
-                ) : (
+            {/* Vendor Card */}
+            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
+                Vendor <span className="text-red-400">*</span>
+              </p>
+              {isLoadingVendors ? (
+                <div className="flex items-center gap-2 text-gray-500 py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Loading vendors...</span>
+                </div>
+              ) : (
                   <div className="space-y-2">
                     {!selectedVendor && (
                       <div className="relative">
@@ -626,51 +603,34 @@ function NewPurchaseOrderPageContent() {
                     )}
                   </div>
                 )}
-              </div>
             </div>
           </div>
 
           {/* Items Section */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Order Items
-            </h2>
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">Line Items</p>
+            </div>
             {isLoadingItems ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                <span className="ml-2 text-gray-500">Loading items...</span>
+              <div className="flex items-center justify-center py-10 gap-2 text-gray-400">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Loading items...</span>
               </div>
             ) : (
               <>
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b bg-gray-50">
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          Item
-                        </th>
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          HSN
-                        </th>
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          Qty
-                        </th>
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          Unit
-                        </th>
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          Rate
-                        </th>
-                        <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
-                          GST %
-                        </th>
-                        <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
-                          Tax Amt
-                        </th>
-                        <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
-                          Total
-                        </th>
-                        <th className="px-3 py-3 w-12"></th>
+                      <tr className="bg-gray-50 border-b border-gray-100">
+                        <th className="px-3 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-10">S.No</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Item</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-20">HSN/SAC</th>
+                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">Tax %</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Qty</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">Unit</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Rate ₹</th>
+                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Amount</th>
+                        <th className="px-3 py-2.5 w-10"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -680,6 +640,7 @@ function NewPurchaseOrderPageContent() {
                           item={item}
                           items={items}
                           selectedItemIds={selectedItemIds}
+                          sno={index + 1}
                           onUpdate={(updatedItem) =>
                             handleUpdateItem(index, updatedItem)
                           }
@@ -689,98 +650,60 @@ function NewPurchaseOrderPageContent() {
                     </tbody>
                   </table>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddItem}
-                  className="mt-4"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Item
-                </Button>
+                <div className="px-5 py-3 border-t border-gray-100">
+                  <Button type="button" variant="outline" size="sm" onClick={handleAddItem}>
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Add Item
+                  </Button>
+                </div>
               </>
             )}
           </div>
 
-          {/* Notes and Terms */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Notes
-              </label>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Internal notes about this order..."
-                rows={3}
-              />
+          {/* Notes + Summary */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-3 space-y-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Notes</p>
+                <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Internal notes about this order..." rows={3} className="resize-none" />
+              </div>
+              <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Terms & Conditions</p>
+                <Textarea value={terms} onChange={(e) => setTerms(e.target.value)} placeholder="Terms and conditions for this order..." rows={3} className="resize-none" />
+              </div>
             </div>
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Terms & Conditions
-              </label>
-              <Textarea
-                value={terms}
-                onChange={(e) => setTerms(e.target.value)}
-                placeholder="Terms and conditions for this order..."
-                rows={3}
-              />
-            </div>
-          </div>
-
-          {/* Summary Panel */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex justify-end">
-              <div className="w-full max-w-sm space-y-3">
-                <div className="flex items-center gap-2 mb-4">
-                  <Calculator className="h-5 w-5 text-gray-500" />
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Order Summary
-                  </h3>
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Calculator className="h-4 w-4 text-gray-400" />
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Summary</p>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Taxable Value</span>
+                  <span className="font-medium">{formatCurrency(totals.subtotal)}</span>
                 </div>
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Taxable Value</span>
-                  <span className="font-medium">
-                    {formatCurrency(totals.subtotal)}
-                  </span>
-                </div>
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">CGST</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">CGST</span>
                   <span>{formatCurrency(totals.cgst)}</span>
                 </div>
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">SGST</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">SGST</span>
                   <span>{formatCurrency(totals.sgst)}</span>
                 </div>
 
-                <div className="flex justify-between text-sm items-center">
-                  <span className="text-gray-600">Round Off</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Round Off</span>
                   <Input
-                    type="number"
-                    step="0.01"
-                    min="-1"
-                    max="1"
+                    type="number" step="0.01" min="-1" max="1"
                     value={roundOff}
-                    onChange={(e) =>
-                      setRoundOff(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setRoundOff(parseFloat(e.target.value) || 0)}
                     className="w-24 text-right h-8"
                   />
                 </div>
 
-                <div className="border-t pt-3">
-                  <div className="flex justify-between">
-                    <span className="text-lg font-semibold text-gray-900">
-                      Total
-                    </span>
-                    <span className="text-lg font-bold text-teal-600">
-                      {formatCurrency(totals.totalAmount)}
-                    </span>
-                  </div>
+                <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
+                  <span>Total</span>
+                  <span className="text-teal-600">{formatCurrency(totals.totalAmount)}</span>
                 </div>
               </div>
             </div>

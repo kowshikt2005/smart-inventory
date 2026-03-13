@@ -84,7 +84,7 @@ export default function StockLedgerPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Fetch items
-  const { data: itemsData, isLoading: isLoadingItems } = useSWR("/api/items?limit=1000&isActive=true");
+  const { data: itemsData, isLoading: isLoadingItems } = useSWR("/api/items?limit=9999&isActive=true");
   const items: Item[] = itemsData?.items || [];
 
   // Fetch ledger

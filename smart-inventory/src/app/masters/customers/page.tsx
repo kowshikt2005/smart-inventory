@@ -29,6 +29,8 @@ import {
   X,
   PowerOff,
   Power,
+  Edit,
+  Trash2,
 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { useState, useMemo } from "react";
@@ -61,6 +63,7 @@ export default function CustomersPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const itemsPerPage = 10;
 
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -114,6 +117,23 @@ export default function CustomersPage() {
       alert("Failed to update customer status. Please try again.");
     } finally {
       setTogglingId(null);
+    }
+  };
+
+  const handleDeleteCustomer = async (customer: Customer) => {
+    if (!confirm(`Delete "${customer.name}"? This cannot be undone.`)) return;
+    setDeletingId(customer.id);
+    try {
+      const res = await fetch(`/api/customers/${customer.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Failed to delete");
+      }
+      mutate();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete customer");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -258,43 +278,63 @@ export default function CustomersPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                              aria-label={`Actions for ${customer.name}`}
-                            >
-                              {togglingId === customer.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <MoreHorizontal className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => router.push(`/masters/customers/${customer.id}`)}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => router.push(`/ledger/customers?customerId=${customer.id}`)}>
-                              <FileText className="h-4 w-4 mr-2" />
-                              View Transactions
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleToggleStatus(customer)}
-                              className={inactive ? "text-green-600" : "text-orange-600"}
-                            >
-                              {inactive ? (
-                                <><Power className="h-4 w-4 mr-2" />Activate</>
-                              ) : (
-                                <><PowerOff className="h-4 w-4 mr-2" />Deactivate</>
-                              )}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost" size="sm"
+                            className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600"
+                            aria-label="Edit customer"
+                            onClick={() => router.push(`/masters/customers/${customer.id}`)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="sm"
+                            className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
+                            aria-label="Delete customer"
+                            disabled={deletingId === customer.id}
+                            onClick={() => handleDeleteCustomer(customer)}
+                          >
+                            {deletingId === customer.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                aria-label={`More actions for ${customer.name}`}
+                                disabled={togglingId === customer.id}
+                              >
+                                {togglingId === customer.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <MoreHorizontal className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => router.push(`/masters/customers/${customer.id}`)}>
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => router.push(`/ledger/customers?customerId=${customer.id}`)}>
+                                <FileText className="h-4 w-4 mr-2" />
+                                View Transactions
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleToggleStatus(customer)}
+                                className={inactive ? "text-green-600" : "text-orange-600"}
+                              >
+                                {inactive ? (
+                                  <><Power className="h-4 w-4 mr-2" />Activate</>
+                                ) : (
+                                  <><PowerOff className="h-4 w-4 mr-2" />Deactivate</>
+                                )}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

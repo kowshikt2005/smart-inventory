@@ -119,7 +119,7 @@ export default function NewDummyInvoicePage() {
   const fetchItems = useCallback(async () => {
     try {
       setIsLoadingItems(true);
-      const res = await fetch("/api/items?limit=500&activeOnly=true&isActive=true");
+      const res = await fetch("/api/items?limit=9999&activeOnly=true&isActive=true");
       if (res.ok) {
         const data = await res.json();
         setItems(data.items || []);

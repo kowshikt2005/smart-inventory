@@ -81,7 +81,7 @@ function NewPurchaseReturnPageContent() {
   const fetchItems = useCallback(async () => {
     try {
       setIsLoadingItems(true);
-      const response = await fetch("/api/items?limit=1000&activeOnly=true");
+      const response = await fetch("/api/items?limit=9999&activeOnly=true");
       if (response.ok) {
         const data = await response.json();
         setItems(data.items || []);

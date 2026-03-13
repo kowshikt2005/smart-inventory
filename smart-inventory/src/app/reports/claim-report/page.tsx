@@ -73,7 +73,7 @@ export default function ClaimReportPage() {
   // Fetch customers, brands, and items for filters
   const { data: customersData } = useSWR("/api/customers?limit=1000");
   const { data: brandsData } = useSWR("/api/brands");
-  const { data: itemsData } = useSWR("/api/items?limit=1000");
+  const { data: itemsData } = useSWR("/api/items?limit=9999");
 
   // Build query string for API
   const queryString = useMemo(() => {

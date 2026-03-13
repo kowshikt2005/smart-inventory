@@ -11,6 +11,7 @@ import {
   AlertCircle,
   CheckCircle,
   Package,
+  Receipt,
 } from "lucide-react";
 
 const reports = [
@@ -79,6 +80,17 @@ const reports = [
     textColor: "text-teal-700",
     borderColor: "border-teal-200",
     hoverBorder: "hover:border-teal-300",
+  },
+  {
+    title: "GST Reports",
+    description: "GSTR-1, GSTR-2, GSTR-3B, and GSTR-9 reports for GST return filing.",
+    href: "/gst",
+    icon: Receipt,
+    color: "bg-orange-500",
+    lightColor: "bg-orange-50",
+    textColor: "text-orange-700",
+    borderColor: "border-orange-200",
+    hoverBorder: "hover:border-orange-300",
   },
 ];
 

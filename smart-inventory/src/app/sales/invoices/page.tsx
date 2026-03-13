@@ -41,6 +41,7 @@ import {
   FileDown,
   Copy,
   MoreVertical,
+  Plus,
 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
 import { ExportButtons } from "@/components/ui/ExportButtons";
@@ -488,6 +489,14 @@ export default function SalesInvoicesPage() {
                 disabled={isLoading || invoices.length === 0}
               />
               <ImportButton entityType="SALES_INVOICE" entityLabel="Sales Invoices" onSuccess={() => fetchInvoices()} />
+              <Button
+                size="sm"
+                className="bg-teal-500 hover:bg-teal-600 text-white"
+                onClick={() => window.location.href = "/sales/invoices/new"}
+              >
+                <Plus className="h-4 w-4 mr-1.5" />
+                New Invoice
+              </Button>
             </div>
           </div>
 

@@ -104,17 +104,17 @@ export default function ClosingStockPage() {
 
   const handleExportExcel = async () => {
     const { company } = await fetchCompanySettings();
-    const headers = ["Item Code", "Name", "Brand", "Sub-Brand", "HSN", "Unit", "Purchase Price", "Physical", "Reserved", "Available", "Stock Value"];
-    const rows = items.map((i) => [i.itemCode, i.name, i.brand, i.subBrand, i.hsnCode, i.unit, i.purchasePrice, i.physicalStock, i.reservedQuantity, i.availableStock, i.stockValue]);
-    rows.push(["", "", "", "", "", "", "", "", "Total", summary.totalQuantity, summary.totalValue]);
+    const headers = ["Item Code", "Name", "Brand", "Sub-Brand", "HSN", "Unit", "Purchase Price", "Closing Stock", "Stock Value"];
+    const rows = items.map((i) => [i.itemCode, i.name, i.brand, i.subBrand, i.hsnCode, i.unit, i.purchasePrice, i.physicalStock, i.stockValue]);
+    rows.push(["", "", "", "", "", "", "Total", summary.totalQuantity, summary.totalValue]);
     exportToExcel({ fileName: `Closing-Stock.xlsx`, sheets: [{ name: "Closing Stock", headers, rows }], company });
   };
 
   const handleExportPDF = async () => {
     const { company } = await fetchCompanySettings();
-    const headers = ["Code", "Name", "Brand", "Sub-Brand", "HSN", "Unit", "Price", "Physical", "Reserved", "Available", "Value"];
-    const rows = items.map((i) => [i.itemCode, i.name, i.brand, i.subBrand, i.hsnCode, i.unit, fmtNum(i.purchasePrice), i.physicalStock, i.reservedQuantity, i.availableStock, fmtNum(i.stockValue)]);
-    rows.push(["", "", "", "", "", "", "", "", "Total", summary.totalQuantity, fmtNum(summary.totalValue)]);
+    const headers = ["Code", "Name", "Brand", "Sub-Brand", "HSN", "Unit", "Price", "Closing Stock", "Value"];
+    const rows = items.map((i) => [i.itemCode, i.name, i.brand, i.subBrand, i.hsnCode, i.unit, fmtNum(i.purchasePrice), i.physicalStock, fmtNum(i.stockValue)]);
+    rows.push(["", "", "", "", "", "", "Total", summary.totalQuantity, fmtNum(summary.totalValue)]);
     exportToPDF({ fileName: `Closing-Stock.pdf`, title: "Closing Stock Report", subtitle: `As of ${new Date().toLocaleDateString("en-IN")}`, orientation: "landscape", sheets: [{ name: "Closing Stock", headers, rows }], company });
   };
 
@@ -240,13 +240,7 @@ export default function ClosingStockPage() {
                       Purchase Price
                     </TableHead>
                     <TableHead className="font-semibold text-right">
-                      Physical
-                    </TableHead>
-                    <TableHead className="font-semibold text-right">
-                      Reserved
-                    </TableHead>
-                    <TableHead className="font-semibold text-right">
-                      Available
+                      Closing Stock
                     </TableHead>
                     <TableHead className="font-semibold text-right">
                       Stock Value
@@ -270,18 +264,6 @@ export default function ClosingStockPage() {
                       <TableCell className="text-right font-medium text-gray-900">
                         {fmtQty(item.physicalStock)}
                       </TableCell>
-                      <TableCell className={`text-right font-medium ${item.reservedQuantity > 0 ? "text-yellow-600" : "text-gray-400"}`}>
-                        {fmtQty(item.reservedQuantity)}
-                      </TableCell>
-                      <TableCell
-                        className={`text-right font-medium ${
-                          item.availableStock <= 0
-                            ? "text-red-600"
-                            : "text-green-600"
-                        }`}
-                      >
-                        {fmtQty(item.availableStock)}
-                      </TableCell>
                       <TableCell className="text-right font-semibold">
                         {fmt(item.stockValue)}
                       </TableCell>
@@ -290,7 +272,7 @@ export default function ClosingStockPage() {
                   {/* Total Row */}
                   <TableRow className="bg-gray-50 border-t-2 border-gray-300">
                     <TableCell
-                      colSpan={9}
+                      colSpan={7}
                       className="font-bold text-gray-900 text-right"
                     >
                       Total

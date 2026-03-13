@@ -23,6 +23,7 @@ interface Item {
 interface OrderItemData {
   id: string;
   itemId: string;
+  itemName?: string | null;
   quantity: number;
   rate: number;
   taxRate: number;
@@ -37,6 +38,7 @@ interface PurchaseOrderItemRowProps {
   onUpdate: (updatedItem: OrderItemData) => void;
   onRemove: () => void;
   disabled?: boolean;
+  sno?: number;
 }
 
 export function PurchaseOrderItemRow({
@@ -46,6 +48,7 @@ export function PurchaseOrderItemRow({
   onUpdate,
   onRemove,
   disabled = false,
+  sno,
 }: PurchaseOrderItemRowProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -54,6 +57,9 @@ export function PurchaseOrderItemRow({
     () => items.find((i) => i.id === item.itemId),
     [items, item.itemId]
   );
+
+  // Fallback display name for imported items with no catalog link
+  const displayName = selectedItem?.name || item.itemName || null;
 
   // Handle item selection from modal
   const handleItemSelect = (selectedItemData: Item) => {
@@ -114,18 +120,20 @@ export function PurchaseOrderItemRow({
   return (
     <>
       <tr>
+        {/* S.No */}
+        {sno !== undefined && (
+          <td className="px-3 py-2 text-center text-sm text-gray-500 w-10">{sno}</td>
+        )}
+
         {/* Item Selection */}
         <td className="px-3 py-2">
-          {selectedItem ? (
-            <div className="min-w-[200px]">
+          {displayName ? (
+            <div className="min-w-[180px]">
               <div className="flex flex-col">
-                <span className="font-medium text-sm">{selectedItem.name}</span>
-                <span className="text-xs text-gray-500">
-                  {selectedItem.itemCode}
-                  {selectedItem.hsnCode && ` | HSN: ${selectedItem.hsnCode}`}
-                </span>
+                <span className="font-medium text-sm">{displayName}</span>
+                {selectedItem && <span className="text-xs text-gray-500">{selectedItem.itemCode}</span>}
               </div>
-              {!disabled && (
+              {!disabled && selectedItem && (
                 <Button
                   type="button"
                   variant="ghost"
@@ -134,7 +142,7 @@ export function PurchaseOrderItemRow({
                   className="mt-1 h-7 text-xs text-teal-600 hover:text-teal-700 hover:bg-teal-50 px-2"
                 >
                   <Package className="h-3 w-3 mr-1" />
-                  Change Item
+                  Change
                 </Button>
               )}
             </div>
@@ -144,7 +152,7 @@ export function PurchaseOrderItemRow({
               variant="outline"
               onClick={() => setIsModalOpen(true)}
               disabled={disabled}
-              className="w-full min-w-[200px] justify-start text-left font-normal"
+              className="w-full min-w-[180px] justify-start text-left font-normal"
             >
               <Package className="h-4 w-4 mr-2" />
               Select item...
@@ -152,59 +160,54 @@ export function PurchaseOrderItemRow({
           )}
         </td>
 
-        {/* HSN Code */}
-        <td className="px-3 py-2 text-sm text-gray-600">
+        {/* HSN/SAC */}
+        <td className="px-3 py-2 text-sm text-gray-600 w-20">
           {selectedItem?.hsnCode || "-"}
         </td>
 
+        {/* Tax % */}
+        <td className="px-3 py-2 text-sm text-gray-600 text-right w-16">
+          {item.taxRate}%
+        </td>
+
         {/* Quantity */}
-        <td className="px-3 py-2">
+        <td className="px-3 py-2 w-24">
           <Input
             type="number"
             min="1"
             step="1"
             value={item.quantity || ""}
             onChange={(e) => handleQuantityChange(e.target.value)}
-            className="w-24 text-right"
+            className="w-full text-right"
             disabled={disabled || !item.itemId}
           />
         </td>
 
         {/* Unit */}
-        <td className="px-3 py-2 text-sm text-gray-600">
+        <td className="px-3 py-2 text-sm text-gray-600 w-16">
           {selectedItem?.unit || "-"}
         </td>
 
-        {/* Rate */}
-        <td className="px-3 py-2">
+        {/* Rate ₹ */}
+        <td className="px-3 py-2 w-28">
           <Input
             type="number"
             min="0.01"
             step="0.01"
             value={item.rate || ""}
             onChange={(e) => handleRateChange(e.target.value)}
-            className="w-28 text-right"
+            className="w-full text-right"
             disabled={disabled || !item.itemId}
           />
         </td>
 
-        {/* Tax Rate */}
-        <td className="px-3 py-2 text-sm text-gray-600 text-right">
-          {item.taxRate}%
-        </td>
-
-        {/* Tax Amount */}
-        <td className="px-3 py-2 text-sm text-gray-600 text-right">
-          {formatCurrency(item.taxAmount)}
-        </td>
-
-        {/* Total (base amount + tax amount) */}
-        <td className="px-3 py-2 text-sm font-medium text-right">
+        {/* Amount */}
+        <td className="px-3 py-2 text-sm font-medium text-right w-28">
           {formatCurrency(item.amount + item.taxAmount)}
         </td>
 
         {/* Actions */}
-        <td className="px-3 py-2">
+        <td className="px-3 py-2 w-10">
           <Button
             type="button"
             variant="ghost"

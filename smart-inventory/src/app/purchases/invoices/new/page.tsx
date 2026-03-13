@@ -58,6 +58,7 @@ interface Item {
 interface InvoiceItemData {
   id: string;
   itemId: string;
+  itemName?: string | null;
   quantity: number;
   rate: number;
   taxRate: number;
@@ -105,7 +106,7 @@ function NewPurchaseInvoicePageContent() {
       amount: 0,
     },
   ]);
-  const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const [isLoadingItems, setIsLoadingItems] = useState(true);
 
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -131,7 +132,9 @@ function NewPurchaseInvoicePageContent() {
   const fetchItems = useCallback(async () => {
     try {
       setIsLoadingItems(true);
-      const response = await fetch("/api/items?limit=1000&activeOnly=true");
+      // When editing, fetch all items (including inactive) so invoice items are always visible
+      const url = editId ? "/api/items?limit=9999" : "/api/items?limit=9999&activeOnly=true";
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         setItems(data.items || []);
@@ -141,7 +144,7 @@ function NewPurchaseInvoicePageContent() {
     } finally {
       setIsLoadingItems(false);
     }
-  }, []);
+  }, [editId]);
 
   const loadPurchaseOrder = useCallback(async (orderId: string) => {
     try {
@@ -220,7 +223,8 @@ function NewPurchaseInvoicePageContent() {
           setInvoiceItems(
             invoice.items.map(
               (item: {
-                itemId: string;
+                itemId: string | null;
+                itemName: string | null;
                 quantity: number;
                 rate: number;
                 taxRate: number;
@@ -228,7 +232,8 @@ function NewPurchaseInvoicePageContent() {
                 amount: number;
               }) => ({
                 id: generateId(),
-                itemId: item.itemId,
+                itemId: item.itemId || "",
+                itemName: item.itemName || null,
                 quantity: Number(item.quantity),
                 rate: Number(item.rate),
                 taxRate: Number(item.taxRate),

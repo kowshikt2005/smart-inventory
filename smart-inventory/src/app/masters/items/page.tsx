@@ -72,7 +72,7 @@ export default function ItemsPage() {
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   // Use SWR for caching
-  const { data, error, isLoading, mutate } = useSWR("/api/items?limit=1000");
+  const { data, error, isLoading, mutate } = useSWR("/api/items?limit=9999");
 
   const unresolvedCount = useMemo(() => {
     return (data?.items || []).filter((i: Item) => i.isImported && !i.brand).length;
