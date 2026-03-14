@@ -89,12 +89,6 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     // Validate required fields
-    if (!body.name) {
-      return NextResponse.json(
-        { error: 'Missing required field: name' },
-        { status: 400 }
-      );
-    }
     if (!body.validFrom) {
       return NextResponse.json(
         { error: 'Missing required field: validFrom' },
@@ -120,6 +114,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const generatedName = body.name?.trim() || `Rate Sheet - ${new Date().toISOString().split('T')[0]} - ${body.customerIds.length} customer(s)`;
+
     // Validate discountPercent (must be between 0 and 100)
     const discountPercent = parseFloat(body.discountPercent) || 0;
     if (discountPercent < 0 || discountPercent > 100) {
@@ -133,7 +129,7 @@ export async function POST(request: Request) {
     const rateSheet = await transaction(async (tx) => {
       const created = await tx.rateSheet.create({
         data: {
-          name: body.name,
+          name: generatedName,
           validFrom: new Date(body.validFrom),
           validTo: body.validTo ? new Date(body.validTo) : null,
           discountPercent,

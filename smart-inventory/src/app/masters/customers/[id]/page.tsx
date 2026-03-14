@@ -20,6 +20,7 @@ import {
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import useSWR from "swr";
+import { normalizeGstin, validateGstin } from "@/lib/gst-validation";
 import {
   RateSheetEditor,
   emptyRateSheetFormData,
@@ -65,6 +66,7 @@ interface Customer {
   id: string;
   customerNumber: string;
   name: string;
+  contactName?: string | null;
   email: string | null;
   phone: string | null;
   gstin: string;
@@ -123,12 +125,22 @@ export default function CustomerDetailPage() {
   }, [customer]);
 
   const handleSave = async () => {
+    const normalizedGstin = normalizeGstin(formData.gstin || "");
+    const gstValidation = validateGstin(normalizedGstin);
+    if (!gstValidation.valid) {
+      alert(gstValidation.error || "Invalid GSTIN");
+      return;
+    }
+
     setIsSaving(true);
     try {
       const response = await fetch(`/api/customers/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          gstin: normalizedGstin,
+        }),
       });
 
       if (!response.ok) {
@@ -253,7 +265,10 @@ export default function CustomerDetailPage() {
 
   const openAddRateSheet = () => {
     setEditingRateSheetId(null);
-    setRateSheetForm(emptyRateSheetFormData);
+    setRateSheetForm({
+      ...emptyRateSheetFormData,
+      name: `Rate Sheet - ${new Date().toISOString().split("T")[0]}`,
+    });
     setShowRateSheetForm(true);
   };
 
@@ -270,10 +285,6 @@ export default function CustomerDetailPage() {
   };
 
   const handleSaveRateSheet = async () => {
-    if (!rateSheetForm.name.trim()) {
-      alert("Rate sheet name is required");
-      return;
-    }
     setIsSavingRateSheet(true);
     const totalInclusions =
       rateSheetForm.inclusionDiscounts.brands.length +
@@ -286,8 +297,10 @@ export default function CustomerDetailPage() {
         : "/api/rate-sheets";
       const method = editingRateSheetId ? "PUT" : "POST";
 
+      const generatedName = rateSheetForm.name?.trim() || `Rate Sheet - ${rateSheetForm.validFrom} - ${customer?.name || "Customer"}`;
+
       const payload: Record<string, unknown> = {
-        name: rateSheetForm.name.trim(),
+        name: generatedName,
         validFrom: rateSheetForm.validFrom,
         validTo: rateSheetForm.validTo || null,
         discountPercent: 0,
@@ -459,6 +472,14 @@ export default function CustomerDetailPage() {
                 )}
               </div>
               <div>
+                <Label>Contact Name</Label>
+                {isEditing ? (
+                  <Input value={formData.contactName || ""} onChange={(e) => setFormData({ ...formData, contactName: e.target.value })} />
+                ) : (
+                  <p className="mt-1">{customer.contactName || "-"}</p>
+                )}
+              </div>
+              <div>
                 <Label>Phone</Label>
                 {isEditing ? (
                   <Input value={formData.phone || ""} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
@@ -469,7 +490,7 @@ export default function CustomerDetailPage() {
               <div>
                 <Label>GSTIN</Label>
                 {isEditing ? (
-                  <Input value={formData.gstin || ""} onChange={(e) => setFormData({ ...formData, gstin: e.target.value })} maxLength={15} />
+                  <Input value={formData.gstin || ""} onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })} maxLength={15} />
                 ) : (
                   <p className="mt-1 font-mono">{customer.gstin}</p>
                 )}

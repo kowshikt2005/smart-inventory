@@ -33,6 +33,7 @@ model Customer {
   id                String                    @id @default(uuid())
   customerNumber    String                    @unique
   name              String
+  contactName       String?
   gstin             String?                   @db.VarChar(15)
   email             String?
   phone             String?
@@ -622,6 +623,7 @@ model PurchaseInvoice {
   dueDate         DateTime
   amount          Decimal               @default(0.00) @db.Decimal(15, 2)
   taxAmount       Decimal               @default(0.00) @db.Decimal(15, 2)
+  roundOff        Decimal               @default(0.00) @db.Decimal(15, 2)
   totalAmount     Decimal               @default(0.00) @db.Decimal(15, 2)
   paidAmount      Decimal               @default(0.00) @db.Decimal(15, 2)
   balanceAmount   Decimal               @default(0.00) @db.Decimal(15, 2)

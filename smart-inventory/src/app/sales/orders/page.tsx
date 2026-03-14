@@ -243,7 +243,7 @@ export default function SalesOrdersPage() {
 
   // Handle create invoice - navigate to review page
   const handleCreateInvoice = (orderId: string) => {
-    router.push(`/sales/invoices/create?salesOrderId=${orderId}`);
+    router.push(`/sales/invoices/new?salesOrderId=${orderId}`);
   };
 
   // Handle status change

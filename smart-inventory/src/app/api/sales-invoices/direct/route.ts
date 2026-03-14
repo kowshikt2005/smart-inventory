@@ -3,6 +3,7 @@ import { db, transaction } from '@/lib/db';
 import { StockMovementType } from '@/generated/prisma';
 import { generateInvoiceNumber, calculateDueDate } from '@/lib/invoice-utils';
 import { calculateOrderTotals } from '@/lib/order-utils';
+import { normalizeRoundOffMode, resolveRoundOff } from '@/lib/rounding-utils';
 import { checkPermission } from '@/lib/api-auth';
 import { auth } from '@/lib/auth';
 
@@ -33,6 +34,12 @@ export async function POST(request: Request) {
     if (!customer) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
     }
+
+    const roundOffSetting = await db.appSetting.findUnique({
+      where: { key: 'invoice_roundoff_mode' },
+      select: { value: true },
+    });
+    const effectiveRoundOffMode = normalizeRoundOffMode(body.roundOffMode || roundOffSetting?.value);
 
     const validItems: Array<{ itemId: string; quantity: number; rate: number; taxRate: number; discountPercent: number; amount: number; taxAmount: number }> = items.filter(
       (item: { itemId?: string; quantity?: number; rate?: number }) => item.itemId && Number(item.quantity) > 0 && Number(item.rate) >= 0
@@ -76,9 +83,16 @@ export async function POST(request: Request) {
         ? new Date(dueDate)
         : calculateDueDate(invoiceDateObj, customer.creditDays);
 
-      const { subtotal, totalTax, cgst, sgst, totalAmount } = calculateOrderTotals(
-        validItems.map((i) => ({ amount: i.amount, taxAmount: i.taxAmount })),
+      const itemTotals = validItems.map((i) => ({ amount: i.amount, taxAmount: i.taxAmount }));
+      const baseTotals = calculateOrderTotals(itemTotals, 0);
+      const roundOffDecision = resolveRoundOff(
+        baseTotals.subtotal + baseTotals.totalTax,
+        effectiveRoundOffMode,
         Number(roundOff)
+      );
+      const { subtotal, totalTax, cgst, sgst, totalAmount } = calculateOrderTotals(
+        itemTotals,
+        roundOffDecision.roundOff
       );
 
       const newInvoice = await (tx.invoice.create as any)({
@@ -90,7 +104,7 @@ export async function POST(request: Request) {
           cgst,
           sgst,
           taxAmount: totalTax,
-          roundOff: Number(roundOff),
+          roundOff: roundOffDecision.roundOff,
           totalAmount,
           paidAmount: 0,
           balanceAmount: totalAmount,

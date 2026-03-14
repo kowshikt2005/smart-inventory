@@ -479,18 +479,6 @@ export function RateSheetEditor({ value, onChange, compact }: RateSheetEditorPro
   return (
     <>
       <div className={compact ? "space-y-4" : "space-y-5"}>
-        {/* Name */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            Rate Sheet Name <span className="text-red-500">*</span>
-          </label>
-          <Input
-            value={value.name}
-            onChange={(e) => update({ name: e.target.value })}
-            placeholder="e.g., Premium Customer Rate"
-          />
-        </div>
-
         {/* Dates */}
         <div className="grid grid-cols-2 gap-4">
           <div>

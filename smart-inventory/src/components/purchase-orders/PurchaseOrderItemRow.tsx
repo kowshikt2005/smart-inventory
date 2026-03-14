@@ -18,6 +18,7 @@ interface Item {
   subBrandId?: string | null;
   brand?: { id: string; name: string } | null;
   subBrand?: { id: string; name: string } | null;
+  uomConversions?: Array<{ name: string; factor: number }> | null;
 }
 
 interface OrderItemData {
@@ -25,6 +26,8 @@ interface OrderItemData {
   itemId: string;
   itemName?: string | null;
   quantity: number;
+  unit?: string;
+  uomFactor?: number;
   rate: number;
   taxRate: number;
   taxAmount: number;
@@ -72,9 +75,41 @@ export function PurchaseOrderItemRow({
     onUpdate({
       ...item,
       itemId: selectedItemData.id,
+      unit: selectedItemData.unit,
+      uomFactor: 1,
       rate,
       taxRate,
       quantity,
+      amount: Math.round(baseAmount * 100) / 100,
+      taxAmount: Math.round(taxAmount * 100) / 100,
+    });
+  };
+
+  const handleUnitChange = (newUnitName: string) => {
+    if (!selectedItem) return;
+
+    const currentFactor = item.uomFactor || 1;
+    let newFactor = 1;
+
+    if (newUnitName !== selectedItem.unit) {
+      const conv = selectedItem.uomConversions?.find((c) => c.name === newUnitName);
+      newFactor = conv?.factor || 1;
+    }
+
+    const baseQuantity = item.quantity * currentFactor;
+    const baseRate = item.rate / currentFactor;
+    const newQuantity = Math.round((baseQuantity / newFactor) * 1000) / 1000;
+    const newRate = Math.round(baseRate * newFactor * 100) / 100;
+
+    const baseAmount = newQuantity * newRate;
+    const taxAmount = baseAmount * (item.taxRate / 100);
+
+    onUpdate({
+      ...item,
+      unit: newUnitName,
+      uomFactor: newFactor,
+      quantity: newQuantity,
+      rate: newRate,
       amount: Math.round(baseAmount * 100) / 100,
       taxAmount: Math.round(taxAmount * 100) / 100,
     });
@@ -184,8 +219,24 @@ export function PurchaseOrderItemRow({
         </td>
 
         {/* Unit */}
-        <td className="px-3 py-2 text-sm text-gray-600 w-16">
-          {selectedItem?.unit || "-"}
+        <td className="px-3 py-2 w-20">
+          {selectedItem && selectedItem.uomConversions && selectedItem.uomConversions.length > 0 ? (
+            <select
+              value={item.unit || selectedItem.unit}
+              onChange={(e) => handleUnitChange(e.target.value)}
+              disabled={disabled || !item.itemId}
+              className="w-full h-9 rounded-md border border-gray-200 px-2 text-sm bg-white disabled:opacity-50"
+            >
+              <option value={selectedItem.unit}>{selectedItem.unit}</option>
+              {selectedItem.uomConversions.map((conv) => (
+                <option key={conv.name} value={conv.name}>
+                  {conv.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="text-sm text-gray-600 px-1">{selectedItem?.unit || "-"}</span>
+          )}
         </td>
 
         {/* Rate ₹ */}

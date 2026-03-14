@@ -73,6 +73,7 @@ function NewSalesInvoiceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
+  const salesOrderId = searchParams.get("salesOrderId");
 
   // Form state
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
@@ -194,6 +195,52 @@ function NewSalesInvoiceContent() {
     }
   }, []);
 
+  const loadSalesOrderContext = useCallback(async (orderId: string) => {
+    try {
+      const res = await fetch(`/api/sales-orders/${orderId}`);
+      if (!res.ok) return;
+
+      const order = await res.json();
+      if (order.customer) {
+        setSelectedCustomer(order.customer);
+      }
+      if (order.notes) {
+        setNotes(order.notes);
+      }
+      if (order.customer?.creditDays) {
+        const due = new Date(invoiceDate);
+        due.setDate(due.getDate() + Number(order.customer.creditDays));
+        setDueDate(due.toISOString().split("T")[0]);
+      }
+
+      if (Array.isArray(order.items) && order.items.length > 0) {
+        setInvoiceItems(
+          order.items.map((orderItem: {
+            itemId: string;
+            quantity: number;
+            rate: number;
+            taxRate: number;
+            taxAmount: number;
+            amount: number;
+            discountPercent?: number;
+          }) => ({
+            id: generateId(),
+            itemId: orderItem.itemId,
+            quantity: Number(orderItem.quantity),
+            rate: Number(orderItem.rate),
+            taxRate: Number(orderItem.taxRate),
+            taxAmount: Number(orderItem.taxAmount),
+            amount: Number(orderItem.amount),
+            discountPercent: Number(orderItem.discountPercent || 0),
+            isGstInclusive: false,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error("Error loading sales order context:", err);
+    }
+  }, [invoiceDate]);
+
   useEffect(() => {
     fetchCustomers();
     fetchItems();
@@ -201,8 +248,11 @@ function NewSalesInvoiceContent() {
       loadInvoiceForEdit(editId);
     } else {
       fetchNextInvoiceNumber();
+      if (salesOrderId) {
+        loadSalesOrderContext(salesOrderId);
+      }
     }
-  }, [fetchCustomers, fetchItems, editId, loadInvoiceForEdit, fetchNextInvoiceNumber]);
+  }, [fetchCustomers, fetchItems, editId, loadInvoiceForEdit, fetchNextInvoiceNumber, salesOrderId, loadSalesOrderContext]);
 
   // Merge active items with items loaded from invoice (handles inactive items)
   const allItems = useMemo(() => {
@@ -330,7 +380,7 @@ function NewSalesInvoiceContent() {
   const handleSubmit = async () => {
     setError(null);
 
-    if (!editId && !selectedCustomer) {
+    if (!editId && !salesOrderId && !selectedCustomer) {
       setError("Please select a customer");
       return;
     }
@@ -357,6 +407,17 @@ function NewSalesInvoiceContent() {
             dueDate,
             notes: notes || null,
             items: validItems.map((i) => ({ itemId: i.itemId, quantity: i.quantity, rate: i.rate, taxRate: i.taxRate })),
+          }),
+        });
+      } else if (salesOrderId) {
+        response = await fetch("/api/sales-invoices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            salesOrderId,
+            invoiceDate,
+            notes: notes || null,
+            roundOff,
           }),
         });
       } else {
@@ -549,7 +610,7 @@ function NewSalesInvoiceContent() {
                           {selectedCustomer.gstin && ` · GSTIN: ${selectedCustomer.gstin}`}
                         </p>
                       </div>
-                      {!editId && (
+                      {!editId && !salesOrderId && (
                         <button type="button" onClick={() => setSelectedCustomer(null)} className="text-teal-500 hover:text-teal-700 ml-3">
                           <X className="h-4 w-4" />
                         </button>

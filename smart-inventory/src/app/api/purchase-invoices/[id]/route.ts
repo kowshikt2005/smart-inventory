@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { checkPermission } from '@/lib/api-auth';
+import { normalizeRoundOffMode, resolveRoundOff } from '@/lib/rounding-utils';
 
 // GET /api/purchase-invoices/[id] - Get a single purchase invoice
 export async function GET(
@@ -136,6 +137,12 @@ export async function PUT(
         );
       }
 
+      const roundOffSetting = await db.appSetting.findUnique({
+        where: { key: 'invoice_roundoff_mode' },
+        select: { value: true },
+      });
+      const effectiveRoundOffMode = normalizeRoundOffMode(body.roundOffMode || roundOffSetting?.value);
+
       const updatedInvoice = await transaction(async (tx) => {
         // Calculate new items first (needed for validation)
         const newItemsPreview: Record<string, number> = {};
@@ -187,12 +194,15 @@ export async function PUT(
 
         // Calculate new items
         const newItems = body.items.map((item: any) => {
-          const amount = Number(item.quantity) * Number(item.rate);
+          const factor = Number(item.uomFactor || 1);
+          const baseQuantity = Number(item.quantity) * factor;
+          const baseRate = Number(item.rate) / factor;
+          const amount = baseQuantity * baseRate;
           const taxAmount = amount * (Number(item.taxRate) / 100);
           return {
             itemId: item.itemId,
-            quantity: Number(item.quantity),
-            rate: Number(item.rate),
+            quantity: Math.round(baseQuantity * 1000) / 1000,
+            rate: Math.round(baseRate * 100) / 100,
             taxRate: Number(item.taxRate),
             taxAmount: Math.round(taxAmount * 100) / 100,
             amount: Math.round(amount * 100) / 100,
@@ -201,7 +211,12 @@ export async function PUT(
 
         const subtotal = newItems.reduce((sum: number, item: any) => sum + item.amount, 0);
         const totalTax = newItems.reduce((sum: number, item: any) => sum + item.taxAmount, 0);
-        const totalAmount = subtotal + totalTax;
+        const roundOffDecision = resolveRoundOff(
+          subtotal + totalTax,
+          effectiveRoundOffMode,
+          Number(body.roundOff || 0)
+        );
+        const totalAmount = subtotal + totalTax + roundOffDecision.roundOff;
 
         // Validate new total covers already paid amount
         const paidAmount = Number(existingInvoice.paidAmount || 0);
@@ -228,6 +243,7 @@ export async function PUT(
             notes: body.notes !== undefined ? body.notes : existingInvoice.notes,
             amount: Math.round(subtotal * 100) / 100,
             taxAmount: Math.round(totalTax * 100) / 100,
+            roundOff: roundOffDecision.roundOff,
             totalAmount: Math.round(totalAmount * 100) / 100,
             balanceAmount: Math.round((totalAmount - paidAmount) * 100) / 100,
             items: { create: newItems },

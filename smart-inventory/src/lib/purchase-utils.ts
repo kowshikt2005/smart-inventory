@@ -125,7 +125,8 @@ export function calculatePurchaseLineItem(
  * Calculate purchase document totals from line items
  */
 export function calculatePurchaseTotals(
-  items: Array<{ amount: number; taxAmount: number }>
+  items: Array<{ amount: number; taxAmount: number }>,
+  roundOff: number = 0
 ): {
   subtotal: number;
   totalTax: number;
@@ -133,7 +134,7 @@ export function calculatePurchaseTotals(
 } {
   const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
   const totalTax = items.reduce((sum, item) => sum + item.taxAmount, 0);
-  const totalAmount = subtotal + totalTax;
+  const totalAmount = subtotal + totalTax + roundOff;
 
   return {
     subtotal: Math.round(subtotal * 100) / 100,

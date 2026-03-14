@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db, transaction } from '@/lib/db';
 import { generatePurchaseInvoiceNumber, calculatePurchaseLineItem, calculatePurchaseTotals } from '@/lib/purchase-utils';
+import { normalizeRoundOffMode, resolveRoundOff } from '@/lib/rounding-utils';
 import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/purchase-invoices - Get all purchase invoices with filtering
@@ -283,6 +284,12 @@ export async function POST(request: Request) {
       }
     }
 
+    const roundOffSetting = await db.appSetting.findUnique({
+      where: { key: 'invoice_roundoff_mode' },
+      select: { value: true },
+    });
+    const effectiveRoundOffMode = normalizeRoundOffMode(body.roundOffMode || roundOffSetting?.value);
+
     // Reject duplicate itemIds — same item must not appear in multiple rows
     const itemIds = body.items.map((item: any) => item.itemId);
     const uniqueItemIds = new Set(itemIds);
@@ -320,6 +327,12 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+      if (invoiceItem.uomFactor !== undefined && Number(invoiceItem.uomFactor) <= 0) {
+        return NextResponse.json(
+          { error: 'UOM factor must be greater than 0' },
+          { status: 400 }
+        );
+      }
     }
 
     // Create invoice in a transaction
@@ -330,17 +343,20 @@ export async function POST(request: Request) {
       // Calculate item totals
       const invoiceItems = body.items.map((invoiceItem: any) => {
         const item = items.find((i) => i.id === invoiceItem.itemId)!;
+        const factor = Number(invoiceItem.uomFactor || 1);
+        const baseQuantity = Number(invoiceItem.quantity) * factor;
+        const baseRate = Number(invoiceItem.rate) / factor;
         const taxRate = invoiceItem.taxRate ?? Number(item.gstRate);
         const { amount, taxAmount } = calculatePurchaseLineItem(
-          invoiceItem.quantity,
-          invoiceItem.rate,
+          baseQuantity,
+          baseRate,
           taxRate
         );
 
         return {
           itemId: invoiceItem.itemId,
-          quantity: invoiceItem.quantity,
-          rate: invoiceItem.rate,
+          quantity: Math.round(baseQuantity * 1000) / 1000,
+          rate: Math.round(baseRate * 100) / 100,
           taxRate,
           taxAmount,
           amount,
@@ -348,7 +364,16 @@ export async function POST(request: Request) {
       });
 
       // Calculate invoice totals
-      const { subtotal, totalTax, totalAmount } = calculatePurchaseTotals(invoiceItems);
+      const baseTotals = calculatePurchaseTotals(invoiceItems, 0);
+      const roundOffDecision = resolveRoundOff(
+        baseTotals.subtotal + baseTotals.totalTax,
+        effectiveRoundOffMode,
+        Number(body.roundOff || 0)
+      );
+      const { subtotal, totalTax, totalAmount } = calculatePurchaseTotals(
+        invoiceItems,
+        roundOffDecision.roundOff
+      );
 
       // Create the purchase invoice
       const invoice = await tx.purchaseInvoice.create({
@@ -361,6 +386,7 @@ export async function POST(request: Request) {
           dueDate: new Date(body.dueDate),
           amount: subtotal,
           taxAmount: totalTax,
+          roundOff: roundOffDecision.roundOff,
           totalAmount,
           paidAmount: 0,
           balanceAmount: totalAmount,

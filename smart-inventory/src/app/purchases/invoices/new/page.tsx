@@ -28,6 +28,7 @@ import {
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { mutate } from "swr";
+import { resolveRoundOff } from "@/lib/rounding-utils";
 
 interface Vendor {
   id: string;
@@ -53,6 +54,7 @@ interface Item {
   subBrandId?: string | null;
   brand?: { id: string; name: string } | null;
   subBrand?: { id: string; name: string } | null;
+  uomConversions?: Array<{ name: string; factor: number }> | null;
 }
 
 interface InvoiceItemData {
@@ -60,11 +62,15 @@ interface InvoiceItemData {
   itemId: string;
   itemName?: string | null;
   quantity: number;
+  unit?: string;
+  uomFactor?: number;
   rate: number;
   taxRate: number;
   taxAmount: number;
   amount: number;
 }
+
+type RoundOffMode = "NONE" | "NEAREST" | "UP" | "DOWN" | "MANUAL";
 
 const generateId = () =>
   `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -84,6 +90,7 @@ function NewPurchaseInvoicePageContent() {
   const [notes, setNotes] = useState("");
   const [terms, setTerms] = useState("");
   const [roundOff, setRoundOff] = useState(0);
+  const [roundOffMode, setRoundOffMode] = useState<RoundOffMode>("MANUAL");
 
   // Vendor state
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -226,6 +233,8 @@ function NewPurchaseInvoicePageContent() {
                 itemId: string | null;
                 itemName: string | null;
                 quantity: number;
+                unit?: string | null;
+                uomFactor?: number | null;
                 rate: number;
                 taxRate: number;
                 taxAmount: number;
@@ -235,6 +244,8 @@ function NewPurchaseInvoicePageContent() {
                 itemId: item.itemId || "",
                 itemName: item.itemName || null,
                 quantity: Number(item.quantity),
+                unit: item.unit || undefined,
+                uomFactor: Number(item.uomFactor || 1),
                 rate: Number(item.rate),
                 taxRate: Number(item.taxRate),
                 taxAmount: Number(item.taxAmount),
@@ -275,6 +286,8 @@ function NewPurchaseInvoicePageContent() {
             invoice.items.map((item: {
               itemId: string;
               quantity: number;
+              unit?: string | null;
+              uomFactor?: number | null;
               rate: number;
               taxRate: number;
               taxAmount: number;
@@ -283,6 +296,8 @@ function NewPurchaseInvoicePageContent() {
               id: generateId(),
               itemId: item.itemId,
               quantity: Number(item.quantity),
+              unit: item.unit || undefined,
+              uomFactor: Number(item.uomFactor || 1),
               rate: Number(item.rate),
               taxRate: Number(item.taxRate),
               taxAmount: Number(item.taxAmount),
@@ -313,6 +328,23 @@ function NewPurchaseInvoicePageContent() {
     fetchVendors();
     fetchItems();
   }, [fetchVendors, fetchItems]);
+
+  useEffect(() => {
+    const loadRoundOffMode = async () => {
+      try {
+        const response = await fetch("/api/settings?key=invoice_roundoff_mode");
+        if (!response.ok) return;
+        const setting = await response.json();
+        const mode = String(setting.value || "MANUAL").toUpperCase() as RoundOffMode;
+        if (["NONE", "NEAREST", "UP", "DOWN", "MANUAL"].includes(mode)) {
+          setRoundOffMode(mode);
+        }
+      } catch {
+        // fall back to MANUAL mode
+      }
+    };
+    loadRoundOffMode();
+  }, []);
 
   useEffect(() => {
     if (editId) {
@@ -426,18 +458,20 @@ function NewPurchaseInvoicePageContent() {
       (sum, item) => sum + item.taxAmount,
       0
     );
+    const roundOffDecision = resolveRoundOff(subtotal + totalTax, roundOffMode, roundOff);
     const cgst = totalTax / 2;
     const sgst = totalTax / 2;
-    const totalAmount = subtotal + totalTax + roundOff;
+    const totalAmount = subtotal + totalTax + roundOffDecision.roundOff;
 
     return {
       subtotal: Math.round(subtotal * 100) / 100,
       totalTax: Math.round(totalTax * 100) / 100,
       cgst: Math.round(cgst * 100) / 100,
       sgst: Math.round(sgst * 100) / 100,
+      roundOff: roundOffDecision.roundOff,
       totalAmount: Math.round(totalAmount * 100) / 100,
     };
-  }, [invoiceItems, roundOff]);
+  }, [invoiceItems, roundOff, roundOffMode]);
 
   // Format currency
   const formatCurrency = (amount: number) => {
@@ -502,9 +536,12 @@ function NewPurchaseInvoicePageContent() {
         notes: notes || null,
         terms: terms || null,
         roundOff,
+        roundOffMode,
         items: validItems.map((item) => ({
           itemId: item.itemId,
           quantity: item.quantity,
+          unit: item.unit,
+          uomFactor: item.uomFactor || 1,
           rate: item.rate,
           taxRate: item.taxRate,
         })),
@@ -795,12 +832,26 @@ function NewPurchaseInvoicePageContent() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500">Round Off</span>
-                  <Input
-                    type="number" step="0.01" min="-1" max="1"
-                    value={roundOff}
-                    onChange={(e) => setRoundOff(parseFloat(e.target.value) || 0)}
-                    className="w-24 text-right h-8"
-                  />
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={roundOffMode}
+                      onChange={(e) => setRoundOffMode(e.target.value as RoundOffMode)}
+                      className="h-8 rounded-md border border-gray-200 px-2 text-xs bg-white"
+                    >
+                      <option value="MANUAL">Manual</option>
+                      <option value="NEAREST">Nearest</option>
+                      <option value="UP">Round Up</option>
+                      <option value="DOWN">Round Down</option>
+                      <option value="NONE">None</option>
+                    </select>
+                    <Input
+                      type="number" step="0.01" min="-1" max="1"
+                      value={roundOffMode === "MANUAL" ? roundOff : totals.roundOff}
+                      onChange={(e) => setRoundOff(parseFloat(e.target.value) || 0)}
+                      className="w-24 text-right h-8"
+                      disabled={roundOffMode !== "MANUAL"}
+                    />
+                  </div>
                 </div>
                 <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
                   <span>Total</span>

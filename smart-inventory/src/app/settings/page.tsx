@@ -375,6 +375,33 @@ export default function SettingsPage() {
                     </button>
                   </div>
                 </div>
+
+                <div className="mt-6 pt-6 border-t border-gray-100 flex items-center justify-between">
+                  <div className="flex-1 pr-8">
+                    <h3 className="text-sm font-medium text-gray-900">
+                      Invoice Round-off Mode
+                    </h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Controls automatic round off: Nearest uses below 0.50 down and 0.50+ up. Manual keeps user-entered round off.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {saving === "invoice_roundoff_mode" && (
+                      <Loader2 className="h-4 w-4 animate-spin text-teal-500" />
+                    )}
+                    <select
+                      value={getSettingValue("invoice_roundoff_mode") === "false" ? "MANUAL" : getSettingValue("invoice_roundoff_mode")}
+                      onChange={(e) => updateSetting("invoice_roundoff_mode", e.target.value)}
+                      className="h-9 rounded-md border border-gray-300 px-3 text-sm bg-white"
+                    >
+                      <option value="MANUAL">Manual</option>
+                      <option value="NEAREST">Nearest</option>
+                      <option value="UP">Round Up</option>
+                      <option value="DOWN">Round Down</option>
+                      <option value="NONE">None</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
 

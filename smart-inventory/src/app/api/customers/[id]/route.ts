@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { checkPermission } from '@/lib/api-auth';
+import { normalizeGstin, validateGstin } from '@/lib/gst-validation';
 
 // GET /api/customers/[id] - Get a single customer by ID
 export async function GET(
@@ -63,10 +64,15 @@ export async function PUT(
       );
     }
 
-    // Validate GSTIN format if provided
-    if (body.gstin && body.gstin.length !== 15) {
+    const hasGstinField = body.gstin !== undefined;
+    const normalizedGstin = hasGstinField
+      ? normalizeGstin(body.gstin || '')
+      : normalizeGstin(existingCustomer.gstin || '');
+
+    const gstValidation = validateGstin(normalizedGstin);
+    if (!gstValidation.valid) {
       return NextResponse.json(
-        { error: 'GSTIN must be exactly 15 characters' },
+        { error: gstValidation.error },
         { status: 400 }
       );
     }
@@ -75,9 +81,10 @@ export async function PUT(
     const updateData: any = {};
 
     if (body.name !== undefined) updateData.name = body.name;
+    if (body.contactName !== undefined) updateData.contactName = body.contactName || null;
     if (body.email !== undefined) updateData.email = body.email || null;
     if (body.phone !== undefined) updateData.phone = body.phone || null;
-    if (body.gstin !== undefined) updateData.gstin = body.gstin || null;
+    if (hasGstinField) updateData.gstin = normalizedGstin;
     if (body.address !== undefined) updateData.address = body.address || null;
     if (body.city !== undefined) updateData.city = body.city || null;
     if (body.state !== undefined) updateData.state = body.state || null;

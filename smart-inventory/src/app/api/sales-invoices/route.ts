@@ -3,6 +3,7 @@ import { db, transaction } from '@/lib/db';
 import { generateInvoiceNumber, calculateDueDate } from '@/lib/invoice-utils';
 import { calculateOrderTotals } from '@/lib/order-utils';
 import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
+import { normalizeRoundOffMode, resolveRoundOff } from '@/lib/rounding-utils';
 import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/sales-invoices - Get all invoices with filtering
@@ -247,6 +248,12 @@ export async function POST(request: Request) {
     });
     const negativeBillingEnabled = negativeBillingSetting?.value === 'true';
 
+    const roundOffSetting = await db.appSetting.findUnique({
+      where: { key: 'invoice_roundoff_mode' },
+      select: { value: true },
+    });
+    const effectiveRoundOffMode = normalizeRoundOffMode(body.roundOffMode || roundOffSetting?.value);
+
     // Validate stock availability using priority-based allocation (skip if negative billing is ON)
     if (!negativeBillingEnabled) {
       const allocationResult = await calculateStockAllocation(db);
@@ -311,9 +318,15 @@ export async function POST(request: Request) {
         amount: Number(item.amount),
         taxAmount: Number(item.taxAmount),
       }));
+      const baseTotals = calculateOrderTotals(itemTotals, 0);
+      const roundOffDecision = resolveRoundOff(
+        baseTotals.subtotal + baseTotals.totalTax,
+        effectiveRoundOffMode,
+        Number(body.roundOff || 0)
+      );
       const { subtotal, totalTax, cgst, sgst, totalAmount } = calculateOrderTotals(
         itemTotals,
-        body.roundOff || 0
+        roundOffDecision.roundOff
       );
 
       // Calculate due date
@@ -333,7 +346,7 @@ export async function POST(request: Request) {
           cgst,
           sgst,
           taxAmount: totalTax,
-          roundOff: body.roundOff || 0,
+          roundOff: roundOffDecision.roundOff,
           totalAmount,
           paidAmount: 0,
           balanceAmount: totalAmount,
@@ -441,11 +454,33 @@ export async function POST(request: Request) {
         },
       });
 
-      // Delete the sales order (cascade will delete items and status history)
-      // Use deleteMany instead of delete to handle race conditions gracefully
-      // (if another request already deleted this order, deleteMany won't throw)
-      await tx.salesOrder.deleteMany({
+      // Keep order history intact: mark invoiced quantities and status instead of deleting order.
+      for (const orderItem of salesOrder.items) {
+        await tx.salesOrderItem.update({
+          where: { id: orderItem.id },
+          data: {
+            invoicedQuantity: {
+              increment: Number(orderItem.quantity),
+            },
+          },
+        });
+      }
+
+      await tx.salesOrder.update({
         where: { id: salesOrder.id },
+        data: {
+          status: 'FULLY_INVOICED',
+        },
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          salesOrderId: salesOrder.id,
+          fromStatus: salesOrder.status,
+          toStatus: 'FULLY_INVOICED',
+          reason: `Invoiced via ${invoiceNumber}`,
+          changedBy: salesOrder.createdBy,
+        },
       });
 
       return newInvoice;

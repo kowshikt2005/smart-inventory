@@ -53,12 +53,19 @@ async function main() {
 
   // 1. Create App Settings
   console.log('⚙️  Creating app settings...');
-  await prisma.appSetting.create({
-    data: {
-      key: 'negative_billing',
-      value: 'false',
-      label: 'Negative Billing',
-    },
+  await prisma.appSetting.createMany({
+    data: [
+      {
+        key: 'negative_billing',
+        value: 'false',
+        label: 'Negative Billing',
+      },
+      {
+        key: 'invoice_roundoff_mode',
+        value: 'MANUAL',
+        label: 'Invoice Round-off Mode',
+      },
+    ],
   });
 
   // 2. Create Roles

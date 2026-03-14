@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { checkPermission } from '@/lib/api-auth';
+import { normalizeGstin, validateGstin } from '@/lib/gst-validation';
 
 // GET /api/customers - Get all customers with optional search and pagination
 export async function GET(request: Request) {
@@ -81,10 +82,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // Validate GSTIN format (15 characters)
-    if (body.gstin && body.gstin.length !== 15) {
+    const normalizedGstin = normalizeGstin(body.gstin || '');
+    const gstValidation = validateGstin(normalizedGstin);
+    if (!gstValidation.valid) {
       return NextResponse.json(
-        { error: 'GSTIN must be exactly 15 characters' },
+        { error: gstValidation.error },
         { status: 400 }
       );
     }
@@ -94,9 +96,10 @@ export async function POST(request: Request) {
       data: {
         customerNumber: `customer-${Date.now()}`, // Generate customer number
         name: body.name,
+        contactName: body.contactName?.trim() || null,
         email: body.email || null,
         phone: body.phone || null,
-        gstin: body.gstin,
+        gstin: normalizedGstin,
         state: body.state,
         city: body.city,
         address: `${body.addressLine1}${body.addressLine2 ? ', ' + body.addressLine2 : ''}`,

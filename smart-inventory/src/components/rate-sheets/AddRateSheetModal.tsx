@@ -134,7 +134,6 @@ export function AddRateSheetModal({
   const [expandedUnassigned, setExpandedUnassigned] = useState(true);
 
   // Form fields
-  const [name, setName] = useState("");
   const [validFrom, setValidFrom] = useState(new Date().toISOString().split("T")[0]);
   const [validTo, setValidTo] = useState("");
   const [isActive, setIsActive] = useState(true);
@@ -150,7 +149,6 @@ export function AddRateSheetModal({
 
   useEffect(() => {
     if (editingRateSheet) {
-      setName(editingRateSheet.name);
       setSelectedCustomers((editingRateSheet.customers || []).map((e) => e.customer));
       setValidFrom(editingRateSheet.validFrom.split("T")[0]);
       setValidTo(editingRateSheet.validTo ? editingRateSheet.validTo.split("T")[0] : "");
@@ -198,7 +196,6 @@ export function AddRateSheetModal({
   };
 
   const resetForm = () => {
-    setName("");
     setSelectedCustomers([]);
     setCustomerSearch("");
     setShowCustomerDropdown(false);
@@ -434,7 +431,6 @@ export function AddRateSheetModal({
     setSelectedCustomers((prev) => [...prev, customer]);
     setCustomerSearch("");
     setShowCustomerDropdown(false);
-    if (!name) setName(`${customer.name} - Rate Sheet`);
   };
 
   const handleCustomerRemove = (id: string) =>
@@ -450,7 +446,6 @@ export function AddRateSheetModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!name.trim()) { setError("Please enter a name for the rate sheet"); return; }
     if (selectedCustomers.length === 0) { setError("Please select at least one customer"); return; }
     if (!validFrom) { setError("Please enter a valid from date"); return; }
     if (totalInclusions === 0) {
@@ -459,8 +454,9 @@ export function AddRateSheetModal({
     }
     setIsSubmitting(true);
     try {
+      const generatedName = `Rate Sheet - ${validFrom} - ${selectedCustomers.length} customer(s)`;
       const payload = {
-        name: name.trim(),
+        name: generatedName,
         customerIds: selectedCustomers.map((c) => c.id),
         validFrom,
         validTo: validTo || null,
@@ -599,18 +595,6 @@ export function AddRateSheetModal({
               {error}
             </div>
           )}
-
-          {/* Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Name <span className="text-red-500">*</span>
-            </label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., Premium Customer Rate"
-            />
-          </div>
 
           {/* Customers */}
           <div>

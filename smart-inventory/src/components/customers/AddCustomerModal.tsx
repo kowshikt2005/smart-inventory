@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X, Plus, Trash2, User, DollarSign } from "lucide-react";
 import { getStateFromGSTIN } from "@/lib/gst-state-codes";
+import { normalizeGstin, validateGstin } from "@/lib/gst-validation";
 import {
   RateSheetEditor,
   emptyRateSheetFormData,
@@ -49,6 +50,7 @@ export function AddCustomerModal({
 
   const [formData, setFormData] = useState({
     name: "",
+    contactName: "",
     email: "",
     phone: "",
     gstin: "",
@@ -77,6 +79,7 @@ export function AddCustomerModal({
   const resetForm = () => {
     setFormData({
       name: "",
+      contactName: "",
       email: "",
       phone: "",
       gstin: "",
@@ -111,14 +114,17 @@ export function AddCustomerModal({
       return;
     }
 
+    const normalizedGstin = normalizeGstin(formData.gstin);
+    const gstValidation = validateGstin(normalizedGstin);
+    if (!gstValidation.valid) {
+      setError(gstValidation.error || "Invalid GSTIN");
+      setActiveTab("customer");
+      setIsSubmitting(false);
+      return;
+    }
+
     // Validate rate sheet if enabled
     if (enableRateSheet) {
-      if (!rateSheetData.name.trim()) {
-        setError("Rate sheet name is required");
-        setActiveTab("ratesheet");
-        setIsSubmitting(false);
-        return;
-      }
       if (!rateSheetData.validFrom) {
         setError("Rate sheet valid-from date is required");
         setActiveTab("ratesheet");
@@ -134,6 +140,7 @@ export function AddCustomerModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
+          gstin: normalizedGstin,
           openingBalance: parseFloat(formData.openingBalance) || 0,
           creditDays: parseInt(formData.creditDays) || 0,
           creditLimit: parseFloat(formData.creditLimit) || 0,
@@ -158,17 +165,19 @@ export function AddCustomerModal({
       }
 
       // 3. Create rate sheet if enabled
-      if (enableRateSheet && rateSheetData.name.trim()) {
+      if (enableRateSheet) {
         const totalInclusions =
           rateSheetData.inclusionDiscounts.brands.length +
           rateSheetData.inclusionDiscounts.subBrands.length +
           rateSheetData.inclusionDiscounts.items.length;
 
+        const generatedRateSheetName = `Rate Sheet - ${rateSheetData.validFrom} - ${data.name}`;
+
         const rsResponse = await fetch("/api/rate-sheets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: rateSheetData.name.trim(),
+            name: generatedRateSheetName,
             validFrom: rateSheetData.validFrom,
             validTo: rateSheetData.validTo || null,
             discountPercent: 0,
@@ -388,6 +397,18 @@ export function AddCustomerModal({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Contact Name
+                    </label>
+                    <Input
+                      type="text"
+                      name="contactName"
+                      value={formData.contactName}
+                      onChange={handleChange}
+                      placeholder="Primary contact person"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Phone
                     </label>
                     <Input
@@ -422,7 +443,7 @@ export function AddCustomerModal({
                       placeholder="22AAAAA0000A1Z5"
                       className="uppercase"
                     />
-                    <p className="text-xs text-gray-500 mt-1">15 characters</p>
+                    <p className="text-xs text-gray-500 mt-1">Format: 27ABCDE1234F1Z5</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">

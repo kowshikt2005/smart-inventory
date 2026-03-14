@@ -180,7 +180,7 @@ export default function SalesOrderDetailPage() {
   };
 
   const handleCreateInvoice = () => {
-    router.push(`/sales/invoices/create?salesOrderId=${id}`);
+    router.push(`/sales/invoices/new?salesOrderId=${id}`);
   };
 
   const formatCurrency = (amount: number) => {

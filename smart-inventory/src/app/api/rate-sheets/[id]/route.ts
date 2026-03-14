@@ -79,7 +79,9 @@ export async function PUT(
     // Build update data for the rate sheet itself
     const updateData: any = {};
 
-    if (body.name !== undefined) updateData.name = body.name;
+    if (body.name !== undefined && String(body.name).trim()) {
+      updateData.name = String(body.name).trim();
+    }
     if (body.validFrom !== undefined) updateData.validFrom = new Date(body.validFrom);
     if (body.validTo !== undefined) updateData.validTo = body.validTo ? new Date(body.validTo) : null;
     if (body.isActive !== undefined) updateData.isActive = body.isActive;

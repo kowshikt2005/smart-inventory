@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { OrderItemRow } from "@/components/sales-orders/OrderItemRow";
+import { ItemSelectionModal } from "@/components/sales-orders/ItemSelectionModal";
 import { ConfigureDiscountsModal, InclusionDiscounts as ModalInclusionDiscounts } from "@/components/sales-orders/ConfigureDiscountsModal";
 import { CustomerSelectionModal } from "@/components/sales-orders/CustomerSelectionModal";
 import {
@@ -180,6 +181,7 @@ function NewSalesOrderPageContent() {
     },
   ]);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
 
   // Local discount overrides
   const [localDiscounts, setLocalDiscounts] = useState<ModalInclusionDiscounts | null>(null);
@@ -630,22 +632,61 @@ function NewSalesOrderPageContent() {
     }
   };
 
+  const buildOrderItemFromSelection = useCallback(
+    (selectedItemData: Item, id: string, quantity = 1): OrderItemData => {
+      const pricing = getEffectivePricing(selectedItemData);
+      const taxRate = Number(selectedItemData.gstRate);
+
+      let baseAmount: number;
+      let taxAmount: number;
+
+      if (pricing.isGstInclusive) {
+        const totalInclusive = quantity * pricing.rate;
+        baseAmount = totalInclusive / (1 + taxRate / 100);
+        taxAmount = totalInclusive - baseAmount;
+      } else {
+        baseAmount = quantity * pricing.rate;
+        taxAmount = baseAmount * (taxRate / 100);
+      }
+
+      return {
+        id,
+        itemId: selectedItemData.id,
+        quantity,
+        unit: selectedItemData.unit,
+        uomFactor: 1,
+        rate: pricing.rate,
+        discountPercent: pricing.discountApplied,
+        taxRate,
+        taxAmount: Math.round(taxAmount * 100) / 100,
+        amount: Math.round(baseAmount * 100) / 100,
+        isGstInclusive: pricing.isGstInclusive,
+      };
+    },
+    [getEffectivePricing]
+  );
+
   // Handle adding new item row
   const handleAddItem = () => {
-    setOrderItems((prev) => [
-      ...prev,
-      {
-        id: generateId(),
-        itemId: "",
-        quantity: 1,
-        rate: 0,
-        discountPercent: 0,
-        taxRate: 0,
-        taxAmount: 0,
-        amount: 0,
-        isGstInclusive: false,
-      },
-    ]);
+    setIsAddItemModalOpen(true);
+  };
+
+  const handleAddItemSelect = (selectedItemData: Item) => {
+    setOrderItems((prev) => {
+      const firstEmptyIndex = prev.findIndex((row) => !row.itemId);
+
+      if (firstEmptyIndex >= 0) {
+        const next = [...prev];
+        next[firstEmptyIndex] = buildOrderItemFromSelection(
+          selectedItemData,
+          next[firstEmptyIndex].id,
+          next[firstEmptyIndex].quantity || 1
+        );
+        return next;
+      }
+
+      return [...prev, buildOrderItemFromSelection(selectedItemData, generateId())];
+    });
   };
 
   // Handle updating item row
@@ -1283,6 +1324,14 @@ function NewSalesOrderPageContent() {
           items={items}
         />
       )}
+
+      <ItemSelectionModal
+        isOpen={isAddItemModalOpen}
+        onClose={() => setIsAddItemModalOpen(false)}
+        items={items}
+        selectedItemIds={selectedItemIds}
+        onSelect={handleAddItemSelect}
+      />
     </DashboardLayout>
   );
 }
