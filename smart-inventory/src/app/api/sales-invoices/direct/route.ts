@@ -46,17 +46,18 @@ export async function POST(request: Request) {
     ).map((item: { itemId: string; quantity: number; rate: number; taxRate?: number; discountPercent?: number; isGstInclusive?: boolean }) => {
       const qty = Number(item.quantity);
       const taxRate = Number(item.taxRate || 0);
+      const discountFactor = 1 - Number(item.discountPercent || 0) / 100;
       const isGstInclusive = item.isGstInclusive || false;
 
       let baseAmount: number;
       let taxAmount: number;
 
       if (isGstInclusive) {
-        const totalInclusive = qty * Number(item.rate);
+        const totalInclusive = qty * Number(item.rate) * discountFactor;
         baseAmount = totalInclusive / (1 + taxRate / 100);
         taxAmount = totalInclusive - baseAmount;
       } else {
-        baseAmount = qty * Number(item.rate);
+        baseAmount = qty * Number(item.rate) * discountFactor;
         taxAmount = baseAmount * (taxRate / 100);
       }
 

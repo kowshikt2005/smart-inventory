@@ -287,7 +287,7 @@ export async function PUT(
         // Update customer ledger (only if customer is linked)
         if (invoice.customerId) {
           await tx.customerLedger.deleteMany({
-            where: { referenceType: 'SALES_INVOICE', referenceId: id },
+            where: { referenceId: id, referenceType: { in: ['sales_invoice', 'SALES_INVOICE'] } },
           });
 
           await tx.customerLedger.create({
@@ -299,7 +299,7 @@ export async function PUT(
               debit: totalAmount,
               credit: 0,
               balance: 0,
-              referenceType: 'SALES_INVOICE',
+              referenceType: 'sales_invoice',
               referenceId: id,
             },
           });
@@ -396,7 +396,7 @@ export async function DELETE(
       // Delete customer ledger entries
       if (invoice.customerId) {
         await tx.customerLedger.deleteMany({
-          where: { referenceType: 'SALES_INVOICE', referenceId: id },
+          where: { referenceId: id, referenceType: { in: ['sales_invoice', 'SALES_INVOICE'] } },
         });
       }
 

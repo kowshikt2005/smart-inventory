@@ -157,7 +157,7 @@ export const Sidebar = memo(function Sidebar() {
 
   const navLinkClass = (isActive: boolean) =>
     cn(
-      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150",
+      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-150",
       isActive
         ? "bg-white/[0.14] text-white font-medium border-l-2 border-amber-400 ml-[-2px]"
         : "text-white/80 hover:bg-white/[0.10] hover:text-white"
@@ -165,7 +165,7 @@ export const Sidebar = memo(function Sidebar() {
 
   const subLinkClass = (isActive: boolean) =>
     cn(
-      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150",
+      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-150",
       isActive
         ? "bg-white/[0.14] text-white font-medium"
         : "text-white/70 hover:bg-white/[0.10] hover:text-white"
@@ -173,7 +173,7 @@ export const Sidebar = memo(function Sidebar() {
 
   const sectionButtonClass = (isActive: boolean) =>
     cn(
-      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-all duration-150",
+      "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-all duration-150",
       isActive
         ? "bg-white/[0.14] text-white"
         : "text-white/80 hover:bg-white/[0.10] hover:text-white"
@@ -211,10 +211,7 @@ export const Sidebar = memo(function Sidebar() {
         {/* TRANSACTIONS section */}
         {showTransactions && (
           <>
-            <div className="mx-3 my-3 h-px bg-white/[0.12]" />
-            <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
-              Transactions
-            </p>
+
 
             {/* Sales */}
             {showSales && (
@@ -259,10 +256,7 @@ export const Sidebar = memo(function Sidebar() {
         {/* FINANCE section */}
         {showFinance && (
           <>
-            <div className="mx-3 my-3 h-px bg-white/[0.12]" />
-            <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
-              Finance
-            </p>
+
 
             {/* Bank/Cash */}
             {showBankCash && (
@@ -307,10 +301,7 @@ export const Sidebar = memo(function Sidebar() {
         {/* ANALYTICS section */}
         {(showReports || showGST) && (
           <>
-            <div className="mx-3 my-3 h-px bg-white/[0.12]" />
-            <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
-              Analytics
-            </p>
+
             {showReports && (
               <div className="mb-0.5">
                 <Link href="/reports" className={navLinkClass(pathname.startsWith("/reports"))}>
@@ -342,10 +333,7 @@ export const Sidebar = memo(function Sidebar() {
         {/* CONFIGURATION section */}
         {showMasters && (
           <>
-            <div className="mx-3 my-3 h-px bg-white/[0.12]" />
-            <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/50">
-              Configuration
-            </p>
+
 
             {/* Masters */}
             <div className="mb-0.5">
@@ -378,8 +366,16 @@ export const Sidebar = memo(function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-5 py-3 border-t border-white/[0.12]">
-        <p className="text-[10px] text-white/40 text-center">v0.2 by ksolutions</p>
+      <div className="px-3 py-3 border-t border-white/[0.12]">
+        <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.10] transition-colors">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-amber-400 to-amber-600 shadow-sm">
+            <span className="text-[9px] font-black text-white tracking-tight">KS</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold text-white/80 leading-none">ksolutions</p>
+            <p className="text-[9px] text-white/40 mt-0.5 leading-none">v0.2</p>
+          </div>
+        </div>
       </div>
     </aside>
   );

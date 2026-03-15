@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Settings, Loader2, AlertTriangle, Trash2, X, ShieldAlert, Save } from "lucide-react";
+import { Settings, Loader2, AlertTriangle, Trash2, X, ShieldAlert, Save, Building2, Sliders } from "lucide-react";
 
 interface AppSetting {
   id: string;
@@ -49,6 +49,7 @@ const COMPANY_FIELDS: {
 
 export default function SettingsPage() {
   const { data: session } = useSession();
+  const [activeTab, setActiveTab] = useState<"app" | "system">("app");
   const [settings, setSettings] = useState<AppSetting[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -211,16 +212,35 @@ export default function SettingsPage() {
     <DashboardLayout>
       <div className="p-6 max-w-4xl mx-auto">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-8">
+        <div className="flex items-center gap-3 mb-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-500 shadow-md">
             <Settings className="h-5 w-5 text-white" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-            <p className="text-sm text-gray-500">
-              Configure application behavior and preferences
-            </p>
+            <p className="text-sm text-gray-500">Configure application behavior and preferences</p>
           </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
+          {([
+            { key: "app",    label: "App Settings",    icon: Building2 },
+            { key: "system", label: "System Settings", icon: Sliders   },
+          ] as const).map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === key
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          ))}
         </div>
 
         {/* Messages */}
@@ -241,6 +261,10 @@ export default function SettingsPage() {
           </div>
         ) : (
           <div className="space-y-6">
+
+            {/* ── APP SETTINGS TAB ─────────────────────────── */}
+            {activeTab === "app" && (
+              <>
             {/* Company Details */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
               <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -405,6 +429,12 @@ export default function SettingsPage() {
               </div>
             </div>
 
+              </>
+            )}
+
+            {/* ── SYSTEM SETTINGS TAB ──────────────────────── */}
+            {activeTab === "system" && (
+              <>
             {/* Stock Scan Settings */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
               <div className="px-6 py-4 border-b border-gray-100">
@@ -481,6 +511,10 @@ export default function SettingsPage() {
                 </div>
               </div>
             )}
+
+              </>
+            )}
+
           </div>
         )}
       </div>

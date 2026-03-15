@@ -65,16 +65,16 @@ export async function PUT(
     }
 
     const hasGstinField = body.gstin !== undefined;
-    const normalizedGstin = hasGstinField
-      ? normalizeGstin(body.gstin || '')
-      : normalizeGstin(existingCustomer.gstin || '');
+    const normalizedGstin = hasGstinField ? normalizeGstin(body.gstin || '') : null;
 
-    const gstValidation = validateGstin(normalizedGstin);
-    if (!gstValidation.valid) {
-      return NextResponse.json(
-        { error: gstValidation.error },
-        { status: 400 }
-      );
+    if (hasGstinField) {
+      const gstValidation = validateGstin(normalizedGstin || '');
+      if (!gstValidation.valid) {
+        return NextResponse.json(
+          { error: gstValidation.error },
+          { status: 400 }
+        );
+      }
     }
 
     // Build update data
