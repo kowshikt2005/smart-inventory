@@ -278,63 +278,56 @@ export default function CustomersPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost" size="sm"
-                            className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600"
-                            aria-label="Edit customer"
-                            onClick={() => router.push(`/masters/customers/${customer.id}`)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost" size="sm"
-                            className="h-8 w-8 p-0 text-gray-400 hover:text-red-600"
-                            aria-label="Delete customer"
-                            disabled={deletingId === customer.id}
-                            onClick={() => handleDeleteCustomer(customer)}
-                          >
-                            {deletingId === customer.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                aria-label={`More actions for ${customer.name}`}
-                                disabled={togglingId === customer.id}
-                              >
-                                {togglingId === customer.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <MoreHorizontal className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => router.push(`/masters/customers/${customer.id}`)}>
-                                <Eye className="h-4 w-4 mr-2" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => router.push(`/ledger/customers?customerId=${customer.id}`)}>
-                                <FileText className="h-4 w-4 mr-2" />
-                                View Transactions
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => handleToggleStatus(customer)}
-                                className={inactive ? "text-green-600" : "text-orange-600"}
-                              >
-                                {inactive ? (
-                                  <><Power className="h-4 w-4 mr-2" />Activate</>
-                                ) : (
-                                  <><PowerOff className="h-4 w-4 mr-2" />Deactivate</>
-                                )}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              aria-label={`Actions for ${customer.name}`}
+                              disabled={togglingId === customer.id || deletingId === customer.id}
+                            >
+                              {togglingId === customer.id || deletingId === customer.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <MoreHorizontal className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => router.push(`/masters/customers/${customer.id}`)}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => router.push(`/ledger/customers?customerId=${customer.id}`)}>
+                              <FileText className="h-4 w-4 mr-2" />
+                              View Transactions
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => router.push(`/masters/customers/${customer.id}`)}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit Customer
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleToggleStatus(customer)}
+                              className={inactive ? "text-green-600" : "text-orange-600"}
+                            >
+                              {inactive ? (
+                                <><Power className="h-4 w-4 mr-2" />Activate</>
+                              ) : (
+                                <><PowerOff className="h-4 w-4 mr-2" />Deactivate</>
+                              )}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteCustomer(customer)}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Customer
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   );

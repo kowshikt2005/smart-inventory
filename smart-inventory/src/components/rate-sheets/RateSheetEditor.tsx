@@ -117,6 +117,7 @@ export function RateSheetEditor({ value, onChange, compact }: RateSheetEditorPro
     if (showInclusionPopup && !dataLoaded) {
       fetchData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showInclusionPopup, dataLoaded]);
 
   const update = (partial: Partial<RateSheetFormData>) => onChange({ ...value, ...partial });
@@ -163,15 +164,6 @@ export function RateSheetEditor({ value, onChange, compact }: RateSheetEditorPro
       return { source: n, percent: d };
     }
     return null;
-  };
-
-  // ── Price preview (MRP → final after discount) ─────────────────
-  const getPricePreview = (discountPct: number, relevantItems: Item[]) => {
-    if (discountPct <= 0) return null;
-    const mrps = relevantItems.map((i) => Number(i.mrp) || 0).filter((m) => m > 0);
-    if (mrps.length === 0) return null;
-    const factor = 1 - discountPct / 100;
-    return { min: Math.min(...mrps) * factor, max: Math.max(...mrps) * factor, count: mrps.length };
   };
 
   // ── Toggle / update ─────────────────────────────────────────────
@@ -296,14 +288,14 @@ export function RateSheetEditor({ value, onChange, compact }: RateSheetEditorPro
   const toggleBrandExpanded = (id: string) =>
     setExpandedBrands((prev) => {
       const s = new Set(prev);
-      s.has(id) ? s.delete(id) : s.add(id);
+      if (s.has(id)) s.delete(id); else s.add(id);
       return s;
     });
 
   const toggleSubBrandExpanded = (id: string) =>
     setExpandedSubBrands((prev) => {
       const s = new Set(prev);
-      s.has(id) ? s.delete(id) : s.add(id);
+      if (s.has(id)) s.delete(id); else s.add(id);
       return s;
     });
 

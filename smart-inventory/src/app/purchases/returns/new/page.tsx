@@ -56,7 +56,7 @@ function NewPurchaseReturnPageContent() {
   const [returnItems, setReturnItems] = useState<ReturnItemData[]>([
     { id: generateId(), itemId: "", quantity: 1, rate: 0, taxRate: 0, taxAmount: 0, amount: 0 },
   ]);
-  const [_isLoadingItems, setIsLoadingItems] = useState(false);
+  const [, setIsLoadingItems] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -328,121 +328,146 @@ function NewPurchaseReturnPageContent() {
 
   const usedItemIds = useMemo(() => new Set(returnItems.map((item) => item.itemId).filter(Boolean)), [returnItems]);
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      minimumFractionDigits: 2,
+    }).format(amount);
+  };
+
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-6xl mx-auto">
-        <div className="mb-6">
-          <Button variant="ghost" size="sm" onClick={() => router.push("/purchases/returns")} className="mb-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Returns
-          </Button>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            {editId ? `Edit Purchase Return - ${returnNumber}` : "New Purchase Return"}
-          </h1>
-          <p className="text-gray-600">
-            {editId ? "Update purchase return details" : "Create a new return to vendor"}
-          </p>
+      <div className="min-h-screen bg-gray-50">
+        {/* Sticky action bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-3 sticky top-0 z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => router.push("/purchases/returns")} className="text-gray-500 -ml-2">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+              <div className="h-4 w-px bg-gray-200" />
+              <div>
+                <span className="text-base font-bold text-gray-900">
+                  {editId ? "Edit Purchase Return" : "New Purchase Return"}
+                </span>
+                <span className="ml-2 text-sm text-gray-400">#{returnNumber}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => router.push("/purchases/returns")}>Cancel</Button>
+              <Button size="sm" onClick={handleSubmit} disabled={isSubmitting} className="bg-teal-500 hover:bg-teal-600 text-white">
+                {isSubmitting ? (
+                  <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Saving...</>
+                ) : (
+                  <><Save className="h-4 w-4 mr-1.5" />{editId ? "Update Return" : "Create Return"}</>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">{error}</div>
-        )}
+        <div className="p-6 space-y-4">
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
+          )}
 
-        <div className="space-y-6">
-          {/* Return Details */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Return Details</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Return Number</label>
-                <Input value={returnNumber} disabled className="bg-gray-50" />
+          {/* Row 1: Return Details + Vendor */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Return Details</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Return Date <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={returnDate}
+                    onChange={(e) => setReturnDate(e.target.value)}
+                    max={new Date().toISOString().split("T")[0]}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Return Date *</label>
-                <Input
-                  type="date"
-                  value={returnDate}
-                  onChange={(e) => setReturnDate(e.target.value)}
-                  max={new Date().toISOString().split("T")[0]}
-                />
-              </div>
+            </div>
+
+            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
+                Vendor <span className="text-red-400">*</span>
+              </p>
+              {selectedVendor ? (
+                <div className="flex items-center justify-between p-3 bg-teal-50 border border-teal-200 rounded-lg">
+                  <div>
+                    <p className="font-medium text-sm">{selectedVendor.name}</p>
+                    <p className="text-xs text-gray-600">{selectedVendor.vendorNumber}</p>
+                  </div>
+                  {!linkedInvoiceId && (
+                    <Button variant="outline" size="sm" onClick={() => setSelectedVendor(null)} className="h-7 text-xs">
+                      <X className="h-3.5 w-3.5 mr-1" />
+                      Change
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <div className="relative mb-3">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      type="text"
+                      placeholder="Search vendors..."
+                      value={vendorSearch}
+                      onChange={(e) => setVendorSearch(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <div className="border rounded-lg max-h-48 overflow-y-auto">
+                    {isLoadingVendors ? (
+                      <div className="flex items-center justify-center py-6 text-gray-500">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        <span className="text-sm">Loading vendors...</span>
+                      </div>
+                    ) : filteredVendors.length === 0 ? (
+                      <p className="p-3 text-gray-500 text-sm text-center">No vendors found</p>
+                    ) : (
+                      filteredVendors.map((vendor) => (
+                        <button
+                          key={vendor.id}
+                          onClick={() => setSelectedVendor(vendor)}
+                          className="w-full p-3 text-left hover:bg-gray-50 border-b last:border-b-0"
+                        >
+                          <p className="font-medium text-sm">{vendor.name}</p>
+                          <p className="text-xs text-gray-500">{vendor.vendorNumber}</p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Vendor Selection */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Vendor *</h2>
-            {selectedVendor ? (
-              <div className="flex items-center justify-between p-4 bg-teal-50 border border-teal-200 rounded-lg">
-                <div>
-                  <p className="font-medium">{selectedVendor.name}</p>
-                  <p className="text-sm text-gray-600">{selectedVendor.vendorNumber}</p>
-                </div>
-                {!linkedInvoiceId && (
-                  <Button variant="outline" size="sm" onClick={() => setSelectedVendor(null)}>
-                    <X className="h-4 w-4 mr-2" />
-                    Change
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div>
-                <div className="relative mb-3">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    type="text"
-                    placeholder="Search vendors..."
-                    value={vendorSearch}
-                    onChange={(e) => setVendorSearch(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-                <div className="border rounded-lg max-h-60 overflow-y-auto">
-                  {isLoadingVendors ? (
-                    <div className="flex items-center justify-center py-8 text-gray-500">
-                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                      Loading vendors...
-                    </div>
-                  ) : filteredVendors.length === 0 ? (
-                    <div className="py-8 text-center text-gray-500">No vendors found</div>
-                  ) : (
-                    filteredVendors.map((vendor) => (
-                      <button
-                        key={vendor.id}
-                        onClick={() => setSelectedVendor(vendor)}
-                        className="w-full p-3 text-left hover:bg-gray-50 border-b last:border-b-0"
-                      >
-                        <p className="font-medium">{vendor.name}</p>
-                        <p className="text-sm text-gray-500">{vendor.vendorNumber}</p>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Return Items */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Return Items *</h2>
-              <Button variant="outline" size="sm" onClick={handleAddItem}>
-                <Plus className="h-4 w-4 mr-2" />
+          {/* Items Section */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">Return Items</p>
+              <Button variant="outline" size="sm" onClick={handleAddItem} className="h-7 text-xs">
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
                 Add Item
               </Button>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2 px-2 text-sm font-medium text-gray-600 w-12">#</th>
-                    <th className="text-left py-2 px-2 text-sm font-medium text-gray-600">Item</th>
-                    <th className="text-left py-2 px-2 text-sm font-medium text-gray-600 w-20">HSN</th>
-                    <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 w-24">Qty</th>
-                    <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 w-28">Rate</th>
-                    <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 w-20">Tax %</th>
-                    <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 w-28">Amount</th>
-                    <th className="text-center py-2 px-2 text-sm font-medium text-gray-600 w-12"></th>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="px-3 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-10">S.No</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Item</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-20">HSN</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Qty</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Rate ₹</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-20">Tax %</th>
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Amount</th>
+                    <th className="px-3 py-2.5 w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -453,9 +478,9 @@ function NewPurchaseReturnPageContent() {
                     );
 
                     return (
-                      <tr key={returnItem.id} className="border-b last:border-b-0">
-                        <td className="py-2 px-2 text-sm text-gray-500">{index + 1}</td>
-                        <td className="py-2 px-2">
+                      <tr key={returnItem.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                        <td className="px-3 py-2.5 text-center text-sm text-gray-400">{index + 1}</td>
+                        <td className="px-3 py-2.5">
                           <select
                             value={returnItem.itemId}
                             onChange={(e) => handleItemChange(index, "itemId", e.target.value)}
@@ -469,50 +494,42 @@ function NewPurchaseReturnPageContent() {
                             ))}
                           </select>
                         </td>
-                        <td className="py-2 px-2 text-sm text-gray-500">{selectedItem?.hsnCode || "-"}</td>
-                        <td className="py-2 px-2">
+                        <td className="px-3 py-2.5 text-sm text-gray-500">{selectedItem?.hsnCode || "-"}</td>
+                        <td className="px-3 py-2.5">
                           <Input
-                            type="number"
-                            min="0"
-                            step="1"
+                            type="number" min="0" step="1"
                             value={returnItem.quantity || ""}
                             onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
-                            className="w-full text-right"
+                            className="w-full h-8 text-right"
                           />
                         </td>
-                        <td className="py-2 px-2">
+                        <td className="px-3 py-2.5">
                           <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
+                            type="number" min="0" step="0.01"
                             value={returnItem.rate || ""}
                             onChange={(e) => handleItemChange(index, "rate", e.target.value)}
-                            className="w-full text-right"
+                            className="w-full h-8 text-right"
                           />
                         </td>
-                        <td className="py-2 px-2">
+                        <td className="px-3 py-2.5">
                           <Input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.01"
+                            type="number" min="0" max="100" step="0.01"
                             value={returnItem.taxRate || ""}
                             onChange={(e) => handleItemChange(index, "taxRate", e.target.value)}
-                            className="w-full text-right"
+                            className="w-full h-8 text-right"
                           />
                         </td>
-                        <td className="py-2 px-2 text-right text-sm font-medium">
-                          {(returnItem.amount + returnItem.taxAmount).toFixed(2)}
+                        <td className="px-3 py-2.5 text-right text-sm font-medium text-gray-900">
+                          {formatCurrency(returnItem.amount + returnItem.taxAmount)}
                         </td>
-                        <td className="py-2 px-2 text-center">
+                        <td className="px-3 py-2.5 text-center">
                           {returnItems.length > 1 && (
                             <Button
-                              variant="ghost"
-                              size="sm"
+                              variant="ghost" size="sm"
                               onClick={() => handleRemoveItem(index)}
-                              className="text-red-500 hover:text-red-700 h-8 w-8 p-0"
+                              className="text-red-500 hover:text-red-700 h-7 w-7 p-0"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           )}
                         </td>
@@ -524,73 +541,47 @@ function NewPurchaseReturnPageContent() {
             </div>
           </div>
 
-          {/* Totals */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex justify-end">
-              <div className="w-72 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">{totals.subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Tax:</span>
-                  <span className="font-medium">{totals.totalTax.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-lg font-bold border-t pt-2">
-                  <span>Total:</span>
-                  <span>{totals.totalAmount.toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Reason & Notes */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Reason & Notes</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Return Reason</label>
+          {/* Row 2: Reason/Notes + Summary */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-3 space-y-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Return Reason</p>
                 <Textarea
                   placeholder="Why are you returning these items?"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   rows={2}
+                  className="resize-none"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
+              <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Additional Notes</p>
                 <Textarea
                   placeholder="Add any additional notes..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={2}
+                  className="resize-none"
                 />
               </div>
             </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-4">
-            <Button variant="outline" onClick={() => router.push("/purchases/returns")}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  {editId ? "Update Return" : "Create Return"}
-                </>
-              )}
-            </Button>
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Summary</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Taxable Value</span>
+                  <span className="font-medium">{formatCurrency(totals.subtotal)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Tax</span>
+                  <span>{formatCurrency(totals.totalTax)}</span>
+                </div>
+                <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
+                  <span>Total</span>
+                  <span className="text-teal-600">{formatCurrency(totals.totalAmount)}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

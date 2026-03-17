@@ -336,7 +336,7 @@ export default function InvoiceDetailPage() {
             {/* Invoice meta — 2/5 width */}
             <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5 flex flex-col">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Invoice Details</p>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm flex-1">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
                 <dt className="text-gray-400">Invoice Date</dt>
                 <dd className="text-gray-900 font-medium text-right">{formatDate(invoice.invoiceDate)}</dd>
                 <dt className="text-gray-400">Due Date</dt>
@@ -344,23 +344,6 @@ export default function InvoiceDetailPage() {
                 <dt className="text-gray-400">Credit Days</dt>
                 <dd className="text-gray-900 font-medium text-right">{invoice.customer?.creditDays ?? "—"} days</dd>
               </dl>
-              {/* Quick totals strip */}
-              <div className="mt-4 pt-3 border-t border-gray-100 space-y-1.5">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Total</span>
-                  <span className="font-semibold text-gray-900">{formatCurrency(Number(invoice.totalAmount))}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Paid</span>
-                  <span className="font-medium text-green-600">{formatCurrency(Number(invoice.paidAmount))}</span>
-                </div>
-                <div className="flex justify-between text-sm font-semibold">
-                  <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>Balance Due</span>
-                  <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>
-                    {formatCurrency(Number(invoice.balanceAmount))}
-                  </span>
-                </div>
-              </div>
             </div>
           </div>
 

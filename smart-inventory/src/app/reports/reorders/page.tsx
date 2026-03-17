@@ -43,7 +43,7 @@ export default function ReordersPage() {
   }, [currentPage, statusFilter]);
 
   const { data, error, isLoading, mutate } = useSWR(apiUrl);
-  const reorders: Reorder[] = data?.reorders || [];
+  const reorders: Reorder[] = useMemo(() => data?.reorders || [], [data]);
   const totalCount = data?.pagination?.total || 0;
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 

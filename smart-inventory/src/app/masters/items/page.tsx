@@ -210,7 +210,7 @@ export default function ItemsPage() {
       setAdjustingStockItem(null);
       setNewStockValue("");
       setStockNotes("");
-      alert(`Available stock adjusted successfully!\nPrevious: ${data.previousAvailableStock}\nNew: ${data.newAvailableStock}\nAdjustment: ${data.adjustment > 0 ? '+' : ''}${data.adjustment}`);
+      alert(`Physical stock adjusted successfully!\nPrevious: ${data.previousPhysicalStock}\nNew: ${data.newPhysicalStock}\nAdjustment: ${data.adjustment > 0 ? '+' : ''}${data.adjustment}`);
     } catch (err) {
       console.error("Error adjusting stock:", err);
       alert(err instanceof Error ? err.message : "Failed to adjust stock");

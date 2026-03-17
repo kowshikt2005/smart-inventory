@@ -28,7 +28,7 @@ import {
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
 import {
   Plus,
-  MoreHorizontal,
+  MoreVertical,
   Edit,
   Trash2,
   Loader2,
@@ -544,13 +544,13 @@ export default function PurchaseOrdersPage() {
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" aria-label="Actions">
-                              <MoreHorizontal className="h-4 w-4" />
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600" aria-label="Actions">
+                              <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem onClick={() => router.push(`/purchases/orders/${order.id}`)}>
-                              <Eye className="h-4 w-4 mr-2" />
+                              <Eye className="h-4 w-4 mr-2 text-teal-600" />
                               View Details
                             </DropdownMenuItem>
 

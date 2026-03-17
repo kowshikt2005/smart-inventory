@@ -14,8 +14,15 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -27,10 +34,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   Plus,
-  MoreHorizontal,
+  MoreVertical,
   Loader2,
   X,
-  CreditCard,
   Eye,
   Trash2,
   Filter,
@@ -79,14 +85,25 @@ const MODE_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
+const MODE_FILTERS = [
+  { value: "ALL", label: "All Payments" },
+  { value: "CASH", label: "Cash" },
+  { value: "UPI", label: "UPI" },
+  { value: "BANK_TRANSFER", label: "Bank Transfer" },
+  { value: "CHEQUE", label: "Cheque" },
+  { value: "CARD", label: "Card" },
+];
+
 export default function PaymentsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const [modeFilter, setModeFilter] = useState("ALL");
   const [customerFilter, setCustomerFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const itemsPerPage = 15;
 
   // Fetch customers for filters
@@ -101,25 +118,23 @@ export default function PaymentsPage() {
   // Build API URL
   const apiUrl = useMemo(() => {
     let url = `/api/payments?page=${currentPage}&limit=${itemsPerPage}`;
-    if (customerFilter) {
-      url += `&customerId=${customerFilter}`;
-    }
-    if (dateFrom) {
-      url += `&dateFrom=${dateFrom}`;
-    }
-    if (dateTo) {
-      url += `&dateTo=${dateTo}`;
-    }
-    if (debouncedSearch) {
-      url += `&search=${encodeURIComponent(debouncedSearch)}`;
-    }
+    if (modeFilter !== "ALL") url += `&mode=${modeFilter}`;
+    if (customerFilter) url += `&customerId=${customerFilter}`;
+    if (dateFrom) url += `&dateFrom=${dateFrom}`;
+    if (dateTo) url += `&dateTo=${dateTo}`;
+    if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
     return url;
-  }, [currentPage, customerFilter, dateFrom, dateTo, debouncedSearch]);
+  }, [currentPage, modeFilter, customerFilter, dateFrom, dateTo, debouncedSearch]);
 
   // Use SWR for caching
   const { data, error, isLoading, mutate } = useSWR(apiUrl);
   const payments = data?.payments || [];
   const totalCount = data?.pagination?.total || 0;
+
+  const handleModeFilter = (mode: string) => {
+    setModeFilter(mode);
+    setCurrentPage(1);
+  };
 
   const handleClearSearch = () => {
     setSearchQuery("");
@@ -146,6 +161,7 @@ export default function PaymentsPage() {
         throw new Error(data.error || "Failed to reverse payment");
       }
 
+      setSelectedPayment(null);
       mutate();
     } catch (err) {
       console.error("Error reversing payment:", err);
@@ -173,53 +189,35 @@ export default function PaymentsPage() {
 
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
-  // Calculate total received
-  const totalReceived = payments.reduce((sum: number, p: Payment) => sum + Number(p.amount), 0);
-
   return (
     <DashboardLayout>
-      <div className="p-6">
+      <div className="p-4 md:p-6">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+        <div className="mb-4">
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">
             Payment Receipts
           </h1>
-          <p className="text-gray-600">
+          <p className="text-sm text-gray-600">
             Record and manage customer payments
           </p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <CreditCard className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Total Payments</p>
-                <p className="text-2xl font-bold text-gray-900">{totalCount}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <CreditCard className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Total Received (This Page)</p>
-                <p className="text-xl font-bold text-green-600">
-                  {formatCurrency(totalReceived)}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Search and Actions */}
-        <div className="space-y-3 mb-6">
+        {/* Filters and Search */}
+        <div className="space-y-3 mb-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {MODE_FILTERS.map((filter) => (
+                <Button
+                  key={filter.value}
+                  variant={modeFilter === filter.value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleModeFilter(filter.value)}
+                  className={modeFilter === filter.value ? "bg-teal-500 hover:bg-teal-600" : ""}
+                >
+                  {filter.label}
+                </Button>
+              ))}
+            </div>
             <div className="flex items-center gap-2">
               <div className="relative w-64">
                 <Input
@@ -248,8 +246,6 @@ export default function PaymentsPage() {
                 <Filter className="h-4 w-4 mr-1" />
                 Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
               </Button>
-            </div>
-            <div className="flex items-center gap-2">
               <ExportButtons
                 onExportExcel={async () => {
                   const { company } = await fetchCompanySettings();
@@ -281,10 +277,11 @@ export default function PaymentsPage() {
               />
               <ImportButton entityType="PAYMENT" entityLabel="Payments" onSuccess={() => mutate()} />
               <Button
+                size="sm"
                 onClick={() => router.push("/sales/receipts/new")}
                 className="bg-teal-500 hover:bg-teal-600 text-white"
               >
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="h-4 w-4 mr-1.5" />
                 Record Payment
               </Button>
             </div>
@@ -350,39 +347,20 @@ export default function PaymentsPage() {
             <Table aria-label="Payments list">
               <TableHeader>
                 <TableRow className="bg-gray-50">
-                  <TableHead scope="col" className="font-semibold">
-                    Date
-                  </TableHead>
-                  <TableHead scope="col" className="font-semibold">
-                    Payment #
-                  </TableHead>
-                  <TableHead scope="col" className="font-semibold">
-                    Customer
-                  </TableHead>
-                  <TableHead scope="col" className="font-semibold">
-                    Mode
-                  </TableHead>
-                  <TableHead scope="col" className="font-semibold">
-                    Reference
-                  </TableHead>
-                  <TableHead scope="col" className="font-semibold">
-                    Invoices
-                  </TableHead>
-                  <TableHead scope="col" className="font-semibold text-right">
-                    Amount
-                  </TableHead>
-                  <TableHead scope="col" className="font-semibold">
-                    Actions
-                  </TableHead>
+                  <TableHead scope="col" className="font-semibold w-[100px]">Date</TableHead>
+                  <TableHead scope="col" className="font-semibold w-[120px]">Payment #</TableHead>
+                  <TableHead scope="col" className="font-semibold">Customer</TableHead>
+                  <TableHead scope="col" className="font-semibold w-[120px]">Mode</TableHead>
+                  <TableHead scope="col" className="font-semibold w-[160px]">Reference</TableHead>
+                  <TableHead scope="col" className="font-semibold w-[140px]">Invoices</TableHead>
+                  <TableHead scope="col" className="font-semibold text-right w-[140px]">Amount</TableHead>
+                  <TableHead scope="col" className="font-semibold w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell
-                      colSpan={8}
-                      className="text-center text-gray-500 py-12"
-                    >
+                    <TableCell colSpan={8} className="text-center text-gray-500 py-12">
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="h-5 w-5 animate-spin" />
                         <span>Loading payments...</span>
@@ -391,17 +369,10 @@ export default function PaymentsPage() {
                   </TableRow>
                 ) : error ? (
                   <TableRow>
-                    <TableCell
-                      colSpan={8}
-                      className="text-center text-red-600 py-8"
-                    >
+                    <TableCell colSpan={8} className="text-center text-red-600 py-8">
                       <div className="space-y-2">
                         <p>Error: {error?.message || "Failed to load payments"}</p>
-                        <Button
-                          onClick={() => mutate()}
-                          variant="outline"
-                          size="sm"
-                        >
+                        <Button onClick={() => mutate()} variant="outline" size="sm">
                           Try Again
                         </Button>
                       </div>
@@ -409,25 +380,25 @@ export default function PaymentsPage() {
                   </TableRow>
                 ) : payments.length === 0 ? (
                   <TableRow>
-                    <TableCell
-                      colSpan={8}
-                      className="text-center text-gray-500 py-8"
-                    >
-                      {searchQuery
-                        ? "No payments found matching your search"
+                    <TableCell colSpan={8} className="text-center text-gray-500 py-8">
+                      {searchQuery || modeFilter !== "ALL"
+                        ? "No payments found matching your filters"
                         : "No payments recorded yet. Click 'Record Payment' to add one."}
                     </TableCell>
                   </TableRow>
                 ) : (
                   payments.map((payment: Payment) => (
-                    <TableRow key={payment.id} className="hover:bg-gray-50">
+                    <TableRow key={payment.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedPayment(payment)}>
                       <TableCell className="text-sm">
                         {formatDate(payment.paymentDate)}
                       </TableCell>
                       <TableCell>
-                        <span className="font-medium text-teal-600">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSelectedPayment(payment); }}
+                          className="font-medium text-teal-600 hover:text-teal-800 hover:underline"
+                        >
                           {payment.paymentNumber}
-                        </span>
+                        </button>
                       </TableCell>
                       <TableCell>
                         <div>
@@ -448,11 +419,7 @@ export default function PaymentsPage() {
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {payment.allocations.slice(0, 2).map((alloc: PaymentAllocation) => (
-                            <Badge
-                              key={alloc.id}
-                              variant="secondary"
-                              className="text-xs"
-                            >
+                            <Badge key={alloc.id} variant="secondary" className="text-xs">
                               {alloc.invoice.invoiceNumber}
                             </Badge>
                           ))}
@@ -470,26 +437,26 @@ export default function PaymentsPage() {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
-                              variant="outline"
+                              variant="ghost"
                               size="sm"
-                              className="h-8 w-8 p-0"
+                              className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600"
                               aria-label="Actions"
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              <MoreHorizontal className="h-4 w-4" />
+                              <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem
-                              onClick={() =>
-                                router.push(`/sales/receipts/${payment.id}`)
-                              }
+                              onClick={() => router.push(`/sales/receipts/${payment.id}`)}
                             >
-                              <Eye className="h-4 w-4 mr-2" />
+                              <Eye className="h-4 w-4 mr-2 text-teal-600" />
                               View Details
                             </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() => handleDelete(payment.id)}
-                              className="text-red-600"
+                              className="text-red-600 focus:text-red-600 focus:bg-red-50"
                             >
                               <Trash2 className="h-4 w-4 mr-2" />
                               Reverse Payment
@@ -539,6 +506,78 @@ export default function PaymentsPage() {
           </div>
         )}
       </div>
+
+      {/* Payment Detail Modal */}
+      <Dialog open={!!selectedPayment} onOpenChange={(open) => { if (!open) setSelectedPayment(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold">
+              {selectedPayment?.paymentNumber}
+            </DialogTitle>
+            <p className="text-sm text-gray-500">
+              {selectedPayment ? formatDate(selectedPayment.paymentDate) : ""}
+            </p>
+          </DialogHeader>
+
+          {selectedPayment && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Customer</p>
+                <p className="font-medium text-gray-900">{selectedPayment.customer.name}</p>
+                <p className="text-sm text-gray-500">{selectedPayment.customer.customerNumber}</p>
+              </div>
+
+              <div className="flex gap-6">
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Payment Mode</p>
+                  <Badge variant="outline">
+                    {MODE_LABELS[selectedPayment.mode] || selectedPayment.mode}
+                  </Badge>
+                </div>
+                {selectedPayment.referenceNumber && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Reference</p>
+                    <p className="text-sm text-gray-700">{selectedPayment.referenceNumber}</p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Amount</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {formatCurrency(Number(selectedPayment.amount))}
+                </p>
+              </div>
+
+              {selectedPayment.allocations.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Invoice Allocations</p>
+                  <div className="space-y-1.5">
+                    {selectedPayment.allocations.map((alloc: PaymentAllocation) => (
+                      <div key={alloc.id} className="flex items-center justify-between py-1.5 px-3 bg-gray-50 rounded-md">
+                        <span className="text-sm font-medium text-gray-700">{alloc.invoice.invoiceNumber}</span>
+                        <span className="text-sm font-medium text-gray-900">{formatCurrency(Number(alloc.amount))}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Button
+                className="w-full bg-teal-500 hover:bg-teal-600 text-white"
+                onClick={() => {
+                  const id = selectedPayment.id;
+                  setSelectedPayment(null);
+                  router.push(`/sales/receipts/${id}`);
+                }}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                View Full Details
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

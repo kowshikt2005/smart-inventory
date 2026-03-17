@@ -196,6 +196,7 @@ export const Sidebar = memo(function Sidebar() {
       {/* Logo */}
       <div className="flex items-center justify-center px-3 py-4 border-b border-white/[0.12]">
         <div className="w-full rounded-lg bg-white p-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.jpg" alt="Sri Balaji Enterprises" className="w-full h-auto object-contain" />
         </div>
       </div>

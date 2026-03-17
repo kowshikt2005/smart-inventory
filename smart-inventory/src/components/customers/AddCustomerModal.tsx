@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { X, Plus, Trash2, User, DollarSign } from "lucide-react";
 import { getStateFromGSTIN } from "@/lib/gst-state-codes";
 import { normalizeGstin, validateGstin } from "@/lib/gst-validation";
+import { GstinVerifyButton, type GstinVerifyResult } from "@/components/ui/GstinVerifyButton";
 import {
   RateSheetEditor,
   emptyRateSheetFormData,
@@ -235,6 +236,16 @@ export function AddCustomerModal({
     }));
   };
 
+  const handleGstinVerified = (result: GstinVerifyResult) => {
+    setFormData((prev) => ({
+      ...prev,
+      name: prev.name.trim() ? prev.name : result.legalName,
+      addressLine1: prev.addressLine1.trim() ? prev.addressLine1 : result.addressLine1,
+      addressLine2: prev.addressLine2.trim() ? prev.addressLine2 : result.addressLine2,
+      city: prev.city.trim() ? prev.city : result.city,
+    }));
+  };
+
   const handleSameAsBillingChange = (checked: boolean) => {
     setSameAsBilling(checked);
     if (checked) {
@@ -433,16 +444,22 @@ export function AddCustomerModal({
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       GSTIN <span className="text-red-500">*</span>
                     </label>
-                    <Input
-                      type="text"
-                      name="gstin"
-                      value={formData.gstin}
-                      onChange={handleChange}
-                      required
-                      maxLength={15}
-                      placeholder="22AAAAA0000A1Z5"
-                      className="uppercase"
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        name="gstin"
+                        value={formData.gstin}
+                        onChange={handleChange}
+                        required
+                        maxLength={15}
+                        placeholder="22AAAAA0000A1Z5"
+                        className="flex-1 uppercase"
+                      />
+                      <GstinVerifyButton
+                        gstin={formData.gstin}
+                        onVerified={handleGstinVerified}
+                      />
+                    </div>
                     <p className="text-xs text-gray-500 mt-1">Format: 27ABCDE1234F1Z5</p>
                   </div>
                   <div>

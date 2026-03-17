@@ -482,6 +482,7 @@ export function AddItemModal({
                 {imageUrl ? (
                   <div className="flex items-start gap-3">
                     <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-200 shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={imageUrl}
                         alt="Item preview"

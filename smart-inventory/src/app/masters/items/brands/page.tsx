@@ -297,6 +297,7 @@ export default function BrandsPage() {
                   <TableRow key={brand.id}>
                     <TableCell>
                       {brand.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img src={brand.logoUrl} alt={`${brand.name} logo`} className="w-8 h-8 rounded object-cover" />
                       ) : (
                         <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
@@ -377,6 +378,7 @@ export default function BrandsPage() {
                   <input ref={fileInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
                   {newBrand.logoUrl ? (
                     <div className="flex items-center gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={newBrand.logoUrl} alt="Brand logo preview" className="w-16 h-16 rounded object-cover border" />
                       <div className="flex gap-2">
                         <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>Change</Button>

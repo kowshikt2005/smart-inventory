@@ -36,9 +36,11 @@ export async function GET(request: Request) {
       const reservedQuantity = Number(item.inventory?.reservedQuantity ?? 0);
       const availableStock = physicalStock - reservedQuantity;
       const purchasePrice = Number(item.purchasePrice);
-      const stockValue = availableStock * purchasePrice;
+      // Stock value and closing stock are always based on physical stock,
+      // not available stock — reservations are order-workflow only
+      const stockValue = physicalStock * purchasePrice;
 
-      if (hideZeroStock && availableStock <= 0) continue;
+      if (hideZeroStock && physicalStock <= 0) continue;
 
       stockItems.push({
         id: item.id,
@@ -60,7 +62,8 @@ export async function GET(request: Request) {
     }
 
     const totalItems = stockItems.length;
-    const totalQuantity = stockItems.reduce((sum, i) => sum + i.availableStock, 0);
+    // Totals use physicalStock — closing stock = actual physical inventory
+    const totalQuantity = stockItems.reduce((sum, i) => sum + i.physicalStock, 0);
     const totalValue = stockItems.reduce((sum, i) => sum + i.stockValue, 0);
 
     return NextResponse.json({

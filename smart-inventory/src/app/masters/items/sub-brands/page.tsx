@@ -357,6 +357,7 @@ export default function SubBrandsPage() {
                   <TableRow key={subBrand.id}>
                     <TableCell>
                       {subBrand.logoUrl ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
                         <img
                           src={subBrand.logoUrl}
                           alt={`${subBrand.name} logo`}
@@ -476,6 +477,7 @@ export default function SubBrandsPage() {
                   />
                   {newSubBrand.logoUrl ? (
                     <div className="flex items-center gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={newSubBrand.logoUrl}
                         alt="Sub-brand logo preview"

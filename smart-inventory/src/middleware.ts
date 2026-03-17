@@ -27,10 +27,23 @@ export async function middleware(request: NextRequest) {
   // Only applies to page routes, not API routes (those have their own checks)
   // Admin role bypasses all page permission checks
   if (!pathname.startsWith("/api/") && token.roleName !== "ADMIN") {
-    const permissionKey = PATH_TO_PERMISSION[pathname];
+    // Try exact match first, then walk up the path to catch sub-routes
+    // e.g. /sales/orders/new → /sales/orders → found in PATH_TO_PERMISSION
+    let checkPath = pathname;
+    let permissionKey: string | undefined;
+    while (checkPath) {
+      if (PATH_TO_PERMISSION[checkPath]) {
+        permissionKey = PATH_TO_PERMISSION[checkPath];
+        break;
+      }
+      const lastSlash = checkPath.lastIndexOf("/");
+      if (lastSlash <= 0) break;
+      checkPath = checkPath.substring(0, lastSlash);
+    }
+
     if (permissionKey) {
       const permissions = token.permissions as RolePermissions | undefined;
-      if (permissions && !permissions[permissionKey]?.view) {
+      if (permissions && !permissions[permissionKey as keyof RolePermissions]?.view) {
         const homeUrl = new URL("/", request.url);
         return NextResponse.redirect(homeUrl);
       }

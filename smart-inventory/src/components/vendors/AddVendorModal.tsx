@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X } from "lucide-react";
 import { getStateFromGSTIN } from "@/lib/gst-state-codes";
+import { GstinVerifyButton, type GstinVerifyResult } from "@/components/ui/GstinVerifyButton";
 
 interface AddVendorModalProps {
   isOpen: boolean;
@@ -106,6 +107,16 @@ export function AddVendorModal({
     setFormData((prev) => ({
       ...prev,
       [name]: value,
+    }));
+  };
+
+  const handleGstinVerified = (result: GstinVerifyResult) => {
+    setFormData((prev) => ({
+      ...prev,
+      name: prev.name.trim() ? prev.name : result.legalName,
+      address: prev.address.trim() ? prev.address : result.address,
+      city: prev.city.trim() ? prev.city : result.city,
+      pincode: prev.pincode.trim() ? prev.pincode : result.pincode,
     }));
   };
 
@@ -218,16 +229,22 @@ export function AddVendorModal({
                 >
                   GSTIN
                 </label>
-                <Input
-                  id="vendor-gstin"
-                  type="text"
-                  name="gstin"
-                  value={formData.gstin}
-                  onChange={handleChange}
-                  maxLength={15}
-                  placeholder="22AAAAA0000A1Z5"
-                  className="uppercase"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="vendor-gstin"
+                    type="text"
+                    name="gstin"
+                    value={formData.gstin}
+                    onChange={handleChange}
+                    maxLength={15}
+                    placeholder="22AAAAA0000A1Z5"
+                    className="flex-1 uppercase"
+                  />
+                  <GstinVerifyButton
+                    gstin={formData.gstin}
+                    onVerified={handleGstinVerified}
+                  />
+                </div>
                 <p className="text-xs text-gray-500 mt-1">
                   15 characters (optional)
                 </p>

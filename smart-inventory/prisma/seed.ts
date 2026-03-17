@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from '../src/generated/prisma';
+import { PrismaClient } from '../src/generated/prisma';
 import { hash } from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -2409,9 +2409,6 @@ async function main() {
   });
 
   // Update invoiced quantities in sales order items
-  const so4Items = await prisma.salesOrderItem.findMany({
-    where: { salesOrderId: so4.id },
-  });
   await prisma.salesOrderItem.updateMany({
     where: { salesOrderId: so4.id, itemId: items[7].id },
     data: { invoicedQuantity: 1 },

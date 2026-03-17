@@ -3,7 +3,6 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -11,14 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { InvoiceStatusBadge } from "@/components/invoices/InvoiceStatusBadge";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
@@ -289,48 +280,66 @@ function NewPaymentContent() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.push("/sales/receipts")}
-            className="mb-2"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Payments
-          </Button>
-          <h1 className="text-2xl font-bold text-gray-900">Record Payment</h1>
-          <p className="text-sm text-gray-600">
-            Receipt #: {paymentNumber}
-          </p>
+      <div className="min-h-screen bg-gray-50">
+        {/* Sticky action bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-3 sticky top-0 z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => router.push("/sales/receipts")} className="text-gray-500 -ml-2">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+              <div className="h-4 w-px bg-gray-200" />
+              <div>
+                <span className="text-base font-bold text-gray-900">Record Payment</span>
+                <span className="ml-2 text-sm text-gray-400">#{paymentNumber}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => router.push("/sales/receipts")}>Cancel</Button>
+              <Button size="sm" onClick={handleSave} disabled={isSaving || totalAllocated <= 0} className="bg-teal-500 hover:bg-teal-600 text-white">
+                {isSaving ? (
+                  <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Saving...</>
+                ) : (
+                  <><Save className="h-4 w-4 mr-1.5" />Save Payment</>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
+        <div className="p-6 space-y-4">
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
+          )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Payment Details */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold mb-4">Payment Details</h2>
-
-              <div className="space-y-4">
-                {/* Customer Selection */}
+          {/* Row 1: Payment Date/Ref + Customer & Method */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Payment Details</p>
+              <div className="space-y-3">
                 <div>
-                  <Label htmlFor="customer">Customer *</Label>
-                  <Select
-                    value={selectedCustomerId}
-                    onValueChange={setSelectedCustomerId}
-                    disabled={isLoadingCustomers}
-                  >
-                    <SelectTrigger id="customer">
-                      <SelectValue placeholder="Select customer..." />
-                    </SelectTrigger>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Payment Date <span className="text-red-500">*</span>
+                  </label>
+                  <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Reference Number</label>
+                  <Input type="text" placeholder="Cheque #, Transaction ID..." value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
+                Customer & Method <span className="text-red-400">*</span>
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Customer</label>
+                  <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId} disabled={isLoadingCustomers}>
+                    <SelectTrigger><SelectValue placeholder="Select customer..." /></SelectTrigger>
                     <SelectContent>
                       {customers.map((customer) => (
                         <SelectItem key={customer.id} value={customer.id}>
@@ -340,67 +349,36 @@ function NewPaymentContent() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* Payment Date */}
-                <div>
-                  <Label htmlFor="paymentDate">Payment Date *</Label>
-                  <Input
-                    id="paymentDate"
-                    type="date"
-                    value={paymentDate}
-                    onChange={(e) => setPaymentDate(e.target.value)}
-                  />
-                </div>
-
-                {/* Payment Mode */}
-                <div>
-                  <Label htmlFor="paymentMode">Payment Mode *</Label>
-                  <Select value={paymentMode} onValueChange={setPaymentMode}>
-                    <SelectTrigger id="paymentMode">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PAYMENT_MODES.map((mode) => (
-                        <SelectItem key={mode.value} value={mode.value}>
-                          {mode.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Deposit To (Bank Account) */}
-                <div>
-                  <Label htmlFor="bankAccount">Deposit To</Label>
-                  <Select value={selectedBankAccountId} onValueChange={setSelectedBankAccountId}>
-                    <SelectTrigger id="bankAccount">
-                      <SelectValue placeholder="Select account..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {bankAccounts.map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.accountName} ({acc.bankName})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Reference Number */}
-                <div>
-                  <Label htmlFor="referenceNumber">Reference Number</Label>
-                  <Input
-                    id="referenceNumber"
-                    type="text"
-                    placeholder="Cheque #, Transaction ID..."
-                    value={referenceNumber}
-                    onChange={(e) => setReferenceNumber(e.target.value)}
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Payment Mode <span className="text-red-500">*</span>
+                    </label>
+                    <Select value={paymentMode} onValueChange={setPaymentMode}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PAYMENT_MODES.map((mode) => (
+                          <SelectItem key={mode.value} value={mode.value}>{mode.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Deposit To</label>
+                    <Select value={selectedBankAccountId} onValueChange={setSelectedBankAccountId}>
+                      <SelectTrigger><SelectValue placeholder="Select account..." /></SelectTrigger>
+                      <SelectContent>
+                        {bankAccounts.map((acc) => (
+                          <SelectItem key={acc.id} value={acc.id}>{acc.accountName} ({acc.bankName})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 {/* Cheque Collection Tracking */}
                 {paymentMode === "CHEQUE" && (
-                  <div className="border border-amber-200 bg-amber-50 rounded-lg p-4">
+                  <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <input
                         type="checkbox"
@@ -412,200 +390,129 @@ function NewPaymentContent() {
                         }}
                         className="rounded border-gray-300"
                       />
-                      <Label htmlFor="chequeCollected" className="text-amber-800 font-medium cursor-pointer">
+                      <label htmlFor="chequeCollected" className="text-amber-800 font-medium cursor-pointer text-sm">
                         Cheque Collected
-                      </Label>
+                      </label>
                     </div>
                     {chequeCollected && (
                       <div className="mt-2">
-                        <Label htmlFor="chequeCollectedDate" className="text-amber-700 text-sm">
-                          Collection Date
-                        </Label>
-                        <Input
-                          id="chequeCollectedDate"
-                          type="date"
-                          value={chequeCollectedDate}
-                          onChange={(e) => setChequeCollectedDate(e.target.value)}
-                          className="mt-1"
-                        />
+                        <label className="block text-sm text-amber-700 mb-1">Collection Date</label>
+                        <Input type="date" value={chequeCollectedDate} onChange={(e) => setChequeCollectedDate(e.target.value)} />
                       </div>
                     )}
                   </div>
                 )}
-
-                {/* Notes */}
-                <div>
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea
-                    id="notes"
-                    placeholder="Optional notes..."
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    rows={3}
-                  />
-                </div>
               </div>
-            </div>
-
-            {/* Payment Summary */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold mb-4">Summary</h2>
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Total Pending</span>
-                  <span className="font-medium">
-                    {formatCurrency(totalPending)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Total Allocated</span>
-                  <span className="font-medium text-green-600">
-                    {formatCurrency(totalAllocated)}
-                  </span>
-                </div>
-                <hr />
-                <div className="flex justify-between font-semibold">
-                  <span>Payment Amount</span>
-                  <span className="text-lg text-green-600">
-                    {formatCurrency(totalAllocated)}
-                  </span>
-                </div>
-              </div>
-
-              <Button
-                onClick={handleSave}
-                disabled={isSaving || totalAllocated <= 0}
-                className="w-full mt-6 bg-teal-500 hover:bg-teal-600"
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Payment
-                  </>
-                )}
-              </Button>
             </div>
           </div>
 
-          {/* Invoice Allocation */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Allocate to Invoices</h2>
-                {Object.keys(allocations).length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleClearAllocations}
-                  >
-                    Clear All
-                  </Button>
-                )}
-              </div>
-
-              {!selectedCustomerId ? (
-                <div className="text-center py-12 text-gray-500">
-                  Select a customer to see pending invoices
-                </div>
-              ) : isLoadingInvoices ? (
-                <div className="text-center py-12 text-gray-500">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                  Loading invoices...
-                </div>
-              ) : pendingInvoices.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  No pending invoices for this customer
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50">
-                        <TableHead className="font-semibold">Invoice</TableHead>
-                        <TableHead className="font-semibold">Date</TableHead>
-                        <TableHead className="font-semibold">Due</TableHead>
-                        <TableHead className="font-semibold">Status</TableHead>
-                        <TableHead className="font-semibold text-right">
-                          Total
-                        </TableHead>
-                        <TableHead className="font-semibold text-right">
-                          Balance
-                        </TableHead>
-                        <TableHead className="font-semibold text-right">
-                          Allocate
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pendingInvoices.map((invoice) => (
-                        <TableRow key={invoice.id}>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">
-                                {invoice.invoiceNumber}
-                              </p>
-                              {invoice.orderNumber && (
-                                <p className="text-xs text-gray-500">
-                                  Order: {invoice.orderNumber}
-                                </p>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {formatDate(invoice.invoiceDate)}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {formatDate(invoice.dueDate)}
-                          </TableCell>
-                          <TableCell>
-                            <InvoiceStatusBadge
-                              status={invoice.effectiveStatus}
-                            />
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
-                            {formatCurrency(Number(invoice.totalAmount))}
-                          </TableCell>
-                          <TableCell className="text-right font-medium text-red-600">
-                            {formatCurrency(Number(invoice.balanceAmount))}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center gap-2 justify-end">
-                              <Input
-                                type="number"
-                                min="0"
-                                max={Number(invoice.balanceAmount)}
-                                step="0.01"
-                                value={allocations[invoice.id] || ""}
-                                onChange={(e) =>
-                                  handleAllocationChange(
-                                    invoice.id,
-                                    e.target.value
-                                  )
-                                }
-                                className="w-28 text-right"
-                                placeholder="0.00"
-                              />
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleAllocateFull(invoice.id)}
-                                title="Allocate full balance"
-                              >
-                                Full
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+          {/* Invoice Allocation Section */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">Allocate to Invoices</p>
+              {Object.keys(allocations).length > 0 && (
+                <Button variant="outline" size="sm" onClick={handleClearAllocations} className="h-7 text-xs">
+                  Clear All
+                </Button>
               )}
+            </div>
+
+            {!selectedCustomerId ? (
+              <div className="flex items-center justify-center py-10 text-gray-400 text-sm">
+                Select a customer to see pending invoices
+              </div>
+            ) : isLoadingInvoices ? (
+              <div className="flex items-center justify-center py-10 gap-2 text-gray-400">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Loading invoices...</span>
+              </div>
+            ) : pendingInvoices.length === 0 ? (
+              <div className="flex items-center justify-center py-10 text-gray-400 text-sm">
+                No pending invoices for this customer
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Invoice</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Date</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Due</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Status</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Total</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Balance</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-40">Allocate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingInvoices.map((invoice) => (
+                      <tr key={invoice.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                        <td className="px-3 py-2.5">
+                          <div className="font-medium text-sm text-gray-900">{invoice.invoiceNumber}</div>
+                          {invoice.orderNumber && (
+                            <div className="text-xs text-gray-400">Order: {invoice.orderNumber}</div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-sm text-gray-600">{formatDate(invoice.invoiceDate)}</td>
+                        <td className="px-3 py-2.5 text-sm text-gray-600">{formatDate(invoice.dueDate)}</td>
+                        <td className="px-3 py-2.5">
+                          <InvoiceStatusBadge status={invoice.effectiveStatus} />
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-sm text-gray-600">
+                          {formatCurrency(Number(invoice.totalAmount))}
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-sm font-medium text-red-600">
+                          {formatCurrency(Number(invoice.balanceAmount))}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <div className="flex items-center gap-2 justify-end">
+                            <Input
+                              type="number"
+                              min="0"
+                              max={Number(invoice.balanceAmount)}
+                              step="0.01"
+                              value={allocations[invoice.id] || ""}
+                              onChange={(e) => handleAllocationChange(invoice.id, e.target.value)}
+                              className="w-28 h-8 text-right"
+                              placeholder="0.00"
+                            />
+                            <Button variant="outline" size="sm" onClick={() => handleAllocateFull(invoice.id)} title="Allocate full balance" className="h-8 text-xs">
+                              Full
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Row 2: Notes + Summary */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-3">
+              <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Notes</p>
+                <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes..." rows={3} className="resize-none" />
+              </div>
+            </div>
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Summary</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Total Pending</span>
+                  <span className="font-medium">{formatCurrency(totalPending)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Total Allocated</span>
+                  <span className="font-medium text-green-600">{formatCurrency(totalAllocated)}</span>
+                </div>
+                <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
+                  <span>Payment Amount</span>
+                  <span className="text-teal-600">{formatCurrency(totalAllocated)}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

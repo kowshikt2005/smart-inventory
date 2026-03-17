@@ -7,7 +7,13 @@ import {
 } from "@/components/ui/table";
 import { ReorderStatusBadge } from "@/components/reorders/ReorderStatusBadge";
 import {
-  Loader2, Eye, RefreshCw, ClipboardList, Clock, PackageCheck, XCircle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Loader2, Eye, RefreshCw, ClipboardList, Clock, PackageCheck, MoreHorizontal,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -43,7 +49,7 @@ export default function ReordersPage() {
   }, [currentPage, statusFilter]);
 
   const { data, error, isLoading, mutate } = useSWR(apiUrl);
-  const reorders: Reorder[] = data?.reorders || [];
+  const reorders: Reorder[] = useMemo(() => data?.reorders || [], [data]);
   const totalCount = data?.pagination?.total || 0;
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
@@ -227,28 +233,29 @@ export default function ReordersPage() {
                       <ReorderStatusBadge status={ro.status} />
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8"
-                          onClick={() => router.push(`/purchases/reorders/${ro.id}`)}
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          View
-                        </Button>
-                        {ro.status === "PENDING" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 text-red-600 hover:text-red-700"
-                            onClick={() => handleCancel(ro.id)}
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Cancel
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
-                        )}
-                      </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => router.push(`/purchases/reorders/${ro.id}`)}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </DropdownMenuItem>
+                          {ro.status === "PENDING" && (
+                            <DropdownMenuItem
+                              className="text-red-600 focus:text-red-600"
+                              onClick={() => handleCancel(ro.id)}
+                            >
+                              Cancel Reorder
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))

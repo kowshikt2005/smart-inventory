@@ -39,6 +39,7 @@ interface Customer {
   customerNumber: string;
   name: string;
   gstin: string | null;
+  creditDays: number;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -1164,6 +1165,7 @@ function NewSalesOrderPageContent() {
                             handleUpdateItem(index, updatedItem)
                           }
                           onRemove={() => handleRemoveItem(index)}
+                          onItemCreated={fetchItems}
                         />
                       ))}
                     </tbody>
@@ -1331,6 +1333,7 @@ function NewSalesOrderPageContent() {
         items={items}
         selectedItemIds={selectedItemIds}
         onSelect={handleAddItemSelect}
+        onItemCreated={fetchItems}
       />
     </DashboardLayout>
   );

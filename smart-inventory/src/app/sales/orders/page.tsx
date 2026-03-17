@@ -29,7 +29,7 @@ import { SalesOrderStatusBadge } from "@/components/sales-orders/SalesOrderStatu
 import { StockStatusBadge } from "@/components/sales-orders/StockStatusBadge";
 import {
   Plus,
-  MoreHorizontal,
+  MoreVertical,
   Edit,
   Trash2,
   Loader2,
@@ -334,44 +334,44 @@ export default function SalesOrdersPage() {
       <div className="p-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground mb-2">Sales Orders</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Sales Orders</h1>
+          <p className="text-gray-600">
             Manage customer orders and track fulfillment status
           </p>
         </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-border/60 p-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-50 rounded-lg">
+              <div className="p-2 bg-indigo-100 rounded-lg">
                 <ShoppingCart className="h-5 w-5 text-indigo-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Orders</p>
-                <p className="text-2xl font-bold text-foreground">{stats.total}</p>
+                <p className="text-sm text-gray-600">Total Orders</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-border/60 p-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-50 rounded-lg">
+              <div className="p-2 bg-amber-100 rounded-lg">
                 <Clock className="h-5 w-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Open Orders</p>
-                <p className="text-2xl font-bold text-foreground">{stats.open}</p>
+                <p className="text-sm text-gray-600">Open Orders</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.open}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-border/60 p-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-50 rounded-lg">
+              <div className="p-2 bg-orange-100 rounded-lg">
                 <Clock className="h-5 w-5 text-orange-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">On Hold</p>
-                <p className="text-2xl font-bold text-foreground">{stats.hold}</p>
+                <p className="text-sm text-gray-600">On Hold</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.hold}</p>
               </div>
             </div>
           </div>
@@ -389,7 +389,7 @@ export default function SalesOrdersPage() {
                   onClick={() => handleStatusFilter(filter.value)}
                   className={
                     statusFilter === filter.value
-                      ? "bg-primary hover:bg-primary/90"
+                      ? "bg-teal-500 hover:bg-teal-600"
                       : ""
                   }
                 >
@@ -409,7 +409,7 @@ export default function SalesOrdersPage() {
                 {searchQuery && (
                   <button
                     onClick={handleClearSearch}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
@@ -420,21 +420,23 @@ export default function SalesOrdersPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowFilters(!showFilters)}
-                className={activeFilterCount > 0 ? "border-primary text-primary" : ""}
+                className={activeFilterCount > 0 ? "border-teal-500 text-teal-600" : ""}
               >
                 <Filter className="h-4 w-4 mr-1" />
                 Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
               </Button>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => router.push("/sales/invoices")}
               >
                 <FileText className="h-4 w-4 mr-2" />
                 New Invoice
               </Button>
               <Button
+                size="sm"
                 onClick={() => router.push("/sales/orders/new")}
-                className="bg-primary hover:bg-primary/90 text-white"
+                className="bg-teal-500 hover:bg-teal-600 text-white"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 New Order
@@ -443,9 +445,9 @@ export default function SalesOrdersPage() {
           </div>
 
           {showFilters && (
-            <div className="flex flex-wrap items-end gap-3 p-4 bg-muted/30 rounded-xl border border-border/60">
+            <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
               <div className="min-w-[160px]">
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Brand</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Brand</label>
                 <Select value={brandFilter} onValueChange={(v) => { setBrandFilter(v === "ALL" ? "" : v); setCurrentPage(1); }}>
                   <SelectTrigger className="h-9 bg-white">
                     <SelectValue placeholder="All Brands" />
@@ -459,7 +461,7 @@ export default function SalesOrdersPage() {
                 </Select>
               </div>
               <div className="min-w-[200px]">
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Customer</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Customer</label>
                 <Select value={customerFilter} onValueChange={(v) => { setCustomerFilter(v === "ALL" ? "" : v); setCurrentPage(1); }}>
                   <SelectTrigger className="h-9 bg-white">
                     <SelectValue placeholder="All Customers" />
@@ -473,7 +475,7 @@ export default function SalesOrdersPage() {
                 </Select>
               </div>
               <div className="min-w-[150px]">
-                <label className="block text-xs font-medium text-muted-foreground mb-1">From Date</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
                 <Input
                   type="date"
                   value={dateFrom}
@@ -482,7 +484,7 @@ export default function SalesOrdersPage() {
                 />
               </div>
               <div className="min-w-[150px]">
-                <label className="block text-xs font-medium text-muted-foreground mb-1">To Date</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
                 <Input
                   type="date"
                   value={dateTo}
@@ -501,7 +503,7 @@ export default function SalesOrdersPage() {
                     setDateTo("");
                     setCurrentPage(1);
                   }}
-                  className="text-muted-foreground hover:text-foreground h-9"
+                  className="text-gray-500 hover:text-gray-700 h-9"
                 >
                   <X className="h-3 w-3 mr-1" />
                   Clear
@@ -539,11 +541,11 @@ export default function SalesOrdersPage() {
         )}
 
         {/* Orders Table */}
-        <div ref={tableRef} onContextMenu={handleContextMenu} className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
+        <div ref={tableRef} onContextMenu={handleContextMenu} className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <Table aria-label="Sales orders list">
               <TableHeader>
-                <TableRow className="bg-muted/30">
+                <TableRow className="bg-gray-50">
                   <TableHead scope="col" className="font-semibold">
                     Date
                   </TableHead>
@@ -575,7 +577,7 @@ export default function SalesOrdersPage() {
                   <TableRow>
                     <TableCell
                       colSpan={8}
-                      className="text-center text-muted-foreground py-12"
+                      className="text-center text-gray-500 py-12"
                     >
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="h-5 w-5 animate-spin" />
@@ -605,7 +607,7 @@ export default function SalesOrdersPage() {
                   <TableRow>
                     <TableCell
                       colSpan={8}
-                      className="text-center text-muted-foreground py-8"
+                      className="text-center text-gray-500 py-8"
                     >
                       {searchQuery || statusFilter !== "ALL"
                         ? "No orders found matching your filters"
@@ -614,7 +616,7 @@ export default function SalesOrdersPage() {
                   </TableRow>
                 ) : (
                   (data?.salesOrders || []).map((order: SalesOrder) => (
-                    <TableRow key={order.id}>
+                    <TableRow key={order.id} className="hover:bg-gray-50">
                       <TableCell className="text-sm">
                         {formatDate(order.orderDate)}
                       </TableCell>
@@ -623,7 +625,7 @@ export default function SalesOrdersPage() {
                           onClick={() =>
                             router.push(`/sales/orders/${order.id}`)
                           }
-                          className="font-medium text-primary hover:text-primary/80 hover:underline"
+                          className="font-medium text-teal-600 hover:text-teal-800 hover:underline"
                         >
                           {order.orderNumber}
                         </button>
@@ -631,12 +633,12 @@ export default function SalesOrdersPage() {
                       <TableCell>
                         <div>
                           <p className="font-medium">{order.customer.name}</p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-gray-500">
                             {order.customer.customerNumber}
                           </p>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell className="text-sm text-gray-600">
                         {order.referenceNumber || "-"}
                       </TableCell>
                       <TableCell className="text-center">
@@ -663,21 +665,21 @@ export default function SalesOrdersPage() {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
-                              variant="outline"
+                              variant="ghost"
                               size="sm"
-                              className="h-8 w-8 p-0"
+                              className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600"
                               aria-label="Actions"
                             >
-                              <MoreHorizontal className="h-4 w-4" />
+                              <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem
                               onClick={() =>
                                 router.push(`/sales/orders/${order.id}`)
                               }
                             >
-                              <Eye className="h-4 w-4 mr-2" />
+                              <Eye className="h-4 w-4 mr-2 text-teal-600" />
                               View Details
                             </DropdownMenuItem>
 
@@ -787,7 +789,7 @@ export default function SalesOrdersPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-gray-600">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount}{" "}
               orders
@@ -801,7 +803,7 @@ export default function SalesOrdersPage() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-gray-600">
                 Page {currentPage} of {totalPages}
               </span>
               <Button

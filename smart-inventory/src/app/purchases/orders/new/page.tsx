@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PurchaseOrderItemRow } from "@/components/purchase-orders/PurchaseOrderItemRow";
+import { VendorSelectionModal } from "@/components/purchase-orders/VendorSelectionModal";
 import {
   ArrowLeft,
   Loader2,
@@ -24,6 +25,7 @@ interface Vendor {
   vendorNumber: string;
   name: string;
   gstin: string | null;
+  creditDays: number;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -76,6 +78,7 @@ function NewPurchaseOrderPageContent() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [vendorSearch, setVendorSearch] = useState("");
+  const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
   const [isLoadingVendors, setIsLoadingVendors] = useState(false);
 
   // Items state
@@ -515,15 +518,25 @@ function NewPurchaseOrderPageContent() {
               ) : (
                   <div className="space-y-2">
                     {!selectedVendor && (
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <Input
-                          type="text"
-                          placeholder="Search vendors by name, number, or GSTIN..."
-                          value={vendorSearch}
-                          onChange={(e) => setVendorSearch(e.target.value)}
-                          className="pl-10"
-                        />
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <Input
+                            type="text"
+                            placeholder="Search vendors by name, number, or GSTIN..."
+                            value={vendorSearch}
+                            onChange={(e) => setVendorSearch(e.target.value)}
+                            className="pl-10"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setIsVendorModalOpen(true)}
+                          className="shrink-0"
+                        >
+                          Browse
+                        </Button>
                       </div>
                     )}
                     {vendorSearch && !selectedVendor && (
@@ -601,6 +614,16 @@ function NewPurchaseOrderPageContent() {
                         )}
                       </div>
                     )}
+                    <VendorSelectionModal
+                      isOpen={isVendorModalOpen}
+                      onClose={() => setIsVendorModalOpen(false)}
+                      vendors={vendors}
+                      onSelect={(vendor) => {
+                        setSelectedVendor(vendor);
+                        setVendorSearch("");
+                        setIsVendorModalOpen(false);
+                      }}
+                    />
                   </div>
                 )}
             </div>

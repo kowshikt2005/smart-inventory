@@ -114,6 +114,20 @@ export function ImportModal({
 
   const fields: ImportField[] = ENTITY_FIELDS[entityType] || [];
 
+  const fetchSavedMappings = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/import/mappings?entityType=${entityType}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setSavedMappings(data.mappings || []);
+      }
+    } catch {
+      // ignore
+    }
+  }, [entityType]);
+
   // Reset on open/close
   useEffect(() => {
     if (isOpen) {
@@ -129,7 +143,7 @@ export function ImportModal({
       setVendorInvoiceInfo(null);
       fetchSavedMappings();
     }
-  }, [isOpen, entityType]);
+  }, [isOpen, entityType, fetchSavedMappings]);
 
   // Escape key
   useEffect(() => {
@@ -139,20 +153,6 @@ export function ImportModal({
     if (isOpen) window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [isOpen, onClose]);
-
-  const fetchSavedMappings = useCallback(async () => {
-    try {
-      const res = await fetch(
-        `/api/import/mappings?entityType=${entityType}`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setSavedMappings(data.mappings || []);
-      }
-    } catch {
-      // ignore
-    }
-  }, [entityType]);
 
   // ── File parsing ───────────────────────────────────────
 

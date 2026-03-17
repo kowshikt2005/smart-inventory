@@ -4,7 +4,8 @@ import { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { X, Search, Package } from "lucide-react";
+import { AddItemModal } from "@/components/items/AddItemModal";
+import { X, Search, Package, Plus } from "lucide-react";
 
 interface Item {
   id: string;
@@ -33,6 +34,7 @@ interface ItemSelectionModalProps {
   items: Item[];
   selectedItemIds: string[];
   onSelect: (item: Item) => void;
+  onItemCreated?: () => void;
 }
 
 export function ItemSelectionModal({
@@ -41,10 +43,12 @@ export function ItemSelectionModal({
   items,
   selectedItemIds,
   onSelect,
+  onItemCreated,
 }: ItemSelectionModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [selectedSubBrandId, setSelectedSubBrandId] = useState("");
+  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
 
   // Filter available items (not already selected)
   const availableItems = useMemo(
@@ -152,7 +156,21 @@ export function ItemSelectionModal({
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-900">Select Item</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold text-gray-900">Select Item</h2>
+              {onItemCreated && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAddItemOpen(true)}
+                  className="text-teal-600 border-teal-300 hover:bg-teal-50"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  New Item
+                </Button>
+              )}
+            </div>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600"
@@ -315,6 +333,18 @@ export function ItemSelectionModal({
             Cancel
           </Button>
         </div>
+
+        {/* Add Item Modal (nested) */}
+        {onItemCreated && (
+          <AddItemModal
+            isOpen={isAddItemOpen}
+            onClose={() => setIsAddItemOpen(false)}
+            onSuccess={() => {
+              setIsAddItemOpen(false);
+              onItemCreated();
+            }}
+          />
+        )}
       </div>
     </div>
   );

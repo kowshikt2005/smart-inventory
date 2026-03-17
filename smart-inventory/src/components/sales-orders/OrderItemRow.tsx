@@ -50,6 +50,7 @@ interface OrderItemRowProps {
   onRemove: () => void;
   disabled?: boolean;
   sno?: number;
+  onItemCreated?: () => void;
 }
 
 export function OrderItemRow({
@@ -60,6 +61,7 @@ export function OrderItemRow({
   onRemove,
   disabled = false,
   sno,
+  onItemCreated,
 }: OrderItemRowProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -371,6 +373,7 @@ export function OrderItemRow({
         items={items}
         selectedItemIds={selectedItemIds}
         onSelect={handleItemSelect}
+        onItemCreated={onItemCreated}
       />
     )}
     </>
