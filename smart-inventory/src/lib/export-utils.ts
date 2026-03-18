@@ -118,16 +118,15 @@ export function exportToExcel({ fileName, sheets, company }: ExcelConfig) {
   writeFileXLSX(workbook, fileName.endsWith(".xlsx") ? fileName : `${fileName}.xlsx`);
 }
 
-// ── PDF Export ─────────────────────────────────────────────────
-export function exportToPDF({
-  fileName,
+// ── Internal: build a jsPDF document without saving ───────────
+function buildPDFDocument({
   title,
   subtitle,
   companyName,
   company,
   orientation = "portrait",
   sheets,
-}: PDFConfig) {
+}: Omit<PDFConfig, "fileName">): jsPDF {
   const doc = new jsPDF({ orientation });
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();
@@ -251,7 +250,23 @@ export function exportToPDF({
     doc.text(`Page ${i} / ${totalPages}`, pw / 2, ph - 8, { align: "center" });
   }
 
+  return doc;
+}
+
+// ── PDF Export (save to disk) ───────────────────────────────────
+export function exportToPDF(config: PDFConfig) {
+  const doc = buildPDFDocument(config);
+  const { fileName } = config;
   doc.save(fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`);
+}
+
+// ── PDF as Base64 string (for email attachments) ───────────────
+// Returns the raw base64 string (no data-URI prefix).
+export function generatePDFBase64(config: Omit<PDFConfig, "fileName">): string {
+  const doc = buildPDFDocument(config);
+  const dataUri = doc.output("datauristring") as string;
+  // Strip "data:application/pdf;base64," prefix
+  return dataUri.split(",")[1];
 }
 
 // ── Formatting Helpers ─────────────────────────────────────────

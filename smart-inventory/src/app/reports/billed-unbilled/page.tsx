@@ -31,7 +31,8 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, generatePDFBase64, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
+import { EmailReportDialog } from "@/components/reports/EmailReportDialog";
 
 interface OrderItem {
   id: string;
@@ -186,6 +187,60 @@ export default function BilledUnbilledReportPage() {
     exportToPDF({ fileName: `Billed-Unbilled_${type}${dateFile}.pdf`, title: `${type === "billed" ? "Billed" : "Unbilled"} Orders Report`, subtitle: dateRange, sheets: [{ name: type === "billed" ? "Billed" : "Unbilled", headers, rows }], company });
   };
 
+  // ── Email send handler ─────────────────────────────────────
+  const handleEmailSend = async (emails: string[], emailFromDate: string, emailToDate: string) => {
+    const { company } = await fetchCompanySettings();
+
+    const params: string[] = [`type=${type}`];
+    if (brandId) params.push(`brandId=${brandId}`);
+    if (emailFromDate) params.push(`fromDate=${emailFromDate}`);
+    if (emailToDate) params.push(`toDate=${emailToDate}`);
+    const res = await fetch(`/api/reports/billed-unbilled?${params.join("&")}`);
+    if (!res.ok) throw new Error("Failed to fetch report data");
+    const fetchedData = await res.json();
+    const fetchedOrders: Order[] = fetchedData.orders || [];
+
+    const headers = type === "billed"
+      ? ["Order No", "Date", "Customer", "Items", "Amount", "Invoiced", "Pending", "Status"]
+      : ["Order No", "Date", "Customer", "Items", "Amount", "Status"];
+    const rows = fetchedOrders.map((o) => {
+      const base: (string | number)[] = [o.orderNumber, fmtDateExport(o.orderDate), o.customer.name, o.itemCount, fmtNum(o.totalAmount)];
+      if (type === "billed") { base.push(fmtNum(o.invoicedAmount)); base.push(fmtNum(o.pendingAmount)); }
+      base.push(o.status);
+      return base;
+    });
+
+    const dateRange = emailFromDate && emailToDate
+      ? `${fmtDateExport(emailFromDate)} to ${fmtDateExport(emailToDate)}`
+      : `As of ${new Date().toLocaleDateString("en-IN")}`;
+    const dateFile = emailFromDate && emailToDate ? `_${fmtDateExport(emailFromDate)}_to_${fmtDateExport(emailToDate)}` : "";
+    const reportLabel = type === "billed" ? "Billed" : "Unbilled";
+
+    const pdfBase64 = generatePDFBase64({
+      title: `${reportLabel} Orders Report`,
+      subtitle: dateRange,
+      sheets: [{ name: reportLabel, headers, rows }],
+      company,
+    });
+
+    const send = await fetch("/api/reports/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        emails,
+        subject: `${reportLabel} Orders Report — ${dateRange}`,
+        pdfBase64,
+        filename: `Billed-Unbilled_${type}${dateFile}.pdf`,
+        reportTitle: `${reportLabel} Orders Report`,
+        dateRange,
+      }),
+    });
+    if (!send.ok) {
+      const d = await send.json();
+      throw new Error(d.error || "Failed to send email");
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
@@ -199,6 +254,14 @@ export default function BilledUnbilledReportPage() {
           </p>
           <div className="absolute right-0 top-0">
             <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={isLoading || orders.length === 0} />
+          <EmailReportDialog
+            reportTitle="Billed & Unbilled"
+            defaultStartDate={fromDate}
+            defaultEndDate={toDate}
+            hasDateFilter
+            onSendEmail={handleEmailSend}
+            disabled={isLoading || orders.length === 0}
+          />
           </div>
         </div>
 

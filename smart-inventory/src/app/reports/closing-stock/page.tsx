@@ -21,7 +21,8 @@ import {
 } from "@/components/ui/table";
 import { Loader2, Package } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, generatePDFBase64, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
+import { EmailReportDialog } from "@/components/reports/EmailReportDialog";
 import { useState, useMemo } from "react";
 import useSWR from "swr";
 
@@ -118,6 +119,39 @@ export default function ClosingStockPage() {
     exportToPDF({ fileName: `Closing-Stock.pdf`, title: "Closing Stock Report", subtitle: `As of ${new Date().toLocaleDateString("en-IN")}`, orientation: "landscape", sheets: [{ name: "Closing Stock", headers, rows }], company });
   };
 
+  // ── Email send handler (no date filter — uses current loaded data) ──
+  const handleEmailSend = async (emails: string[]) => {
+    const { company } = await fetchCompanySettings();
+    const headers = ["Code", "Name", "Brand", "Sub-Brand", "HSN", "Unit", "Price", "Closing Stock", "Value"];
+    const rows = items.map((i) => [i.itemCode, i.name, i.brand, i.subBrand, i.hsnCode, i.unit, fmtNum(i.purchasePrice), i.physicalStock, fmtNum(i.stockValue)]);
+    rows.push(["", "", "", "", "", "", "Total", summary.totalQuantity, fmtNum(summary.totalValue)]);
+
+    const asOf = new Date().toLocaleDateString("en-IN");
+    const pdfBase64 = generatePDFBase64({
+      title: "Closing Stock Report",
+      subtitle: `As of ${asOf}`,
+      orientation: "landscape",
+      sheets: [{ name: "Closing Stock", headers, rows }],
+      company,
+    });
+
+    const send = await fetch("/api/reports/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        emails,
+        subject: `Closing Stock Report — As of ${asOf}`,
+        pdfBase64,
+        filename: `Closing-Stock_${new Date().toISOString().split("T")[0]}.pdf`,
+        reportTitle: "Closing Stock Report",
+      }),
+    });
+    if (!send.ok) {
+      const d = await send.json();
+      throw new Error(d.error || "Failed to send email");
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
@@ -129,6 +163,12 @@ export default function ClosingStockPage() {
               <h1 className="text-2xl font-bold text-gray-900">Closing Stock</h1>
             </div>
             <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={isLoading || items.length === 0} />
+            <EmailReportDialog
+              reportTitle="Closing Stock"
+              hasDateFilter={false}
+              onSendEmail={(emails) => handleEmailSend(emails)}
+              disabled={isLoading || items.length === 0}
+            />
           </div>
           <p className="text-gray-600">
             Current inventory levels with stock valuation at cost price

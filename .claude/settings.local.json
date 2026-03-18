@@ -29,7 +29,13 @@
       "Bash(node -e:*)",
       "Bash(head:*)",
       "mcp__ide__getDiagnostics",
-      "mcp__codebase-memory-mcp__search_graph"
+      "mcp__codebase-memory-mcp__search_graph",
+      "Bash(find \"C:\\\\Users\\\\harsh\\\\OneDrive\\\\Desktop\\\\smart-inventory\\\\smart-inventory\\\\src\\\\app\\\\reports\" -type f -name \"*.tsx\" -o -name \"*.ts\" -o -name \"*.json\" 2>/dev/null | head -50)",
+      "Bash(find \"C:\\\\Users\\\\harsh\\\\OneDrive\\\\Desktop\\\\smart-inventory\\\\smart-inventory\" -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" \\\\\\) | xargs grep -l \"nodemailer\\\\|email\\\\|send.*mail\\\\|transport\" 2>/dev/null | head -20)",
+      "Bash(grep -r \"mail\\\\|email\\\\|SMTP\" \"C:\\\\Users\\\\harsh\\\\OneDrive\\\\Desktop\\\\smart-inventory\\\\smart-inventory\\\\src\\\\lib\" --include=\"*.ts\" --include=\"*.tsx\" 2>/dev/null | head -20)",
+      "Bash(find \"C:\\\\Users\\\\harsh\\\\OneDrive\\\\Desktop\\\\smart-inventory\\\\smart-inventory\\\\src\\\\app\" -path \"*/settings*\" -o -path \"*/masters*\" -type f | grep -E \"\\\\.\\(tsx|ts\\)$\" | head -20)",
+      "Bash(npm run:*)",
+      "Bash(grep:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

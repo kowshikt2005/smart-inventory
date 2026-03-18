@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, ChevronDown, X, Calendar, Eye } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, generatePDFBase64, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
+import { EmailReportDialog } from "@/components/reports/EmailReportDialog";
 
 interface OutstandingInvoice {
   invoiceId: string;
@@ -317,6 +318,56 @@ export default function OutstandingReportPage() {
     exportToPDF({ fileName: `Outstanding-Report_${tab}${dateFile}.pdf`, title: "Outstanding Report", subtitle: `${partyLabel}s | ${selectedPartyName}${dateRange}`, sheets: [{ name: "Outstanding", headers, rows }], company });
   };
 
+  // ── Email send handler ─────────────────────────────────────
+  const handleEmailSend = async (emails: string[], emailFromDate: string, emailToDate: string) => {
+    const { company } = await fetchCompanySettings();
+    const partyLabel = tab === "customer" ? "Customer" : "Vendor";
+
+    const params: string[] = [`type=${tab}`];
+    if (customerId !== "all") params.push(`customerId=${customerId}`);
+    if (vendorId !== "all") params.push(`vendorId=${vendorId}`);
+    if (emailFromDate) params.push(`fromDate=${emailFromDate}`);
+    if (emailToDate) params.push(`toDate=${emailToDate}`);
+
+    const res = await fetch(`/api/reports/outstanding?${params.join("&")}`);
+    if (!res.ok) throw new Error("Failed to fetch report data");
+    const fetchedData = await res.json();
+    const fetchedInvoices: OutstandingInvoice[] = fetchedData.invoices || [];
+
+    const headers = [partyLabel, "Invoice No", "Inv Date", "Due Date", "Amount", "Paid", "Outstanding", "Days Overdue", "Status"];
+    const rows = fetchedInvoices.map((inv) => [inv.partyName, inv.invoiceNumber, fmtDateExport(inv.invoiceDate), fmtDateExport(inv.dueDate), fmtNum(inv.totalAmount), fmtNum(inv.paidAmount), fmtNum(inv.balanceAmount), inv.daysOverdue > 0 ? `${inv.daysOverdue} days` : "-", inv.daysOverdue > 0 ? "Overdue" : inv.status === "PARTIAL" ? "Partial" : "Pending"]);
+
+    const dateRangeLabel = emailFromDate && emailToDate
+      ? `${fmtDateExport(emailFromDate)} to ${fmtDateExport(emailToDate)}`
+      : `As of ${new Date().toLocaleDateString("en-IN")}`;
+    const dateFile = emailFromDate && emailToDate ? `_${fmtDateExport(emailFromDate)}_to_${fmtDateExport(emailToDate)}` : "";
+    const subtitle = `${partyLabel}s | ${selectedPartyName}${emailFromDate && emailToDate ? ` | ${dateRangeLabel}` : ""}`;
+
+    const pdfBase64 = generatePDFBase64({
+      title: "Outstanding Report",
+      subtitle,
+      sheets: [{ name: "Outstanding", headers, rows }],
+      company,
+    });
+
+    const send = await fetch("/api/reports/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        emails,
+        subject: `Outstanding Report (${partyLabel}s) — ${dateRangeLabel}`,
+        pdfBase64,
+        filename: `Outstanding-Report_${tab}${dateFile}.pdf`,
+        reportTitle: "Outstanding Report",
+        dateRange: dateRangeLabel,
+      }),
+    });
+    if (!send.ok) {
+      const d = await send.json();
+      throw new Error(d.error || "Failed to send email");
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
@@ -326,8 +377,16 @@ export default function OutstandingReportPage() {
           <p className="text-sm text-gray-500">
             All unpaid invoices (excluding fully paid)
           </p>
-          <div className="absolute right-0 top-0">
+          <div className="absolute right-0 top-0 flex items-center gap-2">
             <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={isLoading || invoices.length === 0} />
+            <EmailReportDialog
+              reportTitle="Outstanding Report"
+              defaultStartDate={fromDate}
+              defaultEndDate={toDate}
+              hasDateFilter
+              onSendEmail={handleEmailSend}
+              disabled={isLoading || invoices.length === 0}
+            />
           </div>
         </div>
 

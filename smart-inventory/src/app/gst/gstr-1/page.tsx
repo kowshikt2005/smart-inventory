@@ -9,7 +9,8 @@ import {
 import { formatINR } from "@/lib/gst-report-utils";
 import { FileSpreadsheet, Loader2, AlertCircle, Download } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, monthLabel, fetchCompanySettings } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, generatePDFBase64, fmtNum, monthLabel, fetchCompanySettings } from "@/lib/export-utils";
+import { EmailReportDialog } from "@/components/reports/EmailReportDialog";
 import type { GSTR1GovJSON, GovB2CS, GovHSNEntry, GovDocDetail } from "@/types/gst-gov-types";
 
 // ─── Types matching API response ──────────────────────────────────────────────
@@ -157,6 +158,27 @@ export default function GSTR1Page() {
     });
   };
 
+  const handleEmailSend = async (emails: string[], startDate: string) => {
+    const month = new Date(startDate).getMonth() + 1;
+    const year = new Date(startDate).getFullYear();
+    const res = await fetch(`/api/reports/gstr-1?month=${month}&year=${year}`);
+    if (!res.ok) throw new Error("Failed to fetch report data");
+    const emailData: GSTR1Data = await res.json();
+    const { company } = await fetchCompanySettings();
+    const d = emailData.display;
+    const sheets = [];
+    if (d.b2b.length) sheets.push({ name: "B2B Invoices", headers: ["GSTIN", "Receiver", "Inv No", "Date", "POS", "Taxable", "IGST", "CGST", "SGST", "Total"], rows: d.b2b.map((r) => [r.ctin, r.name, r.inum, r.idt, r.pos, fmtNum(r.txval), fmtNum(r.igst), fmtNum(r.cgst), fmtNum(r.sgst), fmtNum(r.val)]) });
+    if (d.b2cs.length) sheets.push({ name: "B2C Supplies", headers: ["Type", "POS", "Rate%", "Taxable", "IGST", "CGST", "SGST"], rows: d.b2cs.map((r) => [r.sply_ty, r.pos, `${r.rt}%`, fmtNum(r.txval), fmtNum(r.iamt), fmtNum(r.camt), fmtNum(r.samt)]) });
+    if (d.cdnr.length) sheets.push({ name: "Credit Notes", headers: ["GSTIN", "Receiver", "Note No", "Date", "Taxable", "IGST", "CGST", "SGST", "Total"], rows: d.cdnr.map((r) => [r.ctin, r.name, r.nt_num, r.nt_dt, fmtNum(r.txval), fmtNum(r.igst), fmtNum(r.cgst), fmtNum(r.sgst), fmtNum(r.val)]) });
+    if (d.hsn.b2b.length) sheets.push({ name: "HSN B2B", headers: ["HSN", "UQC", "Qty", "Taxable", "IGST", "CGST", "SGST", "Rate"], rows: d.hsn.b2b.map((r) => [r.hsn_sc, r.uqc, r.qty, fmtNum(r.txval), fmtNum(r.iamt), fmtNum(r.camt), fmtNum(r.samt), `${r.rt}%`]) });
+    if (d.hsn.b2c.length) sheets.push({ name: "HSN B2C", headers: ["HSN", "UQC", "Qty", "Taxable", "IGST", "CGST", "SGST", "Rate"], rows: d.hsn.b2c.map((r) => [r.hsn_sc, r.uqc, r.qty, fmtNum(r.txval), fmtNum(r.iamt), fmtNum(r.camt), fmtNum(r.samt), `${r.rt}%`]) });
+    if (!sheets.length) throw new Error("No data to email for this period");
+    const label = monthLabel(month - 1, year);
+    const pdfBase64 = await generatePDFBase64({ title: "GSTR-1 — Outward Supplies", subtitle: label, orientation: "landscape", sheets, company });
+    const resp = await fetch("/api/reports/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emails, subject: `GSTR-1 Report — ${label}`, pdfBase64, filename: `GSTR-1_${label}.pdf`, reportTitle: "GSTR-1 — Outward Supplies" }) });
+    if (!resp.ok) throw new Error("Failed to send email");
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6 max-w-7xl mx-auto">
@@ -181,6 +203,14 @@ export default function GSTR1Page() {
               JSON
             </button>
             <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={loading || !data} />
+            <EmailReportDialog
+              reportTitle="GSTR-1"
+              defaultStartDate={`${period.year}-${String(period.month).padStart(2, "0")}-01`}
+              defaultEndDate={`${period.year}-${String(period.month).padStart(2, "0")}-01`}
+              hasDateFilter={true}
+              onSendEmail={handleEmailSend}
+              disabled={loading || !data}
+            />
             <GSTMonthYearSelector mode="monthly" value={period} onChange={setPeriod} />
           </div>
         </div>

@@ -9,6 +9,8 @@ import { ReorderStatusBadge } from "@/components/reorders/ReorderStatusBadge";
 import {
   Loader2, Eye, RefreshCw, ClipboardList, Clock, PackageCheck, XCircle,
 } from "lucide-react";
+import { generatePDFBase64, fetchCompanySettings } from "@/lib/export-utils";
+import { EmailReportDialog } from "@/components/reports/EmailReportDialog";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -91,12 +93,58 @@ export default function ReordersPage() {
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
+  // ── Email send handler (no date filter — uses current page data) ──
+  const handleEmailSend = async (emails: string[]) => {
+    const { company } = await fetchCompanySettings();
+
+    const headers = ["Reorder No.", "Created At", "Items", "Affected Orders", "Status"];
+    const rows = reorders.map((r) => [
+      r.reorderNumber,
+      formatDate(r.createdAt),
+      r._count.items,
+      r._count.salesOrders,
+      r.status,
+    ]);
+
+    const subtitle = `Status: ${statusFilter === "ALL" ? "All" : statusFilter}`;
+    const pdfBase64 = generatePDFBase64({
+      title: "Reorders Report",
+      subtitle,
+      sheets: [{ name: "Reorders", headers, rows }],
+      company,
+    });
+
+    const send = await fetch("/api/reports/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        emails,
+        subject: `Reorders Report — ${subtitle}`,
+        pdfBase64,
+        filename: `Reorders_${new Date().toISOString().split("T")[0]}.pdf`,
+        reportTitle: "Reorders Report",
+      }),
+    });
+    if (!send.ok) {
+      const d = await send.json();
+      throw new Error(d.error || "Failed to send email");
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Reorders</h1>
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-2xl font-bold text-gray-900">Reorders</h1>
+            <EmailReportDialog
+              reportTitle="Reorders"
+              hasDateFilter={false}
+              onSendEmail={(emails) => handleEmailSend(emails)}
+              disabled={isLoading || reorders.length === 0}
+            />
+          </div>
           <p className="text-gray-600">
             Stock shortfall reports generated from daily scans. Scan and convert to purchase orders.
           </p>

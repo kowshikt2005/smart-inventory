@@ -9,7 +9,8 @@ import {
 import { formatINR } from "@/lib/gst-report-utils";
 import { GitCompareArrows, Loader2, AlertCircle } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, monthLabel, fetchCompanySettings } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, generatePDFBase64, fmtNum, fmtDateExport, monthLabel, fetchCompanySettings } from "@/lib/export-utils";
+import { EmailReportDialog } from "@/components/reports/EmailReportDialog";
 
 interface GSTR2Data {
   period: { month: string; year: number };
@@ -92,6 +93,23 @@ export default function GSTR2Page() {
     if (sheets.length) exportToPDF({ fileName: `GSTR-2_${monthLabel(period.month - 1, period.year)}.pdf`, title: "GSTR-2 — Purchase Reconciliation", subtitle: monthLabel(period.month - 1, period.year), orientation: "landscape", sheets, company });
   };
 
+  const handleEmailSend = async (emails: string[], startDate: string) => {
+    const month = new Date(startDate).getMonth() + 1;
+    const year = new Date(startDate).getFullYear();
+    const res = await fetch(`/api/reports/gstr-2?month=${month}&year=${year}`);
+    if (!res.ok) throw new Error("Failed to fetch report data");
+    const emailData: GSTR2Data = await res.json();
+    const { company } = await fetchCompanySettings();
+    const sheets = [];
+    if (emailData.invoices.length) sheets.push({ name: "Invoices", headers: ["GSTIN", "Vendor", "Invoice", "Date", "POS", "Taxable", "CGST", "SGST", "Total"], rows: emailData.invoices.map((r) => [r.vendorGstin, r.vendorName, r.invoiceNumber, fmtDateExport(r.date), r.placeOfSupply, fmtNum(r.taxableValue), fmtNum(r.cgst), fmtNum(r.sgst), fmtNum(r.total)]) });
+    if (emailData.hsn.length) sheets.push({ name: "HSN Summary", headers: ["HSN", "Description", "UQC", "Qty", "Taxable", "CGST", "SGST", "Rate"], rows: emailData.hsn.map((r) => [r.hsnCode, r.description, r.uqc, r.qty, fmtNum(r.taxableValue), fmtNum(r.cgst), fmtNum(r.sgst), `${r.rate}%`]) });
+    if (!sheets.length) throw new Error("No data to email for this period");
+    const label = monthLabel(month - 1, year);
+    const pdfBase64 = await generatePDFBase64({ title: "GSTR-2 — Purchase Reconciliation", subtitle: label, orientation: "landscape", sheets, company });
+    const resp = await fetch("/api/reports/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emails, subject: `GSTR-2 Report — ${label}`, pdfBase64, filename: `GSTR-2_${label}.pdf`, reportTitle: "GSTR-2 — Purchase Reconciliation" }) });
+    if (!resp.ok) throw new Error("Failed to send email");
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6 max-w-7xl mx-auto">
@@ -110,6 +128,14 @@ export default function GSTR2Page() {
           </div>
           <div className="flex items-center gap-3">
             <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={loading || !data} />
+            <EmailReportDialog
+              reportTitle="GSTR-2"
+              defaultStartDate={`${period.year}-${String(period.month).padStart(2, "0")}-01`}
+              defaultEndDate={`${period.year}-${String(period.month).padStart(2, "0")}-01`}
+              hasDateFilter={true}
+              onSendEmail={handleEmailSend}
+              disabled={loading || !data}
+            />
             <GSTMonthYearSelector
               mode="monthly"
               value={period}

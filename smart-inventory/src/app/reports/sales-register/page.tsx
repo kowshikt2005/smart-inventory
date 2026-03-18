@@ -23,7 +23,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, generatePDFBase64, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
+import { EmailReportDialog } from "@/components/reports/EmailReportDialog";
 
 // ── Indian fiscal year helpers ──────────────────────────────────
 function getCurrentFiscalYear(): number {
@@ -154,6 +155,54 @@ export default function SalesRegisterPage() {
     });
   };
 
+  // ── Email send handler ─────────────────────────────────────
+  const handleEmailSend = async (emails: string[], fromDate: string, toDate: string) => {
+    const { company } = await fetchCompanySettings();
+
+    const qs = new URLSearchParams({ startDate: fromDate, endDate: toDate });
+    if (customerId !== "all") qs.append("customerId", customerId);
+    const res = await fetch(`/api/reports/sales-register?${qs}`);
+    if (!res.ok) throw new Error("Failed to fetch report data");
+    const fetchedData = await res.json();
+
+    const start = new Date(fromDate);
+    let y = start.getFullYear();
+    let m = start.getMonth();
+    const fetchedMonths = (fetchedData.months || []).map((row: { month: string; grossAmount: number; taxAmount: number; netAmount: number }) => {
+      const result = { ...row, monthIndex: m, year: y };
+      m++; if (m > 11) { m = 0; y++; }
+      return result;
+    });
+    const fetchedTotals = fetchedData.totals || { grossAmount: 0, taxAmount: 0, netAmount: 0 };
+
+    const rows = fetchedMonths.map((r: MonthData) => [r.month + " " + r.year, fmtNum(r.grossAmount), fmtNum(r.taxAmount), fmtNum(r.netAmount)]);
+    rows.push(["Total", fmtNum(fetchedTotals.grossAmount), fmtNum(fetchedTotals.taxAmount), fmtNum(fetchedTotals.netAmount)]);
+
+    const pdfBase64 = generatePDFBase64({
+      title: "Sales Register",
+      subtitle: `${fmtDate(fromDate)} - ${fmtDate(toDate)} | ${selectedCustomerName}`,
+      sheets: [{ name: "Sales Register", headers: ["Month", "Gross Amount (₹)", "Tax Amount (₹)", "Net Amount (₹)"], rows }],
+      company,
+    });
+
+    const send = await fetch("/api/reports/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        emails,
+        subject: `Sales Register Report — ${fmtDate(fromDate)} to ${fmtDate(toDate)}`,
+        pdfBase64,
+        filename: `Sales-Register_${fmtDate(fromDate)}_to_${fmtDate(toDate)}.pdf`,
+        reportTitle: "Sales Register",
+        dateRange: `${fmtDate(fromDate)} to ${fmtDate(toDate)}`,
+      }),
+    });
+    if (!send.ok) {
+      const d = await send.json();
+      throw new Error(d.error || "Failed to send email");
+    }
+  };
+
   // ── Handle month row click ─────────────────────────────────
   const handleMonthClick = (monthData: MonthData) => {
     const hasData = monthData.grossAmount > 0 || monthData.taxAmount > 0 || monthData.netAmount > 0;
@@ -174,6 +223,14 @@ export default function SalesRegisterPage() {
         {/* ── Top-right: fiscal year preset + date display ── */}
         <div className="flex items-center justify-end gap-3 mb-4">
           <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={isLoading || months.length === 0} />
+          <EmailReportDialog
+            reportTitle="Sales Register"
+            defaultStartDate={startDate}
+            defaultEndDate={endDate}
+            hasDateFilter
+            onSendEmail={handleEmailSend}
+            disabled={isLoading || months.length === 0}
+          />
           <Select
             value={period}
             onValueChange={(v) => setPeriod(v as Period)}

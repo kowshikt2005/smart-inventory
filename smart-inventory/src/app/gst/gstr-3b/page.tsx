@@ -9,7 +9,8 @@ import {
 import { formatINR } from "@/lib/gst-report-utils";
 import { Calculator, Loader2, AlertCircle, ChevronDown, ChevronUp, Download } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, monthLabel, fetchCompanySettings } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, generatePDFBase64, fmtNum, monthLabel, fetchCompanySettings } from "@/lib/export-utils";
+import { EmailReportDialog } from "@/components/reports/EmailReportDialog";
 import type { GSTR3BGovJSON } from "@/types/gst-gov-types";
 
 // ─── Types matching API response ──────────────────────────────────────────────
@@ -143,6 +144,25 @@ export default function GSTR3BPage() {
     });
   };
 
+  const handleEmailSend = async (emails: string[], startDate: string) => {
+    const month = new Date(startDate).getMonth() + 1;
+    const year = new Date(startDate).getFullYear();
+    const res = await fetch(`/api/reports/gstr-3b?month=${month}&year=${year}`);
+    if (!res.ok) throw new Error("Failed to fetch report data");
+    const emailData: GSTR3BData = await res.json();
+    const { company } = await fetchCompanySettings();
+    const d = emailData.display;
+    const sheets = [
+      { name: "3.1 — Outward Supplies", headers: ["Description", "Taxable Value", "IGST", "CGST", "SGST"], rows: [["Outward taxable supplies", fmtNum(d.outwardSupplies.txval), fmtNum(d.outwardSupplies.igst), fmtNum(d.outwardSupplies.cgst), fmtNum(d.outwardSupplies.sgst)], ...d.outwardSupplies.rateWise.map((r) => [`Rate ${r.rate}%`, fmtNum(r.txval), fmtNum(r.igst), fmtNum(r.cgst), fmtNum(r.sgst)])] },
+      { name: "4 — Eligible ITC", headers: ["Details", "IGST", "CGST", "SGST"], rows: [["ITC Available", fmtNum(d.itc.available.igst), fmtNum(d.itc.available.cgst), fmtNum(d.itc.available.sgst)], ["ITC Reversed", fmtNum(d.itc.reversed.igst), fmtNum(d.itc.reversed.cgst), fmtNum(d.itc.reversed.sgst)], ["Net ITC", fmtNum(d.itc.net.igst), fmtNum(d.itc.net.cgst), fmtNum(d.itc.net.sgst)]] },
+      { name: "6.1 — Tax Payable", headers: ["Description", "IGST", "CGST", "SGST", "Total"], rows: [["Output Tax", fmtNum(d.taxPayable.outputTax.igst), fmtNum(d.taxPayable.outputTax.cgst), fmtNum(d.taxPayable.outputTax.sgst), fmtNum(d.taxPayable.outputTax.igst + d.taxPayable.outputTax.cgst + d.taxPayable.outputTax.sgst)], ["Less: ITC", fmtNum(d.taxPayable.itcNet.igst), fmtNum(d.taxPayable.itcNet.cgst), fmtNum(d.taxPayable.itcNet.sgst), fmtNum(d.taxPayable.itcNet.igst + d.taxPayable.itcNet.cgst + d.taxPayable.itcNet.sgst)], ["Net Payable", fmtNum(d.taxPayable.netPayable.igst), fmtNum(d.taxPayable.netPayable.cgst), fmtNum(d.taxPayable.netPayable.sgst), fmtNum(d.taxPayable.netPayable.total)]] },
+    ];
+    const label = monthLabel(month - 1, year);
+    const pdfBase64 = await generatePDFBase64({ title: "GSTR-3B — Monthly Summary Return", subtitle: label, sheets, company });
+    const resp = await fetch("/api/reports/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emails, subject: `GSTR-3B Report — ${label}`, pdfBase64, filename: `GSTR-3B_${label}.pdf`, reportTitle: "GSTR-3B — Monthly Summary Return" }) });
+    if (!resp.ok) throw new Error("Failed to send email");
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6 max-w-4xl mx-auto">
@@ -167,6 +187,14 @@ export default function GSTR3BPage() {
               JSON
             </button>
             <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={loading || !data} />
+            <EmailReportDialog
+              reportTitle="GSTR-3B"
+              defaultStartDate={`${period.year}-${String(period.month).padStart(2, "0")}-01`}
+              defaultEndDate={`${period.year}-${String(period.month).padStart(2, "0")}-01`}
+              hasDateFilter={true}
+              onSendEmail={handleEmailSend}
+              disabled={loading || !data}
+            />
             <GSTMonthYearSelector mode="monthly" value={period} onChange={setPeriod} />
           </div>
         </div>

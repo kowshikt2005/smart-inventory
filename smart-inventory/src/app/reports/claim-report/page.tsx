@@ -22,7 +22,8 @@ import {
 } from "@/components/ui/table";
 import { Loader2, FileText } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, generatePDFBase64, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
+import { EmailReportDialog } from "@/components/reports/EmailReportDialog";
 import { useState, useMemo } from "react";
 import useSWR from "swr";
 
@@ -142,6 +143,51 @@ export default function ClaimReportPage() {
     exportToPDF({ fileName: `Claim-Report_${fmtDateExport(filters.startDate)}_to_${fmtDateExport(filters.endDate)}.pdf`, title: "Claim Report", subtitle: `${fmtDateExport(filters.startDate)} to ${fmtDateExport(filters.endDate)}`, orientation: "landscape", sheets: [{ name: "Claims", headers, rows }], company });
   };
 
+  // ── Email send handler ─────────────────────────────────────
+  const handleEmailSend = async (emails: string[], fromDate: string, toDate: string) => {
+    const { company } = await fetchCompanySettings();
+
+    const qs = new URLSearchParams({ startDate: fromDate, endDate: toDate });
+    if (filters.brandId !== "all") qs.append("brandId", filters.brandId);
+    if (filters.customerId !== "all") qs.append("customerId", filters.customerId);
+    if (filters.productId !== "all") qs.append("productId", filters.productId);
+    if (filters.hideZeroClaims) qs.append("hideZeroClaims", "true");
+    qs.append("usePrice", filters.usePrice);
+
+    const res = await fetch(`/api/reports/claim-report?${qs}`);
+    if (!res.ok) throw new Error("Failed to fetch report data");
+    const fetchedData = await res.json();
+    const fetchedClaims: ClaimRecord[] = fetchedData.claims || [];
+
+    const headers = ["Date", "Invoice", "Brand", "Sub-Brand", "Customer", "Product", "MRP", "Sell Price", "Sold Rate", "Qty", "Unit Claim", "Total Claim"];
+    const rows = fetchedClaims.map((c) => [fmtDateExport(c.date), c.invoiceNumber, c.brand, c.subBrand, c.customer, c.productName, fmtNum(c.mrp), fmtNum(c.sellingPrice), fmtNum(c.soldRate), c.quantity, fmtNum(c.unitClaim), fmtNum(c.totalClaim)]);
+
+    const pdfBase64 = generatePDFBase64({
+      title: "Claim Report",
+      subtitle: `${fmtDateExport(fromDate)} to ${fmtDateExport(toDate)}`,
+      orientation: "landscape",
+      sheets: [{ name: "Claims", headers, rows }],
+      company,
+    });
+
+    const send = await fetch("/api/reports/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        emails,
+        subject: `Claim Report — ${fmtDateExport(fromDate)} to ${fmtDateExport(toDate)}`,
+        pdfBase64,
+        filename: `Claim-Report_${fmtDateExport(fromDate)}_to_${fmtDateExport(toDate)}.pdf`,
+        reportTitle: "Claim Report",
+        dateRange: `${fmtDateExport(fromDate)} to ${fmtDateExport(toDate)}`,
+      }),
+    });
+    if (!send.ok) {
+      const d = await send.json();
+      throw new Error(d.error || "Failed to send email");
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
@@ -153,6 +199,14 @@ export default function ClaimReportPage() {
               <h1 className="text-2xl font-bold text-gray-900">Claim Report</h1>
             </div>
             <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={isLoading || claims.length === 0} />
+            <EmailReportDialog
+              reportTitle="Claim Report"
+              defaultStartDate={filters.startDate}
+              defaultEndDate={filters.endDate}
+              hasDateFilter
+              onSendEmail={handleEmailSend}
+              disabled={isLoading || claims.length === 0}
+            />
           </div>
           <p className="text-gray-600">
             Track product claims based on selling price vs sold rate differences

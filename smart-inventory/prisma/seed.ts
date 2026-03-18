@@ -47,6 +47,7 @@ async function main() {
     prisma.bankAccount.deleteMany(),
     prisma.appSetting.deleteMany(),
     prisma.importMapping.deleteMany(),
+    prisma.emailRecipient.deleteMany(),
     prisma.user.deleteMany(),
     prisma.role.deleteMany(),
   ]);
@@ -64,6 +65,11 @@ async function main() {
         key: 'invoice_roundoff_mode',
         value: 'MANUAL',
         label: 'Invoice Round-off Mode',
+      },
+      {
+        key: 'company_gstin',
+        value: '27AABCM9012F1Z5',
+        label: 'Company GSTIN',
       },
     ],
   });
@@ -3071,6 +3077,140 @@ async function main() {
   console.log('\n🔧 Other:');
   console.log('  - Stock Adjustments: 1 (damage)');
   console.log('  - FIFO test: SO-0005 (Feb 10) has priority over SO-0008 (Feb 16) for A54');
+  // ── GST Test Invoices for March 2026 ─────────────────────────
+  // Sales Invoice INV-0006: intra-state sale (Maharashtra → Maharashtra)
+  await prisma.invoice.create({
+    data: {
+      invoiceNumber: 'INV-0006',
+      invoiceDate: new Date('2026-03-05'),
+      customerId: customers[0].id,  // Tech Solutions, Maharashtra, GSTIN 27AABCT1234F1Z5
+      subtotal: 100000,
+      cgst: 9000,
+      sgst: 9000,
+      taxAmount: 18000,
+      totalAmount: 118000,
+      paidAmount: 0,
+      balanceAmount: 118000,
+      paymentStatus: 'PENDING',
+      dueDate: new Date('2026-04-04'),
+      items: {
+        create: [
+          {
+            itemId: items[0].id,
+            itemName: items[0].name,
+            quantity: 1,
+            rate: 100000,
+            taxRate: 18,
+            taxAmount: 18000,
+            amount: 100000,
+          },
+        ],
+      },
+    },
+  });
+
+  // Sales Invoice INV-0007: inter-state sale (Maharashtra → Karnataka)
+  await prisma.invoice.create({
+    data: {
+      invoiceNumber: 'INV-0007',
+      invoiceDate: new Date('2026-03-12'),
+      customerId: customers[1].id,  // Digital World, Karnataka, GSTIN 29AABCD5678G1ZA
+      subtotal: 70000,
+      cgst: 0,
+      sgst: 0,
+      taxAmount: 12600,
+      totalAmount: 82600,
+      paidAmount: 82600,
+      balanceAmount: 0,
+      paymentStatus: 'PAID',
+      dueDate: new Date('2026-04-11'),
+      items: {
+        create: [
+          {
+            itemId: items[1].id,
+            itemName: items[1].name,
+            quantity: 2,
+            rate: 35000,
+            taxRate: 18,
+            taxAmount: 12600,
+            amount: 70000,
+          },
+        ],
+      },
+    },
+  });
+
+  // Purchase Invoice PI-0005: purchase from Samsung (inter-state, GST 18%)
+  await prisma.purchaseInvoice.create({
+    data: {
+      invoiceNumber: 'PI-0005',
+      vendorId: vendors[0].id,   // Samsung India, Haryana, GSTIN 27AABCS1234E1Z1
+      vendorName: vendors[0].name,
+      date: new Date('2026-03-08'),
+      dueDate: new Date('2026-05-07'),
+      amount: 240000,
+      taxAmount: 43200,
+      totalAmount: 283200,
+      paidAmount: 0,
+      balanceAmount: 283200,
+      status: 'PENDING',
+      items: {
+        create: [
+          {
+            itemId: items[0].id,
+            itemName: items[0].name,
+            quantity: 3,
+            rate: 80000,
+            taxRate: 18,
+            taxAmount: 43200,
+            amount: 240000,
+          },
+        ],
+      },
+    },
+  });
+
+  // Purchase Invoice PI-0006: purchase from Apple (intra-state, GST 18%)
+  await prisma.purchaseInvoice.create({
+    data: {
+      invoiceNumber: 'PI-0006',
+      vendorId: vendors[1].id,  // Apple, Maharashtra, GSTIN 27AABCA5678F1Z2
+      vendorName: vendors[1].name,
+      date: new Date('2026-03-15'),
+      dueDate: new Date('2026-04-29'),
+      amount: 140000,
+      taxAmount: 25200,
+      totalAmount: 165200,
+      paidAmount: 0,
+      balanceAmount: 165200,
+      status: 'PENDING',
+      items: {
+        create: [
+          {
+            itemId: items[3].id,
+            itemName: items[3].name,
+            quantity: 2,
+            rate: 70000,
+            taxRate: 18,
+            taxAmount: 25200,
+            amount: 140000,
+          },
+        ],
+      },
+    },
+  });
+
+  console.log('🧾 GST test invoices seeded (2 sales + 2 purchase for March 2026)');
+
+  // ── Email Recipients (for Email Report feature) ──────────────
+  await prisma.emailRecipient.createMany({
+    data: [
+      { email: 'admin@example.com', name: 'Admin', isDefault: true },
+      { email: 'reports@example.com', name: 'Reports Inbox', isDefault: false },
+    ],
+  });
+  console.log('📧 Email recipients seeded (2)');
+
   console.log('\n🔐 Test Login Credentials:');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('Admin:    admin@example.com / password123    | Phone OTP: +918639347263');

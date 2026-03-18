@@ -9,7 +9,8 @@ import {
 import { formatINR } from "@/lib/gst-report-utils";
 import { CalendarDays, Loader2, AlertCircle } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
-import { exportToExcel, exportToPDF, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
+import { exportToExcel, exportToPDF, generatePDFBase64, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
+import { EmailReportDialog } from "@/components/reports/EmailReportDialog";
 
 interface GSTR9Data {
   financialYear: string;
@@ -98,6 +99,19 @@ export default function GSTR9Page() {
     exportToPDF({ fileName: `GSTR-9_FY-${period.fy}.pdf`, title: "GSTR-9 — Annual Return", subtitle: `Financial Year ${period.fy}`, sheets, company });
   };
 
+  const handleEmailSend = async (emails: string[]) => {
+    if (!data) return;
+    const { company } = await fetchCompanySettings();
+    const sheets = [
+      { name: "Part II — Outward Supplies", headers: ["Description", "Count", "Value", "Taxable", "CGST", "SGST"], rows: [["Total Sales", data.partII.totalSales.count, fmtNum(data.partII.totalSales.value), fmtNum(data.partII.totalSales.taxableValue), fmtNum(data.partII.totalSales.cgst), fmtNum(data.partII.totalSales.sgst)], ["B2B Sales", data.partII.b2b.count, fmtNum(data.partII.b2b.value), "", "", ""], ["B2C Sales", data.partII.b2c.count, fmtNum(data.partII.b2c.value), "", "", ""], ["Credit Notes", data.partII.creditNotes.count, fmtNum(data.partII.creditNotes.value), "", "", fmtNum(data.partII.creditNotes.tax)], ["Net Outward", "", fmtNum(data.partII.netOutward.value), "", "", fmtNum(data.partII.netOutward.tax)]] },
+      { name: "Part IV — Tax Payable", headers: ["Description", "CGST", "SGST", "Total"], rows: [["Output Tax", fmtNum(data.partIV.output.cgst), fmtNum(data.partIV.output.sgst), fmtNum(data.partIV.output.cgst + data.partIV.output.sgst)], ["Less: ITC", fmtNum(data.partIV.input.cgst), fmtNum(data.partIV.input.sgst), fmtNum(data.partIV.input.cgst + data.partIV.input.sgst)], ["Net Tax", fmtNum(data.partIV.net.cgst), fmtNum(data.partIV.net.sgst), fmtNum(data.partIV.net.total)]] },
+      { name: "Monthly Breakdown", headers: ["Month", "Sales Value", "Sales Tax", "Purchase Value", "Purchase Tax", "Net Tax"], rows: data.monthly.map((r) => [r.month, fmtNum(r.salesValue), fmtNum(r.salesTax), fmtNum(r.purchaseValue), fmtNum(r.purchaseTax), fmtNum(r.netTax)]) },
+    ];
+    const pdfBase64 = await generatePDFBase64({ title: "GSTR-9 — Annual Return", subtitle: `Financial Year ${period.fy}`, sheets, company });
+    const resp = await fetch("/api/reports/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emails, subject: `GSTR-9 Annual Return — FY ${period.fy}`, pdfBase64, filename: `GSTR-9_FY-${period.fy}.pdf`, reportTitle: "GSTR-9 — Annual Return" }) });
+    if (!resp.ok) throw new Error("Failed to send email");
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6 max-w-5xl mx-auto">
@@ -116,6 +130,12 @@ export default function GSTR9Page() {
           </div>
           <div className="flex items-center gap-3">
             <ExportButtons onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} disabled={loading || !data} />
+            <EmailReportDialog
+              reportTitle="GSTR-9"
+              hasDateFilter={false}
+              onSendEmail={handleEmailSend}
+              disabled={loading || !data}
+            />
             <GSTMonthYearSelector
               mode="annual"
               value={period}
