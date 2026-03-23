@@ -65,10 +65,12 @@ model CustomerShippingAddress {
   customerId String
   label      String
   address    String   @db.Text
-  city       String?
-  state      String?
-  pincode    String?
-  isDefault  Boolean  @default(false)
+  city         String?
+  state        String?
+  pincode      String?
+  contactName  String?
+  contactPhone String?
+  isDefault    Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
@@ -133,6 +135,7 @@ model Brand {
   discountPercent   Decimal?   @db.Decimal(5, 2)
   logoUrl           String?
   preferredVendorId String?
+  isActive          Boolean    @default(true)
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
   items             Item[]
@@ -149,6 +152,7 @@ model SubBrand {
   brandId         String
   discountPercent Decimal? @db.Decimal(5, 2)
   logoUrl         String?
+  isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   items           Item[]
@@ -451,6 +455,7 @@ model InvoiceItem {
   itemId           String?
   itemName         String?
   salesOrderItemId String?
+  ref              String?
   quantity         Decimal @db.Decimal(15, 3)
   rate             Decimal @db.Decimal(15, 2)
   discountPercent  Decimal @default(0.00) @db.Decimal(5, 2)
@@ -652,8 +657,10 @@ model PurchaseInvoiceItem {
   purchaseInvoiceId String
   itemId            String?
   itemName          String?
+  ref               String?
   quantity          Decimal         @db.Decimal(15, 3)
   rate              Decimal         @db.Decimal(15, 2)
+  discountPercent   Decimal         @default(0.00) @db.Decimal(5, 2)
   taxRate           Decimal         @default(0.00) @db.Decimal(5, 2)
   taxAmount         Decimal         @default(0.00) @db.Decimal(15, 2)
   amount            Decimal         @default(0.00) @db.Decimal(15, 2)

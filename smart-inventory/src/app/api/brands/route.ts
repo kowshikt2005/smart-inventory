@@ -14,11 +14,10 @@ export async function GET(request: Request) {
     const page = searchParams.get('page') ? parseInt(searchParams.get('page')!) : null;
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : null;
 
-    const where = search
-      ? {
-          name: { contains: search },
-        }
-      : {};
+    const activeOnly = searchParams.get('activeOnly') === 'true';
+    const where: any = {};
+    if (search) where.name = { contains: search };
+    if (activeOnly) where.isActive = true;
 
     // Use parallel queries for efficiency
     const [brands, total] = await Promise.all([

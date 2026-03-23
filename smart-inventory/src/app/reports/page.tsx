@@ -49,6 +49,17 @@ const reports = [
     hoverBorder: "hover:border-amber-300",
   },
   {
+    title: "Profit Report",
+    description: "Gross margin per invoice line — sold amount vs purchase cost, inclusive of GST. View by item, brand, or product.",
+    href: "/reports/profit-report",
+    icon: TrendingUp,
+    color: "bg-green-500",
+    lightColor: "bg-green-50",
+    textColor: "text-green-700",
+    borderColor: "border-green-200",
+    hoverBorder: "hover:border-green-300",
+  },
+  {
     title: "Claim Report",
     description: "Analyse product claims based on selling price vs sold rate differences across invoices.",
     href: "/reports/claim-report",

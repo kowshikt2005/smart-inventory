@@ -14,6 +14,7 @@ import { PurchaseInvoiceStatusBadge, PurchaseReturnStatusBadge } from "@/compone
 import { ArrowLeft, Loader2, Edit, Trash2, CreditCard, RotateCcw } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import useSWR from "swr";
+import { useState } from "react";
 
 interface PurchaseInvoice {
   id: string;
@@ -50,6 +51,7 @@ interface PurchaseInvoice {
     id: string;
     itemId: string | null;
     itemName: string | null;
+    ref: string | null;
     quantity: number;
     rate: number;
     taxRate: number;
@@ -85,7 +87,7 @@ export default function PurchaseInvoiceDetailPage() {
   const params = useParams();
   const invoiceId = params.id as string;
 
-  const { data: invoice, error, isLoading, mutate: _mutate } = useSWR<PurchaseInvoice>(
+  const { data: invoice, error, isLoading } = useSWR<PurchaseInvoice>(
     `/api/purchase-invoices/${invoiceId}`
   );
 
@@ -238,7 +240,23 @@ export default function PurchaseInvoiceDetailPage() {
                 </div>
               )}
               {!invoice.vendor && invoice.isImported && (
-                <p className="text-xs text-amber-600 mt-2">Imported invoice — vendor not linked to masters</p>
+                <div className="mt-2">
+                  <p className="text-xs text-amber-600 mb-1">Vendor not linked to masters</p>
+                  <button
+                    className="text-xs text-teal-600 hover:text-teal-700 underline underline-offset-2"
+                    onClick={() => {
+                      const params = new URLSearchParams({
+                        openCreate: "true",
+                        returnTo: `/purchases/invoices/${invoiceId}`,
+                        purchaseInvoiceId: invoiceId,
+                        prefillName: invoice.vendorName || "",
+                      });
+                      router.push(`/masters/vendors?${params.toString()}`);
+                    }}
+                  >
+                    Create &amp; link vendor
+                  </button>
+                </div>
               )}
             </div>
 
@@ -312,7 +330,29 @@ export default function PurchaseInvoiceDetailPage() {
                       <TableRow key={item.id} className="hover:bg-gray-50">
                         <TableCell>
                           <p className="font-medium text-gray-900">{item.item?.name || item.itemName || "—"}</p>
-                          <p className="text-xs text-gray-400">{item.item?.itemCode || ""}</p>
+                          {item.item ? (
+                            <p className="text-xs text-gray-400">{item.item.itemCode}</p>
+                          ) : (
+                            <button
+                              className="text-xs text-amber-600 hover:text-amber-700 underline underline-offset-2 mt-0.5"
+                              onClick={() => {
+                                const hsnFromRef = item.ref?.startsWith("HSN:") ? item.ref.slice(4) : "";
+                                const params = new URLSearchParams({
+                                  openCreate: "true",
+                                  returnTo: `/purchases/invoices/${invoiceId}`,
+                                  invoiceItemId: item.id,
+                                  invoiceType: "PURCHASE",
+                                  prefillName: item.itemName || "",
+                                  prefillRate: String(Number(item.rate)),
+                                  prefillGstRate: String(Math.round(Number(item.taxRate))),
+                                  prefillHsnCode: hsnFromRef,
+                                });
+                                router.push(`/masters/items?${params.toString()}`);
+                              }}
+                            >
+                              Not in masters — Create item
+                            </button>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm text-gray-500">{item.item?.hsnCode || "—"}</TableCell>
                         <TableCell className="text-right text-sm">{Number(item.quantity)} {item.item?.unit || ""}</TableCell>

@@ -17,8 +17,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Plus, MoreHorizontal, Edit, Loader2, X, Camera, Upload } from "lucide-react";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { Plus, MoreHorizontal, Edit, Loader2, X, Camera, Upload, Power, PowerOff } from "lucide-react";
+import { useState, useMemo, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface Vendor {
   id: string;
@@ -33,6 +34,7 @@ interface Brand {
   logoUrl: string | null;
   preferredVendorId: string | null;
   preferredVendor: { id: string; name: string } | null;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -44,7 +46,11 @@ interface BrandForm {
   preferredVendorId: string;
 }
 
-export default function BrandsPage() {
+function BrandsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo");
+
   const [brands, setBrands] = useState<Brand[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [vendorSearch, setVendorSearch] = useState("");
@@ -65,6 +71,13 @@ export default function BrandsPage() {
     fetchBrands();
     fetchVendors();
   }, []);
+
+  // Auto-open add modal when redirected from item creation with ?create=1
+  useEffect(() => {
+    if (searchParams.get("create") === "1") {
+      setShowAddModal(true);
+    }
+  }, [searchParams]);
 
   const fetchBrands = async () => {
     try {
@@ -141,7 +154,11 @@ export default function BrandsPage() {
       if (response.ok) {
         setShowAddModal(false);
         setNewBrand({ name: "", discountPercent: "", logoUrl: "", preferredVendorId: "" });
-        fetchBrands();
+        if (returnTo) {
+          router.push(returnTo);
+        } else {
+          fetchBrands();
+        }
       } else {
         const data = await response.json();
         setModalError(data.error || "Failed to create brand");
@@ -218,6 +235,19 @@ export default function BrandsPage() {
     setModalError(null);
   };
 
+  const handleToggleActive = async (brand: Brand) => {
+    try {
+      const response = await fetch(`/api/brands/${brand.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !brand.isActive }),
+      });
+      if (response.ok) fetchBrands();
+    } catch {
+      // non-critical
+    }
+  };
+
   const selectedVendorName = useMemo(() => {
     if (!newBrand.preferredVendorId) return "";
     return vendors.find((v) => v.id === newBrand.preferredVendorId)?.name || "";
@@ -261,6 +291,7 @@ export default function BrandsPage() {
               <TableRow className="bg-gray-50">
                 <TableHead className="font-semibold w-16">Logo</TableHead>
                 <TableHead className="font-semibold">Name</TableHead>
+                <TableHead className="font-semibold text-center">Status</TableHead>
                 <TableHead className="font-semibold text-center">Discount %</TableHead>
                 <TableHead className="font-semibold">Preferred Vendor</TableHead>
                 <TableHead className="font-semibold">Created Date</TableHead>
@@ -270,7 +301,7 @@ export default function BrandsPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-gray-500 py-12">
+                  <TableCell colSpan={7} className="text-center text-gray-500 py-12">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Loading brands...</span>
@@ -279,7 +310,7 @@ export default function BrandsPage() {
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-red-600 py-8">
+                  <TableCell colSpan={7} className="text-center text-red-600 py-8">
                     <div className="space-y-2">
                       <p>Error: {error}</p>
                       <Button onClick={fetchBrands} variant="outline" size="sm">Try Again</Button>
@@ -288,13 +319,13 @@ export default function BrandsPage() {
                 </TableRow>
               ) : paginatedBrands.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-gray-500 py-8">
+                  <TableCell colSpan={7} className="text-center text-gray-500 py-8">
                     {searchQuery ? "No brands found matching your search" : "No brands yet. Click 'Add Brand' to get started."}
                   </TableCell>
                 </TableRow>
               ) : (
                 paginatedBrands.map((brand) => (
-                  <TableRow key={brand.id}>
+                  <TableRow key={brand.id} className={!brand.isActive ? "opacity-60" : ""}>
                     <TableCell>
                       {brand.logoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -306,6 +337,13 @@ export default function BrandsPage() {
                       )}
                     </TableCell>
                     <TableCell className="font-medium">{brand.name}</TableCell>
+                    <TableCell className="text-center">
+                      {brand.isActive ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Active</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">Inactive</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-center">
                       {brand.discountPercent !== null ? (
                         <span className="text-green-600 font-medium">{Number(brand.discountPercent)}%</span>
@@ -332,6 +370,13 @@ export default function BrandsPage() {
                           <DropdownMenuItem onClick={() => handleEditBrand(brand)}>
                             <Edit className="h-4 w-4 mr-2" />
                             Edit Brand
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleToggleActive(brand)}>
+                            {brand.isActive ? (
+                              <><PowerOff className="h-4 w-4 mr-2 text-red-500" />Deactivate</>
+                            ) : (
+                              <><Power className="h-4 w-4 mr-2 text-green-600" />Activate</>
+                            )}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -464,5 +509,13 @@ export default function BrandsPage() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function BrandsPage() {
+  return (
+    <Suspense>
+      <BrandsContent />
+    </Suspense>
   );
 }

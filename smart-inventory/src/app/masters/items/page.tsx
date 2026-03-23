@@ -22,8 +22,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, MoreHorizontal, Eye, Edit, Loader2, X, Package, Trash2, Tag, Layers, ArrowRight, PowerOff, Power, Wand2 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
-import { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useMemo, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import useSWR from "swr";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -53,12 +53,45 @@ interface Item {
   };
 }
 
-export default function ItemsPage() {
+function ItemsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
+
+  // Read redirect-back intent from URL params (set by invoice pages)
+  const returnTo = searchParams.get("returnTo");
+  const invoiceItemId = searchParams.get("invoiceItemId");
+  const invoiceType = searchParams.get("invoiceType") as "PURCHASE" | "SALES" | null;
+  const prefillName = searchParams.get("prefillName");
+  const prefillRate = searchParams.get("prefillRate");
+  const prefillGstRate = searchParams.get("prefillGstRate");
+  const prefillHsnCode = searchParams.get("prefillHsnCode");
+  const openCreate = searchParams.get("openCreate") === "true";
+
+  // Auto-open modal when redirected from an invoice page
+  useEffect(() => {
+    if (openCreate) {
+      setShowAddModal(true);
+    }
+  }, [openCreate]);
+
+  // Stable reference — only computed once from URL params so AddItemModal's
+  // useEffect doesn't re-fire on every SWR revalidation re-render.
+  const prefillDataRef = useRef(
+    openCreate
+      ? {
+          name: prefillName || undefined,
+          purchasePrice: invoiceType === "PURCHASE" && prefillRate ? prefillRate : undefined,
+          sellingPrice: invoiceType === "SALES" && prefillRate ? prefillRate : undefined,
+          gstRate: prefillGstRate || undefined,
+          hsnCode: prefillHsnCode || undefined,
+        }
+      : undefined
+  );
+  const prefillData = prefillDataRef.current;
   const [adjustingStockItem, setAdjustingStockItem] = useState<Item | null>(null);
   const [newStockValue, setNewStockValue] = useState("");
   const [stockNotes, setStockNotes] = useState("");
@@ -534,12 +567,26 @@ export default function ItemsPage() {
             setShowAddModal(false);
             setEditingItem(null);
           }}
-          onSuccess={() => {
+          onSuccess={async (item) => {
             mutate();
             setCurrentPage(1);
             setEditingItem(null);
+            // If opened from an invoice, link the new item and redirect back
+            if (returnTo && invoiceItemId && invoiceType) {
+              try {
+                await fetch("/api/import/link-invoice-item", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ itemId: item.id, invoiceItemId, invoiceType }),
+                });
+              } catch {
+                // Linking failed silently — user is still redirected; they can re-link manually
+              }
+              router.push(returnTo);
+            }
           }}
           editItem={editingItem}
+          prefillData={prefillData}
         />
 
         {/* Stock Adjustment Modal */}
@@ -651,5 +698,13 @@ export default function ItemsPage() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function ItemsPage() {
+  return (
+    <Suspense>
+      <ItemsContent />
+    </Suspense>
   );
 }

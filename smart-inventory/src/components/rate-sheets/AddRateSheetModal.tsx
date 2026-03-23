@@ -17,6 +17,8 @@ import {
   Layers,
   Package,
   Box,
+  Eye,
+  Percent,
 } from "lucide-react";
 
 interface Customer {
@@ -126,9 +128,14 @@ export function AddRateSheetModal({
     items: [],
   });
 
+  // Default discount (base for all items, overrides cascade on top)
+  const [defaultDiscountPercent, setDefaultDiscountPercent] = useState(0);
+
   // Popup state
   const [showInclusionPopup, setShowInclusionPopup] = useState(false);
+  const [activePopupTab, setActivePopupTab] = useState<"configure" | "preview">("configure");
   const [inclusionSearch, setInclusionSearch] = useState("");
+  const [previewSearch, setPreviewSearch] = useState("");
   const [expandedBrands, setExpandedBrands] = useState<Set<string>>(new Set());
   const [expandedSubBrands, setExpandedSubBrands] = useState<Set<string>>(new Set());
   const [expandedUnassigned, setExpandedUnassigned] = useState(true);
@@ -153,6 +160,7 @@ export function AddRateSheetModal({
       setValidFrom(editingRateSheet.validFrom.split("T")[0]);
       setValidTo(editingRateSheet.validTo ? editingRateSheet.validTo.split("T")[0] : "");
       setIsActive(editingRateSheet.isActive);
+      setDefaultDiscountPercent(Number(editingRateSheet.discountPercent) || 0);
       if (editingRateSheet.inclusionDiscounts) {
         setInclusionDiscounts({
           brands: editingRateSheet.inclusionDiscounts.brands || [],
@@ -202,10 +210,13 @@ export function AddRateSheetModal({
     setValidFrom(new Date().toISOString().split("T")[0]);
     setValidTo("");
     setIsActive(true);
+    setDefaultDiscountPercent(0);
     setInclusionDiscounts({ brands: [], subBrands: [], items: [] });
     setError(null);
     setShowInclusionPopup(false);
+    setActivePopupTab("configure");
     setInclusionSearch("");
+    setPreviewSearch("");
     setExpandedBrands(new Set());
     setExpandedSubBrands(new Set());
   };
@@ -239,6 +250,7 @@ export function AddRateSheetModal({
         return { source: n, percent: d };
       }
     }
+    if (defaultDiscountPercent > 0) return { source: "Default", percent: defaultDiscountPercent };
     return null;
   };
 
@@ -250,6 +262,7 @@ export function AddRateSheetModal({
       const n = brands.find((b) => b.id === sb.brandId)?.name || "Brand";
       return { source: n, percent: d };
     }
+    if (defaultDiscountPercent > 0) return { source: "Default", percent: defaultDiscountPercent };
     return null;
   };
 
@@ -441,6 +454,42 @@ export function AddRateSheetModal({
     inclusionDiscounts.subBrands.length +
     inclusionDiscounts.items.length;
 
+  // Preview: compute effective discount for every item
+  const previewRows = useMemo(() => {
+    return items.map((item) => {
+      const getDiscount = (): { percent: number; source: string } => {
+        const iD = inclusionDiscounts.items.find((i) => i.id === item.id);
+        if (iD) return { percent: iD.discountPercent, source: "Item" };
+        if (item.subBrandId) {
+          const sbD = inclusionDiscounts.subBrands.find((sb) => sb.id === item.subBrandId);
+          if (sbD) return { percent: sbD.discountPercent, source: subBrands.find((sb) => sb.id === item.subBrandId)?.name || "Sub-brand" };
+        }
+        if (item.brandId) {
+          const bD = inclusionDiscounts.brands.find((b) => b.id === item.brandId);
+          if (bD) return { percent: bD.discountPercent, source: brands.find((b) => b.id === item.brandId)?.name || "Brand" };
+        }
+        if (defaultDiscountPercent > 0) return { percent: defaultDiscountPercent, source: "Default" };
+        return { percent: 0, source: "—" };
+      };
+      const { percent, source } = getDiscount();
+      const mrp = Number(item.mrp) || 0;
+      const finalRate = mrp > 0 && percent > 0 ? Math.round(mrp * (1 - percent / 100) * 100) / 100 : mrp;
+      const brand = brands.find((b) => b.id === item.brandId);
+      return { item, percent, source, mrp, finalRate, brand };
+    }).sort((a, b) => (a.brand?.name || "\uFFFF").localeCompare(b.brand?.name || "\uFFFF"));
+  }, [items, inclusionDiscounts, defaultDiscountPercent, brands, subBrands]);
+
+  const filteredPreviewRows = useMemo(() => {
+    const q = previewSearch.trim().toLowerCase();
+    if (!q) return previewRows;
+    return previewRows.filter(
+      (r) =>
+        r.item.name.toLowerCase().includes(q) ||
+        r.item.itemCode.toLowerCase().includes(q) ||
+        (r.brand?.name || "").toLowerCase().includes(q)
+    );
+  }, [previewRows, previewSearch]);
+
   // ── Submit ──────────────────────────────────────────────────────
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -448,8 +497,8 @@ export function AddRateSheetModal({
     setError(null);
     if (selectedCustomers.length === 0) { setError("Please select at least one customer"); return; }
     if (!validFrom) { setError("Please enter a valid from date"); return; }
-    if (totalInclusions === 0) {
-      setError("Please configure at least one brand, sub-brand, or item discount");
+    if (totalInclusions === 0 && defaultDiscountPercent <= 0) {
+      setError("Please set a default discount or configure at least one brand/item discount");
       return;
     }
     setIsSubmitting(true);
@@ -460,7 +509,7 @@ export function AddRateSheetModal({
         customerIds: selectedCustomers.map((c) => c.id),
         validFrom,
         validTo: validTo || null,
-        discountPercent: 0,
+        discountPercent: defaultDiscountPercent,
         isActive,
         useInclusionModel: true,
         inclusionDiscounts,
@@ -703,7 +752,7 @@ export function AddRateSheetModal({
           <div>
             <button
               type="button"
-              onClick={() => setShowInclusionPopup(true)}
+              onClick={() => { setShowInclusionPopup(true); setActivePopupTab("configure"); }}
               className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl border-2 border-dashed border-gray-200 hover:border-teal-300 hover:bg-teal-50/30 transition-all group"
             >
               <div className="flex items-center gap-3">
@@ -789,51 +838,134 @@ export function AddRateSheetModal({
           <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[88vh] flex flex-col overflow-hidden">
             {/* Popup header */}
             <div className="flex items-center justify-between px-5 py-4 border-b bg-white">
-              <div>
-                <h3 className="text-base font-semibold text-gray-900">Configure Discounts</h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Check brands, sub-brands or items — set individual discount %
-                </p>
+              <h3 className="text-base font-semibold text-gray-900">Configure Discounts</h3>
+              <div className="flex items-center gap-3">
+                {/* Tab toggle */}
+                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setActivePopupTab("configure")}
+                    className={`px-3 py-1.5 font-medium transition-colors flex items-center gap-1.5 ${activePopupTab === "configure" ? "bg-teal-500 text-white" : "text-gray-500 hover:bg-gray-50"}`}
+                  >
+                    <Settings2 className="h-3 w-3" />
+                    Configure
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePopupTab("preview")}
+                    className={`px-3 py-1.5 font-medium transition-colors border-l border-gray-200 flex items-center gap-1.5 ${activePopupTab === "preview" ? "bg-teal-500 text-white" : "text-gray-500 hover:bg-gray-50"}`}
+                  >
+                    <Eye className="h-3 w-3" />
+                    Preview
+                  </button>
+                </div>
+                <button
+                  onClick={() => setShowInclusionPopup(false)}
+                  className="text-gray-400 hover:text-gray-600 rounded-lg p-1 hover:bg-gray-100"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <button
-                onClick={() => setShowInclusionPopup(false)}
-                className="text-gray-400 hover:text-gray-600 rounded-lg p-1 hover:bg-gray-100"
-              >
-                <X className="h-5 w-5" />
-              </button>
             </div>
 
-            {/* Search */}
-            <div className="px-5 py-3 border-b bg-white">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search brands, sub-brands, or items..."
-                  value={inclusionSearch}
-                  onChange={(e) => setInclusionSearch(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
+            {/* ── CONFIGURE TAB ── */}
+            {activePopupTab === "configure" && (
+              <>
+                {/* Default discount input */}
+                <div className="px-5 py-3 border-b bg-teal-50/40">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-gray-700 mb-0.5">Default discount for all items</p>
+                      <p className="text-xs text-gray-400">Items with no specific override will use this. Set 0 to exclude them.</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.5"
+                          value={defaultDiscountPercent || ""}
+                          placeholder="0"
+                          onChange={(e) => setDefaultDiscountPercent(parseFloat(e.target.value) || 0)}
+                          onFocus={(e) => e.target.select()}
+                          className="w-20 h-8 text-sm text-right pr-7"
+                        />
+                        <Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-            {/* Legend */}
-            <div className="flex items-center gap-5 px-5 py-2 border-b bg-gray-50 text-xs text-gray-400">
-              <div className="flex items-center gap-1.5">
-                <Tag className="h-3 w-3 text-orange-500" />
-                <span>Brand</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Layers className="h-3 w-3 text-sky-500" />
-                <span>Sub-brand</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Package className="h-3 w-3 text-gray-400" />
-                <span>Item</span>
-              </div>
-              <span className="ml-auto text-blue-400">Blue = inherited discount</span>
-            </div>
+                {/* Search */}
+                <div className="px-5 py-3 border-b bg-white">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Search brands, sub-brands, or items..."
+                      value={inclusionSearch}
+                      onChange={(e) => setInclusionSearch(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
 
-            {/* Tree */}
+                {/* Legend */}
+                <div className="flex items-center gap-5 px-5 py-2 border-b bg-gray-50 text-xs text-gray-400">
+                  <div className="flex items-center gap-1.5">
+                    <Tag className="h-3 w-3 text-orange-500" />
+                    <span>Brand</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Layers className="h-3 w-3 text-sky-500" />
+                    <span>Sub-brand</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Package className="h-3 w-3 text-gray-400" />
+                    <span>Item</span>
+                  </div>
+                  <span className="ml-auto text-blue-400">Check = override · Blue = inherited</span>
+                </div>
+              </>
+            )}
+
+            {/* ── PREVIEW TAB header ── */}
+            {activePopupTab === "preview" && (
+              <>
+                {/* Preview search */}
+                <div className="px-5 py-3 border-b bg-white">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Search by item name, code, or brand..."
+                      value={previewSearch}
+                      onChange={(e) => setPreviewSearch(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                {/* Stats bar */}
+                <div className="flex items-center gap-4 px-5 py-2 border-b bg-gray-50 text-xs text-gray-500">
+                  <span>{previewRows.length} items total</span>
+                  <span className="text-green-600 font-medium">{previewRows.filter((r) => r.percent > 0).length} with discount</span>
+                  <span className="text-gray-400">{previewRows.filter((r) => r.percent === 0).length} no discount</span>
+                  {defaultDiscountPercent > 0 && (
+                    <span className="ml-auto text-purple-600 font-medium">Default: {defaultDiscountPercent}% off</span>
+                  )}
+                </div>
+                {/* Preview table header */}
+                <div className="grid grid-cols-[1fr_72px_60px_80px_80px] gap-2 px-5 py-2 border-b bg-gray-50 text-xs font-medium text-gray-500">
+                  <span>Item</span>
+                  <span className="text-right">MRP</span>
+                  <span className="text-right">Disc %</span>
+                  <span className="text-right">Final</span>
+                  <span className="text-center">Source</span>
+                </div>
+              </>
+            )}
+
+            {/* ── CONFIGURE TAB tree ── */}
+            {activePopupTab === "configure" && (
             <div className="flex-1 overflow-y-auto">
               {isLoadingData ? (
                 <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
@@ -1066,10 +1198,60 @@ export function AddRateSheetModal({
                 </div>
               )}
             </div>
+            )}
+
+            {/* ── PREVIEW TAB content ── */}
+            {activePopupTab === "preview" && (
+              <div className="flex-1 overflow-y-auto">
+                {filteredPreviewRows.length === 0 ? (
+                  <p className="text-center text-gray-400 py-12 text-sm">
+                    {previewSearch ? "No items match your search" : "No items loaded"}
+                  </p>
+                ) : (
+                  filteredPreviewRows.map((row) => (
+                    <div
+                      key={row.item.id}
+                      className={`grid grid-cols-[1fr_72px_60px_80px_80px] gap-2 px-5 py-2.5 border-b border-gray-50 items-center ${row.percent > 0 ? "" : "opacity-50"}`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{row.item.name}</p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {row.item.itemCode}
+                          {row.brand && <span className="text-gray-300"> · {row.brand.name}</span>}
+                        </p>
+                      </div>
+                      <span className="text-xs text-gray-500 text-right">
+                        {row.mrp > 0 ? `₹${row.mrp.toFixed(2)}` : "—"}
+                      </span>
+                      <span className={`text-xs font-semibold text-right ${row.percent > 0 ? "text-green-600" : "text-gray-300"}`}>
+                        {row.percent > 0 ? `${row.percent}%` : "—"}
+                      </span>
+                      <span className={`text-xs font-medium text-right ${row.percent > 0 ? "text-gray-900" : "text-gray-300"}`}>
+                        {row.mrp > 0 ? `₹${row.finalRate.toFixed(2)}` : "—"}
+                      </span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded text-center truncate ${
+                        row.source === "Default" ? "bg-purple-50 text-purple-600" :
+                        row.source === "Item" ? "bg-teal-50 text-teal-700" :
+                        row.source === "—" ? "text-gray-300" :
+                        "bg-orange-50 text-orange-700"
+                      }`}>
+                        {row.source}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
 
             {/* Popup footer */}
             <div className="border-t px-5 py-3.5 bg-gray-50 flex items-center justify-between">
               <div className="flex items-center gap-4 text-sm text-gray-600">
+                {defaultDiscountPercent > 0 && (
+                  <span className="flex items-center gap-1.5 text-purple-600">
+                    <Percent className="h-3 w-3" />
+                    {defaultDiscountPercent}% default
+                  </span>
+                )}
                 {inclusionDiscounts.brands.length > 0 && (
                   <span className="flex items-center gap-1.5">
                     <Tag className="h-3 w-3 text-orange-500" />
@@ -1088,8 +1270,8 @@ export function AddRateSheetModal({
                     {inclusionDiscounts.items.length} item{inclusionDiscounts.items.length !== 1 ? "s" : ""}
                   </span>
                 )}
-                {totalInclusions === 0 && (
-                  <span className="text-gray-400">Nothing selected yet</span>
+                {totalInclusions === 0 && defaultDiscountPercent <= 0 && (
+                  <span className="text-gray-400">Nothing configured yet</span>
                 )}
               </div>
               <Button

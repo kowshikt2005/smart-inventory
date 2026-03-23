@@ -12,7 +12,10 @@ function str(v: unknown): string {
 }
 
 function num(v: unknown): number {
-  const n = Number(v);
+  // Strips commas and takes the first numeric token (handles "9,198.82" and "2.50 219.02" Tally format)
+  const s = v === null || v === undefined ? '' : String(v).replace(/,/g, '').trim();
+  const first = s.split(/\s+/)[0];
+  const n = Number(first);
   return isNaN(n) ? 0 : n;
 }
 
@@ -39,7 +42,7 @@ interface RefData {
   vendors: { id: string; name: string; gstin: string | null }[];
   brands: { id: string; name: string }[];
   subBrands: { id: string; name: string; brandId: string }[];
-  items: { id: string; name: string; itemCode: string; userCode: string | null; brandId: string | null; subBrandId: string | null; gstRate: any; inventory: { id: string } | null }[];
+  items: { id: string; name: string; itemCode: string; userCode: string | null; hsnCode: string | null; brandId: string | null; subBrandId: string | null; gstRate: any; inventory: { id: string } | null }[];
   bankAccounts: { id: string; accountName: string }[];
 }
 
@@ -49,7 +52,7 @@ async function loadRefData(): Promise<RefData> {
     db.vendor.findMany({ select: { id: true, name: true, gstin: true } }),
     db.brand.findMany({ select: { id: true, name: true } }),
     db.subBrand.findMany({ select: { id: true, name: true, brandId: true } }),
-    db.item.findMany({ select: { id: true, name: true, itemCode: true, userCode: true, brandId: true, subBrandId: true, gstRate: true, inventory: { select: { id: true } } } }),
+    db.item.findMany({ select: { id: true, name: true, itemCode: true, userCode: true, hsnCode: true, brandId: true, subBrandId: true, gstRate: true, inventory: { select: { id: true } } } }),
     db.bankAccount.findMany({ select: { id: true, accountName: true } }),
   ]);
   return { customers, vendors, brands, subBrands, items, bankAccounts };
@@ -65,11 +68,13 @@ function findVendor(ref: RefData, nameOrGstin: string) {
   return ref.vendors.find(v => ciMatch(v.name, s)) || ref.vendors.find(v => v.gstin && ciMatch(v.gstin, s));
 }
 
-function findItem(ref: RefData, nameOrCode: string) {
+function findItem(ref: RefData, nameOrCode: string, hsnCode?: string) {
   const s = str(nameOrCode);
   return ref.items.find(i => i.userCode && ciMatch(i.userCode, s))
     || ref.items.find(i => ciMatch(i.itemCode, s))
-    || ref.items.find(i => ciMatch(i.name, s));
+    || ref.items.find(i => ciMatch(i.name, s))
+    // fallback: match by HSN if provided and name/code lookup failed
+    || (hsnCode ? ref.items.find(i => i.hsnCode && ciMatch(i.hsnCode, hsnCode)) : undefined);
 }
 
 function findBrand(ref: RefData, name: string) {
@@ -82,6 +87,19 @@ function findSubBrand(ref: RefData, name: string, brandId: string) {
 
 function findBankAccount(ref: RefData, name: string) {
   return ref.bankAccounts.find(b => ciMatch(b.accountName, str(name)));
+}
+
+// ── tax calculation helper ───────────────────────────────
+// Priority: cgstRate+sgstRate > taxRate > item gstRate
+// num() handles comma-formatted values and Tally "rate amount" cells by taking the first token
+function calcLineTax(row: Record<string, unknown>, lineAmount: number, item: { gstRate: any } | undefined): { taxRate: number; taxAmount: number } {
+  const explicitRate = str(row.taxRate) !== '' ? num(row.taxRate) : null;
+  const cgstSgstRate = (str(row.cgstRate) !== '' || str(row.sgstRate) !== '')
+    ? num(row.cgstRate) + num(row.sgstRate)
+    : null;
+  const taxRate = explicitRate ?? cgstSgstRate ?? (item ? Number(item.gstRate) : 0);
+  const taxAmount = Math.round(lineAmount * (taxRate / 100) * 100) / 100;
+  return { taxRate, taxAmount };
 }
 
 // ── validate action ──────────────────────────────────────
@@ -211,11 +229,15 @@ async function validateRows(entityType: EntityType, rows: Record<string, unknown
     }
 
     if (entityType === 'SALES_INVOICE') {
-      const cust = findCustomer(ref, str(row.customerName));
+      // Customer: try by name first, then by GSTIN fallback
+      const custByName = findCustomer(ref, str(row.customerName));
+      const cust = custByName || (row.customerGstin ? findCustomer(ref, str(row.customerGstin)) : undefined);
       if (!cust) warnings.push({ field: 'customerName', message: `Customer "${str(row.customerName)}" not found — will be stored as text` });
       else resolved._customerId = cust.id;
 
-      const item = findItem(ref, str(row.itemName));
+      // Item: try by name or itemCode, then HSN fallback
+      const itemLookup = str(row.itemCode) || str(row.itemName);
+      const item = findItem(ref, itemLookup, str(row.hsnCode));
       if (!item) warnings.push({ field: 'itemName', message: `Item "${str(row.itemName)}" not found — will be stored as text` });
       else {
         resolved._itemId = item.id;
@@ -225,11 +247,15 @@ async function validateRows(entityType: EntityType, rows: Record<string, unknown
     }
 
     if (entityType === 'PURCHASE_INVOICE') {
-      const vend = findVendor(ref, str(row.vendorName));
+      // Vendor: try by name first, then by GSTIN fallback
+      const vendByName = findVendor(ref, str(row.vendorName));
+      const vend = vendByName || (row.vendorGstin ? findVendor(ref, str(row.vendorGstin)) : undefined);
       if (!vend) warnings.push({ field: 'vendorName', message: `Vendor "${str(row.vendorName)}" not found — will be stored as text` });
       else resolved._vendorId = vend.id;
 
-      const item = findItem(ref, str(row.itemName));
+      // Item: try by name or itemCode, then HSN fallback
+      const itemLookup = str(row.itemCode) || str(row.itemName);
+      const item = findItem(ref, itemLookup, str(row.hsnCode));
       if (!item) warnings.push({ field: 'itemName', message: `Item "${str(row.itemName)}" not found — will be stored as text` });
       else {
         resolved._itemId = item.id;
@@ -680,39 +706,38 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
       if (existing) throw new Error(`Invoice ${invNo} already exists`);
 
       await transaction(async (tx) => {
-        const cust = findCustomer(ref, str(firstRow.customerName));
-        const isImported = !cust || invRows.some(r => !findItem(ref, str(r.itemName)));
+        const custByName = findCustomer(ref, str(firstRow.customerName));
+        const cust = custByName || (firstRow.customerGstin ? findCustomer(ref, str(firstRow.customerGstin)) : undefined);
+        const isImported = !cust || invRows.some(r => !findItem(ref, str(r.itemCode) || str(r.itemName), str(r.hsnCode)));
 
         // Calculate line items
-        const lineItems: { itemId: string | null; itemName: string; quantity: number; rate: number; discountPercent: number; taxRate: number; taxAmount: number; amount: number; inventoryId: string | null }[] = [];
+        const lineItems: { itemId: string | null; itemName: string; ref: string | null; quantity: number; rate: number; discountPercent: number; taxRate: number; taxAmount: number; amount: number; inventoryId: string | null }[] = [];
         let subtotal = 0;
         let totalTax = 0;
 
         for (const row of invRows) {
-          const item = findItem(ref, str(row.itemName));
-          const taxRate = row.taxRate !== undefined && row.taxRate !== null && str(row.taxRate) !== '' ? num(row.taxRate) : (item ? Number(item.gstRate) : 0);
-
+          const item = findItem(ref, str(row.itemCode) || str(row.itemName), str(row.hsnCode));
           const qty = num(row.quantity);
           const rate = num(row.rate);
           const disc = num(row.discountPercent);
-
           const lineAmount = qty * rate * (1 - disc / 100);
-          const lineTax = lineAmount * (taxRate / 100);
+          const { taxRate, taxAmount } = calcLineTax(row, lineAmount, item);
 
           lineItems.push({
             itemId: item?.id || null,
-            itemName: str(row.itemName),
+            itemName: str(row.itemName) || str(row.itemCode),
+            ref: str(row.ref) || (str(row.hsnCode) ? `HSN:${str(row.hsnCode)}` : null),
             quantity: qty,
             rate,
             discountPercent: disc,
             taxRate,
-            taxAmount: Math.round(lineTax * 100) / 100,
+            taxAmount,
             amount: Math.round(lineAmount * 100) / 100,
             inventoryId: item?.inventory?.id || null,
           });
 
           subtotal += lineAmount;
-          totalTax += lineTax;
+          totalTax += taxAmount;
         }
 
         subtotal = Math.round(subtotal * 100) / 100;
@@ -721,10 +746,11 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
         const cgst = Math.round(totalTax / 2 * 100) / 100;
         const sgst = totalTax - cgst;
 
+        const importDate = new Date();
         const invoice = await (tx.invoice.create as any)({
           data: {
             invoiceNumber: invNo,
-            invoiceDate: parseDate(firstRow.invoiceDate),
+            invoiceDate: firstRow.invoiceDate ? parseDate(firstRow.invoiceDate) : importDate,
             customerId: cust?.id || null,
             customerName: str(firstRow.customerName),
             subtotal,
@@ -741,13 +767,14 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
           },
         });
 
-        // Create invoice items + inventory updates
+        // Create invoice items (no stock movement yet)
         for (const li of lineItems) {
-          await tx.invoiceItem.create({
+          await (tx.invoiceItem.create as any)({
             data: {
               invoiceId: invoice.id,
               itemId: li.itemId,
               itemName: li.itemName,
+              ref: li.ref,
               quantity: li.quantity,
               rate: li.rate,
               discountPercent: li.discountPercent,
@@ -756,17 +783,20 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
               amount: li.amount,
             },
           });
+        }
 
-          // Decrement inventory (only if item exists in masters)
-          if (li.itemId && li.inventoryId) {
+        // Apply stock only if every item in the invoice is resolved
+        const allResolved = lineItems.every(li => li.itemId && li.inventoryId);
+        if (allResolved) {
+          for (const li of lineItems) {
             await tx.inventory.update({
-              where: { id: li.inventoryId },
+              where: { id: li.inventoryId! },
               data: { physicalStock: { decrement: li.quantity } },
             });
             await tx.stockMovement.create({
               data: {
-                inventoryId: li.inventoryId,
-                itemId: li.itemId,
+                inventoryId: li.inventoryId!,
+                itemId: li.itemId!,
                 quantity: li.quantity,
                 type: 'SALE',
                 referenceType: 'INVOICE',
@@ -788,7 +818,7 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
           await tx.customerLedger.create({
             data: {
               customerId: cust.id,
-              date: parseDate(firstRow.invoiceDate),
+              date: importDate,
               description: `Sales Invoice ${invNo}`,
               type: 'SALES_INVOICE',
               debit: totalAmount,
@@ -829,48 +859,50 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
       if (existing) throw new Error(`Purchase Invoice ${invNo} already exists`);
 
       await transaction(async (tx) => {
-        const vend = findVendor(ref, str(firstRow.vendorName));
-        const isImported = !vend || invRows.some(r => !findItem(ref, str(r.itemName)));
+        const vendByName = findVendor(ref, str(firstRow.vendorName));
+        const vend = vendByName || (firstRow.vendorGstin ? findVendor(ref, str(firstRow.vendorGstin)) : undefined);
+        const isImported = !vend || invRows.some(r => !findItem(ref, str(r.itemCode) || str(r.itemName), str(r.hsnCode)));
 
-        const lineItems: { itemId: string | null; itemName: string; quantity: number; rate: number; taxRate: number; taxAmount: number; amount: number; inventoryId: string | null }[] = [];
+        const lineItems: { itemId: string | null; itemName: string; ref: string | null; quantity: number; rate: number; discountPercent: number; taxRate: number; taxAmount: number; amount: number; inventoryId: string | null }[] = [];
         let subtotal = 0;
         let totalTax = 0;
 
         for (const row of invRows) {
-          const item = findItem(ref, str(row.itemName));
-          const taxRate = row.taxRate !== undefined && row.taxRate !== null && str(row.taxRate) !== '' ? num(row.taxRate) : (item ? Number(item.gstRate) : 0);
-
+          const item = findItem(ref, str(row.itemCode) || str(row.itemName), str(row.hsnCode));
           const qty = num(row.quantity);
           const rate = num(row.rate);
-
-          const lineAmount = qty * rate;
-          const lineTax = lineAmount * (taxRate / 100);
+          const disc = num(row.discountPercent);
+          const lineAmount = qty * rate * (1 - disc / 100);
+          const { taxRate, taxAmount } = calcLineTax(row, lineAmount, item);
 
           lineItems.push({
             itemId: item?.id || null,
-            itemName: str(row.itemName),
+            itemName: str(row.itemName) || str(row.itemCode),
+            ref: str(row.ref) || (str(row.hsnCode) ? `HSN:${str(row.hsnCode)}` : null),
             quantity: qty,
             rate,
+            discountPercent: disc,
             taxRate,
-            taxAmount: Math.round(lineTax * 100) / 100,
+            taxAmount,
             amount: Math.round(lineAmount * 100) / 100,
             inventoryId: item?.inventory?.id || null,
           });
 
           subtotal += lineAmount;
-          totalTax += lineTax;
+          totalTax += taxAmount;
         }
 
         subtotal = Math.round(subtotal * 100) / 100;
         totalTax = Math.round(totalTax * 100) / 100;
         const totalAmount = Math.round((subtotal + totalTax) * 100) / 100;
 
+        const importDate = new Date();
         const invoice = await (tx.purchaseInvoice.create as any)({
           data: {
             invoiceNumber: invNo,
             vendorId: vend?.id || null,
             vendorName: vend?.name || str(firstRow.vendorName),
-            date: parseDate(firstRow.date),
+            date: firstRow.date ? parseDate(firstRow.date) : importDate,
             dueDate: parseDate(firstRow.dueDate),
             amount: subtotal,
             taxAmount: totalTax,
@@ -883,30 +915,36 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
           },
         });
 
+        // Create purchase invoice items (no stock movement yet)
         for (const li of lineItems) {
-          await tx.purchaseInvoiceItem.create({
+          await (tx.purchaseInvoiceItem.create as any)({
             data: {
               purchaseInvoiceId: invoice.id,
               itemId: li.itemId,
               itemName: li.itemName,
+              ref: li.ref,
               quantity: li.quantity,
               rate: li.rate,
+              discountPercent: li.discountPercent,
               taxRate: li.taxRate,
               taxAmount: li.taxAmount,
               amount: li.amount,
             },
           });
+        }
 
-          // Increment inventory (only if item exists in masters)
-          if (li.itemId && li.inventoryId) {
+        // Apply stock only if every item in the invoice is resolved
+        const allResolved = lineItems.every(li => li.itemId && li.inventoryId);
+        if (allResolved) {
+          for (const li of lineItems) {
             await tx.inventory.update({
-              where: { id: li.inventoryId },
+              where: { id: li.inventoryId! },
               data: { physicalStock: { increment: li.quantity } },
             });
             await tx.stockMovement.create({
               data: {
-                inventoryId: li.inventoryId,
-                itemId: li.itemId,
+                inventoryId: li.inventoryId!,
+                itemId: li.itemId!,
                 quantity: li.quantity,
                 type: 'PURCHASE',
                 referenceType: 'PURCHASE_INVOICE',
@@ -928,7 +966,7 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
           await tx.vendorLedger.create({
             data: {
               vendorId: vend.id,
-              date: parseDate(firstRow.date),
+              date: importDate,
               description: `Purchase Invoice ${invNo}`,
               type: 'PURCHASE_INVOICE',
               debit: totalAmount,

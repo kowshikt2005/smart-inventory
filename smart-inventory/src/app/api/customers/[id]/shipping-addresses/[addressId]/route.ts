@@ -37,6 +37,8 @@ export async function PUT(
         city: body.city !== undefined ? body.city : existing.city,
         state: body.state !== undefined ? body.state : existing.state,
         pincode: body.pincode !== undefined ? body.pincode : existing.pincode,
+        contactName: body.contactName !== undefined ? body.contactName : existing.contactName,
+        contactPhone: body.contactPhone !== undefined ? body.contactPhone : existing.contactPhone,
         isDefault: body.isDefault !== undefined ? body.isDefault : existing.isDefault,
       },
     });

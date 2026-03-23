@@ -15,26 +15,33 @@ import {
 
 interface ShippingAddr {
   label: string;
+  gstin: string; // UI-only: used for GST lookup, not saved to DB
   address: string;
   city: string;
   state: string;
   pincode: string;
+  contactName: string;
+  contactPhone: string;
   isDefault: boolean;
 }
 
 const emptyAddress = (): ShippingAddr => ({
   label: "",
+  gstin: "",
   address: "",
   city: "",
   state: "",
   pincode: "",
+  contactName: "",
+  contactPhone: "",
   isDefault: false,
 });
 
 interface AddCustomerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (customer: { id: string }) => void;
+  prefillName?: string;
 }
 
 type Tab = "customer" | "ratesheet";
@@ -43,6 +50,7 @@ export function AddCustomerModal({
   isOpen,
   onClose,
   onSuccess,
+  prefillName,
 }: AddCustomerModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +66,7 @@ export function AddCustomerModal({
     state: "",
     stateCode: "",
     city: "",
+    pincode: "",
     addressLine1: "",
     addressLine2: "",
     openingBalance: "0",
@@ -87,6 +96,7 @@ export function AddCustomerModal({
       state: "",
       stateCode: "",
       city: "",
+      pincode: "",
       addressLine1: "",
       addressLine2: "",
       openingBalance: "0",
@@ -108,8 +118,8 @@ export function AddCustomerModal({
     setError(null);
 
     // Validate customer fields
-    if (!formData.name.trim() || !formData.gstin.trim() || !formData.state.trim() || !formData.city.trim()) {
-      setError("Please fill all required customer fields (name, GSTIN, state, city)");
+    if (!formData.name.trim() || !formData.gstin.trim() || !formData.state.trim() || !formData.city.trim() || !formData.pincode.trim()) {
+      setError("Please fill all required customer fields (name, GSTIN, state, city, pincode)");
       setActiveTab("customer");
       setIsSubmitting(false);
       return;
@@ -157,7 +167,7 @@ export function AddCustomerModal({
       const validAddresses = shippingAddresses.filter(
         (a) => a.label.trim() && a.address.trim()
       );
-      for (const addr of validAddresses) {
+      for (const { gstin: _gstin, ...addr } of validAddresses) {
         await fetch(`/api/customers/${customerId}/shipping-addresses`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -196,12 +206,12 @@ export function AddCustomerModal({
           setError(
             `Customer created, but rate sheet failed: ${rsData.error || "Unknown error"}`
           );
-          onSuccess?.();
+          onSuccess?.(data);
           return;
         }
       }
 
-      onSuccess?.();
+      onSuccess?.(data);
       onClose();
       resetForm();
     } catch (err) {
@@ -239,11 +249,27 @@ export function AddCustomerModal({
   const handleGstinVerified = (result: GstinVerifyResult) => {
     setFormData((prev) => ({
       ...prev,
-      name: prev.name.trim() ? prev.name : result.legalName,
+      name: prev.name.trim() ? prev.name : (result.tradeName || result.legalName),
+      contactName: prev.contactName.trim() ? prev.contactName : result.legalName,
       addressLine1: prev.addressLine1.trim() ? prev.addressLine1 : result.addressLine1,
       addressLine2: prev.addressLine2.trim() ? prev.addressLine2 : result.addressLine2,
       city: prev.city.trim() ? prev.city : result.city,
+      pincode: prev.pincode.trim() ? prev.pincode : result.pincode,
     }));
+  };
+
+  const handleShippingGstinVerified = (idx: number, result: GstinVerifyResult) => {
+    setShippingAddresses((prev) => {
+      const updated = [...prev];
+      updated[idx] = {
+        ...updated[idx],
+        address: updated[idx].address.trim() ? updated[idx].address : result.addressLine1,
+        city: updated[idx].city.trim() ? updated[idx].city : result.city,
+        state: updated[idx].state.trim() ? updated[idx].state : result.stateName,
+        pincode: updated[idx].pincode.trim() ? updated[idx].pincode : result.pincode,
+      };
+      return updated;
+    });
   };
 
   const handleSameAsBillingChange = (checked: boolean) => {
@@ -252,12 +278,15 @@ export function AddCustomerModal({
       setShippingAddresses([
         {
           label: "Default",
+          gstin: "",
           address: [formData.addressLine1, formData.addressLine2]
             .filter(Boolean)
             .join(", "),
           city: formData.city,
           state: formData.state,
           pincode: "",
+          contactName: "",
+          contactPhone: "",
           isDefault: true,
         },
       ]);
@@ -300,6 +329,12 @@ export function AddCustomerModal({
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, onClose]);
+
+  useEffect(() => {
+    if (isOpen && prefillName) {
+      setFormData((prev) => ({ ...prev, name: prefillName }));
+    }
+  }, [isOpen, prefillName]);
 
   useEffect(() => {
     if (isOpen && firstInputRef.current) {
@@ -544,6 +579,20 @@ export function AddCustomerModal({
                       placeholder="Mumbai"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Pincode <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="text"
+                      name="pincode"
+                      value={formData.pincode}
+                      onChange={handleChange}
+                      required
+                      maxLength={6}
+                      placeholder="400001"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -658,6 +707,28 @@ export function AddCustomerModal({
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">
+                            GSTIN (for autofill)
+                          </label>
+                          <div className="flex gap-2">
+                            <Input
+                              value={addr.gstin}
+                              onChange={(e) =>
+                                updateAddress(idx, "gstin", e.target.value.toUpperCase())
+                              }
+                              placeholder="22AAAAA0000A1Z5"
+                              maxLength={15}
+                              disabled={sameAsBilling}
+                              className={`flex-1 uppercase ${sameAsBilling ? "bg-gray-100" : ""}`}
+                            />
+                            <GstinVerifyButton
+                              gstin={addr.gstin}
+                              onVerified={(result) => handleShippingGstinVerified(idx, result)}
+                              disabled={sameAsBilling}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
                             Address <span className="text-red-500">*</span>
                           </label>
                           <Input
@@ -708,6 +779,36 @@ export function AddCustomerModal({
                               updateAddress(idx, "pincode", e.target.value)
                             }
                             placeholder="Pincode"
+                            disabled={sameAsBilling}
+                            className={sameAsBilling ? "bg-gray-100" : ""}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Contact Name
+                          </label>
+                          <Input
+                            value={addr.contactName}
+                            onChange={(e) =>
+                              updateAddress(idx, "contactName", e.target.value)
+                            }
+                            placeholder="Contact person"
+                            disabled={sameAsBilling}
+                            className={sameAsBilling ? "bg-gray-100" : ""}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Contact Phone
+                          </label>
+                          <Input
+                            type="tel"
+                            value={addr.contactPhone}
+                            onChange={(e) =>
+                              updateAddress(idx, "contactPhone", e.target.value)
+                            }
+                            placeholder="+91 98765 43210"
+                            maxLength={20}
                             disabled={sameAsBilling}
                             className={sameAsBilling ? "bg-gray-100" : ""}
                           />

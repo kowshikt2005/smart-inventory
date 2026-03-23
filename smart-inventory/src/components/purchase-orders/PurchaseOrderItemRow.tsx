@@ -214,7 +214,7 @@ export function PurchaseOrderItemRow({
             value={item.quantity || ""}
             onChange={(e) => handleQuantityChange(e.target.value)}
             className="w-full text-right"
-            disabled={disabled || !item.itemId}
+            disabled={disabled || (!item.itemId && !item.itemName)}
           />
         </td>
 
@@ -224,7 +224,7 @@ export function PurchaseOrderItemRow({
             <select
               value={item.unit || selectedItem.unit}
               onChange={(e) => handleUnitChange(e.target.value)}
-              disabled={disabled || !item.itemId}
+              disabled={disabled || (!item.itemId && !item.itemName)}
               className="w-full h-9 rounded-md border border-gray-200 px-2 text-sm bg-white disabled:opacity-50"
             >
               <option value={selectedItem.unit}>{selectedItem.unit}</option>
@@ -248,7 +248,7 @@ export function PurchaseOrderItemRow({
             value={item.rate || ""}
             onChange={(e) => handleRateChange(e.target.value)}
             className="w-full text-right"
-            disabled={disabled || !item.itemId}
+            disabled={disabled || (!item.itemId && !item.itemName)}
           />
         </td>
 

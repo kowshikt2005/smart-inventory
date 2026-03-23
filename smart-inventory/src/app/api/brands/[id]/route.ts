@@ -92,6 +92,7 @@ export async function PUT(
         preferredVendorId: body.preferredVendorId !== undefined
           ? (body.preferredVendorId || null)
           : existingBrand.preferredVendorId,
+        isActive: body.isActive !== undefined ? body.isActive : existingBrand.isActive,
       },
     });
 

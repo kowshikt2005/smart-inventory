@@ -24,8 +24,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Plus, MoreHorizontal, Edit, Loader2, X, Camera, Upload } from "lucide-react";
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { Plus, MoreHorizontal, Edit, Loader2, X, Camera, Upload, Power, PowerOff } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface Brand {
   id: string;
@@ -38,12 +39,17 @@ interface SubBrand {
   brandId: string;
   discountPercent: number | null;
   logoUrl: string | null;
+  isActive: boolean;
   brand?: { name: string };
   createdAt: string;
   updatedAt: string;
 }
 
-export default function SubBrandsPage() {
+function SubBrandsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo");
+
   const [subBrands, setSubBrands] = useState<SubBrand[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -98,6 +104,16 @@ export default function SubBrandsPage() {
     fetchAllData();
   }, [fetchAllData]);
 
+  // Auto-open add modal when redirected from item creation with ?create=1
+  // Pre-select the brand if ?brandId= is provided
+  useEffect(() => {
+    if (searchParams.get("create") === "1") {
+      const brandId = searchParams.get("brandId") || "";
+      setNewSubBrand((prev) => ({ ...prev, brandId }));
+      setShowAddModal(true);
+    }
+  }, [searchParams]);
+
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -150,7 +166,11 @@ export default function SubBrandsPage() {
         setShowAddModal(false);
         setNewSubBrand({ name: "", brandId: "", discountPercent: "", logoUrl: "" });
         setModalError(null);
-        fetchAllData();
+        if (returnTo) {
+          router.push(returnTo);
+        } else {
+          fetchAllData();
+        }
       } else {
         const data = await response.json();
         setModalError(data.error || "Failed to create sub-brand");
@@ -244,6 +264,19 @@ export default function SubBrandsPage() {
     setModalError(null);
   };
 
+  const handleToggleActive = async (subBrand: SubBrand) => {
+    try {
+      const response = await fetch(`/api/sub-brands/${subBrand.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !subBrand.isActive }),
+      });
+      if (response.ok) fetchAllData();
+    } catch {
+      // non-critical
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
@@ -304,6 +337,9 @@ export default function SubBrandsPage() {
                   Parent Brand
                 </TableHead>
                 <TableHead scope="col" className="font-semibold text-center">
+                  Status
+                </TableHead>
+                <TableHead scope="col" className="font-semibold text-center">
                   Discount %
                 </TableHead>
                 <TableHead scope="col" className="font-semibold">
@@ -317,10 +353,7 @@ export default function SubBrandsPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="text-center text-gray-500 py-12"
-                  >
+                  <TableCell colSpan={7} className="text-center text-gray-500 py-12">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Loading sub-brands...</span>
@@ -329,10 +362,7 @@ export default function SubBrandsPage() {
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="text-center text-red-600 py-8"
-                  >
+                  <TableCell colSpan={7} className="text-center text-red-600 py-8">
                     <div className="space-y-2">
                       <p>Error: {error}</p>
                       <Button onClick={fetchAllData} variant="outline" size="sm">
@@ -343,10 +373,7 @@ export default function SubBrandsPage() {
                 </TableRow>
               ) : paginatedSubBrands.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="text-center text-gray-500 py-8"
-                  >
+                  <TableCell colSpan={7} className="text-center text-gray-500 py-8">
                     {searchQuery
                       ? "No sub-brands found matching your search"
                       : "No sub-brands yet. Click 'Add Sub-brand' to get started."}
@@ -354,7 +381,7 @@ export default function SubBrandsPage() {
                 </TableRow>
               ) : (
                 paginatedSubBrands.map((subBrand) => (
-                  <TableRow key={subBrand.id}>
+                  <TableRow key={subBrand.id} className={!subBrand.isActive ? "opacity-60" : ""}>
                     <TableCell>
                       {subBrand.logoUrl ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
@@ -371,6 +398,13 @@ export default function SubBrandsPage() {
                     </TableCell>
                     <TableCell className="font-medium">{subBrand.name}</TableCell>
                     <TableCell>{subBrand.brand?.name}</TableCell>
+                    <TableCell className="text-center">
+                      {subBrand.isActive ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Active</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">Inactive</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-center">
                       {subBrand.discountPercent !== null ? (
                         <span className="text-green-600 font-medium">{Number(subBrand.discountPercent)}%</span>
@@ -394,11 +428,16 @@ export default function SubBrandsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => handleEditSubBrand(subBrand)}
-                          >
+                          <DropdownMenuItem onClick={() => handleEditSubBrand(subBrand)}>
                             <Edit className="h-4 w-4 mr-2" />
                             Edit Sub-brand
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleToggleActive(subBrand)}>
+                            {subBrand.isActive ? (
+                              <><PowerOff className="h-4 w-4 mr-2 text-red-500" />Deactivate</>
+                            ) : (
+                              <><Power className="h-4 w-4 mr-2 text-green-600" />Activate</>
+                            )}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -601,5 +640,13 @@ export default function SubBrandsPage() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function SubBrandsPage() {
+  return (
+    <Suspense>
+      <SubBrandsContent />
+    </Suspense>
   );
 }

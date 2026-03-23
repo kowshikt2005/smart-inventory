@@ -15,6 +15,7 @@ export interface GstinVerifyResult {
   pincode: string;
   businessType: string;
   stateCode: string;
+  stateName: string;
 }
 
 interface GstinVerifyButtonProps {

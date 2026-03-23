@@ -29,10 +29,12 @@ import {
   X,
   PowerOff,
   Power,
+  Edit,
+  Trash2,
 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
-import { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useMemo, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { useDebounce } from "@/hooks/useDebounce";
 
@@ -56,14 +58,27 @@ interface Vendor {
 
 type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
 
-export default function VendorsPage() {
+function VendorsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo");
+  const purchaseInvoiceId = searchParams.get("purchaseInvoiceId");
+  const prefillName = searchParams.get("prefillName") || undefined;
+
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const itemsPerPage = 10;
+
+  // Auto-open modal when redirected from an invoice page
+  useEffect(() => {
+    if (searchParams.get("openCreate") === "true") {
+      setShowAddModal(true);
+    }
+  }, [searchParams]);
 
   // Debounce search
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -124,8 +139,25 @@ export default function VendorsPage() {
     router.push(`/masters/vendors/${vendorId}`);
   };
 
-  const handleViewTransactions = (_vendorId: string) => {
-    router.push(`/ledger/customers`);
+  const handleViewTransactions = (vendorId: string) => {
+    router.push(`/ledger/vendors?vendorId=${vendorId}`);
+  };
+
+  const handleDeleteVendor = async (vendor: Vendor) => {
+    if (!confirm(`Delete "${vendor.name}"? This cannot be undone.`)) return;
+    setDeletingId(vendor.id);
+    try {
+      const res = await fetch(`/api/vendors/${vendor.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Failed to delete");
+      }
+      mutate();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete vendor");
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const handleToggleStatus = async (vendor: Vendor) => {
@@ -150,7 +182,7 @@ export default function VendorsPage() {
       <div className="p-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">All Vendors</h1>
+          <h1 className="text-2xl font-bold text-foreground mb-6">All Vendors</h1>
 
           {/* Search and Add Button */}
           <div className="flex items-start justify-between gap-4 mb-4">
@@ -166,7 +198,7 @@ export default function VendorsPage() {
                 {searchQuery && (
                   <button
                     onClick={() => handleSearchChange("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground"
                     aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
@@ -174,9 +206,8 @@ export default function VendorsPage() {
                 )}
               </div>
               {searchQuery && (
-                <p className="text-sm text-gray-600 mt-2">
-                  Found {filteredVendors.length} vendor
-                  {filteredVendors.length !== 1 ? "s" : ""}
+                <p className="text-sm text-muted-foreground mt-2">
+                  Found {filteredVendors.length} vendor{filteredVendors.length !== 1 ? "s" : ""}
                 </p>
               )}
             </div>
@@ -184,7 +215,7 @@ export default function VendorsPage() {
               <ImportButton entityType="VENDOR" entityLabel="Vendors" onSuccess={() => mutate()} />
               <Button
                 onClick={() => setShowAddModal(true)}
-                className="bg-teal-500 hover:bg-teal-600 text-white"
+                className="bg-primary hover:bg-primary/90 text-white"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Vendor
@@ -217,43 +248,26 @@ export default function VendorsPage() {
         </div>
 
         {/* Vendors Table */}
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
           <Table aria-label="Vendor list">
             <TableHeader>
-              <TableRow className="bg-gray-50">
-                <TableHead scope="col" className="font-semibold">
-                  Name
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  GST No.
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  City
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  State
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  Credit Days
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  Credit Limit
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  Status
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  Actions
-                </TableHead>
+              <TableRow className="bg-muted/30">
+                <TableHead className="font-semibold">Name</TableHead>
+                <TableHead className="font-semibold">GST No.</TableHead>
+                <TableHead className="font-semibold">State Code</TableHead>
+                <TableHead className="font-semibold">PAN</TableHead>
+                <TableHead className="font-semibold">City</TableHead>
+                <TableHead className="font-semibold">State</TableHead>
+                <TableHead className="font-semibold">Credit Days</TableHead>
+                <TableHead className="font-semibold">Opening Balance</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="text-center text-gray-500 py-12"
-                  >
+                  <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Loading vendors...</span>
@@ -262,31 +276,17 @@ export default function VendorsPage() {
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="text-center text-red-600 py-8"
-                  >
+                  <TableCell colSpan={10} className="text-center text-red-600 py-8">
                     <div className="space-y-2">
                       <p>Error: {error.message || "Failed to load vendors"}</p>
-                      <Button
-                        onClick={() => mutate()}
-                        variant="outline"
-                        size="sm"
-                      >
-                        Try Again
-                      </Button>
+                      <Button onClick={() => mutate()} variant="outline" size="sm">Try Again</Button>
                     </div>
                   </TableCell>
                 </TableRow>
               ) : paginatedVendors.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="text-center text-gray-500 py-8"
-                  >
-                    {searchQuery
-                      ? "No vendors found matching your search"
-                      : "No vendors yet. Click 'Add Vendor' to get started."}
+                  <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                    {searchQuery ? "No vendors found matching your search" : "No vendors yet. Click 'Add Vendor' to get started."}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -296,13 +296,17 @@ export default function VendorsPage() {
                     className={!vendor.isActive ? "opacity-50 bg-muted/20" : undefined}
                   >
                     <TableCell className="font-medium">{vendor.name}</TableCell>
-                    <TableCell>{vendor.gstin || "N/A"}</TableCell>
-                    <TableCell>{vendor.city || "N/A"}</TableCell>
-                    <TableCell>{vendor.state || "N/A"}</TableCell>
-                    <TableCell>{vendor.creditDays}</TableCell>
-                    <TableCell>
-                      {vendor.openingBalance.toLocaleString("en-US")}
+                    <TableCell className="font-mono text-sm">{vendor.gstin || "-"}</TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {vendor.gstin && vendor.gstin.length >= 2 ? vendor.gstin.substring(0, 2) : "-"}
                     </TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {vendor.gstin && vendor.gstin.length >= 12 ? vendor.gstin.substring(2, 12) : "-"}
+                    </TableCell>
+                    <TableCell>{vendor.city || "-"}</TableCell>
+                    <TableCell>{vendor.state || "-"}</TableCell>
+                    <TableCell>{vendor.creditDays}</TableCell>
+                    <TableCell>{Number(vendor.openingBalance).toLocaleString("en-IN")}</TableCell>
                     <TableCell>
                       {vendor.isActive ? (
                         <Badge className="bg-green-100 text-green-700 border-green-200">
@@ -320,8 +324,9 @@ export default function VendorsPage() {
                             size="sm"
                             className="h-8 w-8 p-0"
                             aria-label={`Actions for ${vendor.name}`}
+                            disabled={togglingId === vendor.id || deletingId === vendor.id}
                           >
-                            {togglingId === vendor.id ? (
+                            {togglingId === vendor.id || deletingId === vendor.id ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
                               <MoreHorizontal className="h-4 w-4" />
@@ -341,6 +346,12 @@ export default function VendorsPage() {
                             <FileText className="h-4 w-4 mr-2" />
                             View Transactions
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => router.push(`/masters/vendors/${vendor.id}`)}
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit Vendor
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => handleToggleStatus(vendor)}
@@ -358,6 +369,14 @@ export default function VendorsPage() {
                               </>
                             )}
                           </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleDeleteVendor(vendor)}
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Vendor
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -371,7 +390,7 @@ export default function VendorsPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, filteredVendors.length)} of{" "}
               {filteredVendors.length} vendors
@@ -406,12 +425,34 @@ export default function VendorsPage() {
         <AddVendorModal
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
-          onSuccess={() => {
+          prefillName={prefillName}
+          onSuccess={async (vendor) => {
             mutate();
             setCurrentPage(1);
+            // If opened from an invoice, link the new vendor and redirect back
+            if (returnTo && purchaseInvoiceId) {
+              try {
+                await fetch("/api/import/link-invoice-vendor", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ vendorId: vendor.id, purchaseInvoiceId }),
+                });
+              } catch {
+                // Linking failed silently — user is still redirected
+              }
+              router.push(returnTo);
+            }
           }}
         />
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function VendorsPage() {
+  return (
+    <Suspense>
+      <VendorsContent />
+    </Suspense>
   );
 }

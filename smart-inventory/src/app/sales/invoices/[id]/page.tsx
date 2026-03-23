@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ArrowLeft, Loader2, Ban, FileDown, MapPin, Edit } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { generateInvoicePDF } from "@/lib/invoice-pdf";
 import { fetchCompanySettings } from "@/lib/export-utils";
@@ -35,6 +35,7 @@ interface InvoiceItem {
   id: string;
   itemId: string | null;
   itemName: string | null;
+  ref: string | null;
   quantity: number;
   rate: number;
   discountPercent: number;
@@ -113,22 +114,23 @@ export default function InvoiceDetailPage() {
   const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchInvoice = async () => {
-      try {
-        const response = await fetch(`/api/sales-invoices/${id}`);
-        if (!response.ok) throw new Error("Failed to fetch invoice");
-        const data = await response.json();
-        setInvoice(data);
-      } catch (err) {
-        console.error("Error fetching invoice:", err);
-        setError(err instanceof Error ? err.message : "Failed to load invoice");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchInvoice();
+  const fetchInvoice = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/sales-invoices/${id}`);
+      if (!response.ok) throw new Error("Failed to fetch invoice");
+      const data = await response.json();
+      setInvoice(data);
+    } catch (err) {
+      console.error("Error fetching invoice:", err);
+      setError(err instanceof Error ? err.message : "Failed to load invoice");
+    } finally {
+      setIsLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    fetchInvoice();
+  }, [fetchInvoice]);
 
   const handleCancel = async () => {
     if (!confirm("Are you sure you want to cancel this invoice?")) return;
@@ -315,7 +317,23 @@ export default function InvoiceDetailPage() {
                 </div>
               )}
               {!invoice.customer && invoice.isImported && (
-                <p className="text-xs text-amber-600 mt-2">Imported invoice — customer not linked to masters</p>
+                <div className="mt-2">
+                  <p className="text-xs text-amber-600 mb-1">Customer not linked to masters</p>
+                  <button
+                    className="text-xs text-teal-600 hover:text-teal-700 underline underline-offset-2"
+                    onClick={() => {
+                      const qs = new URLSearchParams({
+                        openCreate: "true",
+                        returnTo: `/sales/invoices/${id}`,
+                        salesInvoiceId: id,
+                        prefillName: invoice.customerName || "",
+                      });
+                      router.push(`/masters/customers?${qs.toString()}`);
+                    }}
+                  >
+                    Create &amp; link customer
+                  </button>
+                </div>
               )}
               {invoice.shippingAddress && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
@@ -377,7 +395,29 @@ export default function InvoiceDetailPage() {
                       <TableRow key={item.id} className="hover:bg-gray-50">
                         <TableCell>
                           <p className="font-medium text-gray-900">{item.item?.name || item.itemName || "—"}</p>
-                          <p className="text-xs text-gray-400">{item.item?.itemCode || ""}</p>
+                          {item.item ? (
+                            <p className="text-xs text-gray-400">{item.item.itemCode}</p>
+                          ) : (
+                            <button
+                              className="text-xs text-amber-600 hover:text-amber-700 underline underline-offset-2 mt-0.5"
+                              onClick={() => {
+                                const hsnFromRef = item.ref?.startsWith("HSN:") ? item.ref.slice(4) : "";
+                                const params = new URLSearchParams({
+                                  openCreate: "true",
+                                  returnTo: `/sales/invoices/${id}`,
+                                  invoiceItemId: item.id,
+                                  invoiceType: "SALES",
+                                  prefillName: item.itemName || "",
+                                  prefillRate: String(Number(item.rate)),
+                                  prefillGstRate: String(Math.round(Number(item.taxRate))),
+                                  prefillHsnCode: hsnFromRef,
+                                });
+                                router.push(`/masters/items?${params.toString()}`);
+                              }}
+                            >
+                              Not in masters — Create item
+                            </button>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm text-gray-500">{item.item?.hsnCode || "—"}</TableCell>
                         <TableCell className="text-right text-sm">{Number(item.quantity)} {item.item?.unit || ""}</TableCell>

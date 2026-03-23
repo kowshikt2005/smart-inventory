@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -53,11 +54,20 @@ interface EditItem {
   };
 }
 
+interface PrefillData {
+  name?: string;
+  purchasePrice?: string;
+  sellingPrice?: string;
+  gstRate?: string;
+  hsnCode?: string;
+}
+
 interface AddItemModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (item: { id: string }) => void;
   editItem?: EditItem | null;
+  prefillData?: PrefillData;
 }
 
 export function AddItemModal({
@@ -65,7 +75,9 @@ export function AddItemModal({
   onClose,
   onSuccess,
   editItem,
+  prefillData,
 }: AddItemModalProps) {
+  const router = useRouter();
   const isEditing = !!editItem;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,8 +106,8 @@ export function AddItemModal({
   const [uomConversions, setUomConversions] = useState<UOMConversion[]>([]);
 
   // Use SWR to cache brands and sub-brands - NO N+1 queries!
-  const { data: brandsData, isLoading: _brandsLoading } = useSWR(isOpen ? "/api/brands" : null);
-  const { data: subBrandsData, isLoading: _subBrandsLoading } = useSWR(isOpen ? "/api/sub-brands" : null);
+  const { data: brandsData, isLoading: _brandsLoading } = useSWR(isOpen ? "/api/brands?activeOnly=true" : null);
+  const { data: subBrandsData, isLoading: _subBrandsLoading } = useSWR(isOpen ? "/api/sub-brands?activeOnly=true" : null);
 
   // Ensure current brand is in the list (just like GST options are always there)
   const brands = useMemo(() => {
@@ -111,17 +123,17 @@ export function AddItemModal({
   useEffect(() => {
     if (!editItem && isOpen) {
       setFormData({
-        name: "",
+        name: prefillData?.name || "",
         userCode: "",
         barcode: "",
         description: "",
         brandId: "",
         subBrandId: "",
-        hsnCode: "",
-        gstRate: "18",
-        purchasePrice: "0",
+        hsnCode: prefillData?.hsnCode || "",
+        gstRate: prefillData?.gstRate || "18",
+        purchasePrice: prefillData?.purchasePrice || "0",
         mrp: "0",
-        sellingPrice: "0",
+        sellingPrice: prefillData?.sellingPrice || "0",
         margin: "",
         marginType: "PERCENTAGE",
         minStock: "0",
@@ -130,7 +142,7 @@ export function AddItemModal({
       setUomConversions([]);
       setImageUrl(null);
     }
-  }, [editItem, isOpen]);
+  }, [editItem, isOpen, prefillData]);
 
   // Populate form when editing (wait for brands/sub-brands data to load first to avoid race condition)
   useEffect(() => {
@@ -249,7 +261,6 @@ export function AddItemModal({
     const missing: string[] = [];
     if (!formData.name.trim()) missing.push("Item Name");
     if (!formData.brandId) missing.push("Brand");
-    if (!formData.subBrandId) missing.push("Sub-brand");
 
     if (missing.length > 0) {
       setError(`Required fields missing: ${missing.join(", ")}`);
@@ -299,7 +310,7 @@ export function AddItemModal({
       }
 
       // Success
-      onSuccess?.();
+      onSuccess?.(data);
       onClose();
 
       // Reset form
@@ -556,10 +567,18 @@ export function AddItemModal({
                     ))}
                   </SelectContent>
                 </Select>
+                <button
+                  type="button"
+                  onClick={() => router.push("/masters/items/brands?create=1&returnTo=/masters/items")}
+                  className="mt-1 flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700"
+                >
+                  <Plus className="h-3 w-3" />
+                  Create new brand
+                </button>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Sub-brand <span className="text-red-500">*</span>
+                  Sub-brand
                 </label>
                 <Select
                   key={`subbrand-${formData.subBrandId}-${filteredSubBrands.length}`}
@@ -578,6 +597,19 @@ export function AddItemModal({
                     ))}
                   </SelectContent>
                 </Select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = formData.brandId
+                      ? `/masters/items/sub-brands?create=1&returnTo=/masters/items&brandId=${formData.brandId}`
+                      : "/masters/items/sub-brands?create=1&returnTo=/masters/items";
+                    router.push(url);
+                  }}
+                  className="mt-1 flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700"
+                >
+                  <Plus className="h-3 w-3" />
+                  Create new sub-brand
+                </button>
               </div>
             </div>
           </div>

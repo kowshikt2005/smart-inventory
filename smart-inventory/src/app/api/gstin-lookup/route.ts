@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkAuth } from "@/lib/api-auth";
 import { validateGstin, normalizeGstin } from "@/lib/gst-validation";
+import { GST_STATE_CODES } from "@/lib/gst-state-codes";
 
 export async function POST(req: NextRequest) {
   const { error } = await checkAuth();
@@ -88,6 +89,7 @@ export async function POST(req: NextRequest) {
     const addressLine1 = withoutPincode.slice(0, -2).join(", ");
     const addressLine2 = "";
 
+    const stateCode = normalized.substring(0, 2);
     return NextResponse.json({
       legalName: data.lgnm ?? "",
       tradeName: data.tradeNam ?? "",
@@ -98,7 +100,8 @@ export async function POST(req: NextRequest) {
       city,
       pincode,
       businessType: data.ctb ?? "",
-      stateCode: normalized.substring(0, 2),
+      stateCode,
+      stateName: GST_STATE_CODES[stateCode] ?? "",
     });
   } catch (err) {
     console.error("[gstin-lookup] error:", err);

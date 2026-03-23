@@ -33,8 +33,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
-import { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useMemo, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { useDebounce } from "@/hooks/useDebounce";
 
@@ -56,8 +56,13 @@ interface Customer {
 
 type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
 
-export default function CustomersPage() {
+function CustomersContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo");
+  const salesInvoiceId = searchParams.get("salesInvoiceId");
+  const prefillName = searchParams.get("prefillName") || undefined;
+
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -65,6 +70,13 @@ export default function CustomersPage() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const itemsPerPage = 10;
+
+  // Auto-open modal when redirected from a sales invoice
+  useEffect(() => {
+    if (searchParams.get("openCreate") === "true") {
+      setShowAddModal(true);
+    }
+  }, [searchParams]);
 
   const debouncedSearch = useDebounce(searchQuery, 300);
 
@@ -359,9 +371,33 @@ export default function CustomersPage() {
         <AddCustomerModal
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
-          onSuccess={() => { mutate(); setCurrentPage(1); }}
+          prefillName={prefillName}
+          onSuccess={async (customer) => {
+            mutate();
+            setCurrentPage(1);
+            if (returnTo && salesInvoiceId) {
+              try {
+                await fetch("/api/import/link-invoice-customer", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ customerId: customer.id, salesInvoiceId }),
+                });
+              } catch {
+                // linking failed silently — user is still redirected
+              }
+              router.push(returnTo);
+            }
+          }}
         />
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function CustomersPage() {
+  return (
+    <Suspense>
+      <CustomersContent />
+    </Suspense>
   );
 }

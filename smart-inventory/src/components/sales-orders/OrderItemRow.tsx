@@ -31,6 +31,7 @@ interface Item {
 interface OrderItemData {
   id: string;
   itemId: string;
+  itemName?: string | null;
   quantity: number;
   unit?: string;
   uomFactor?: number;
@@ -70,6 +71,9 @@ export function OrderItemRow({
     () => items.find((i) => i.id === item.itemId),
     [items, item.itemId]
   );
+
+  // Fallback display name for imported items not linked to master
+  const displayName = selectedItem?.name || item.itemName || null;
 
   // Calculate available stock
   const availableStock = useMemo(() => {
@@ -228,11 +232,14 @@ export function OrderItemRow({
 
         {/* Item Selection */}
         <td className="px-3 py-2">
-          {selectedItem ? (
+          {displayName ? (
             <div className="min-w-[180px]">
               <div className="flex flex-col">
-                <span className="font-medium text-sm">{selectedItem.name}</span>
-                <span className="text-xs text-gray-500">{selectedItem.itemCode}</span>
+                <span className="font-medium text-sm">{displayName}</span>
+                {selectedItem
+                  ? <span className="text-xs text-gray-500">{selectedItem.itemCode}</span>
+                  : <span className="text-xs text-amber-600">Not in masters</span>
+                }
               </div>
               {!disabled && (
                 <Button
@@ -243,7 +250,7 @@ export function OrderItemRow({
                   className="mt-1 h-7 text-xs text-teal-600 hover:text-teal-700 hover:bg-teal-50 px-2"
                 >
                   <Package className="h-3 w-3 mr-1" />
-                  Change
+                  {selectedItem ? "Change" : "Link to master"}
                 </Button>
               )}
             </div>
@@ -286,7 +293,7 @@ export function OrderItemRow({
             value={item.quantity || ""}
             onChange={(e) => handleQuantityChange(e.target.value)}
             className="w-full text-right"
-            disabled={disabled || !item.itemId}
+            disabled={disabled || (!item.itemId && !item.itemName)}
           />
         </td>
 
@@ -320,7 +327,7 @@ export function OrderItemRow({
             value={item.rate || ""}
             onChange={(e) => handleRateChange(e.target.value)}
             className="w-full text-right"
-            disabled={disabled || !item.itemId}
+            disabled={disabled || (!item.itemId && !item.itemName)}
           />
         </td>
 

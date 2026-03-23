@@ -55,6 +55,8 @@ export async function POST(
         city: body.city || null,
         state: body.state || null,
         pincode: body.pincode || null,
+        contactName: body.contactName || null,
+        contactPhone: body.contactPhone || null,
         isDefault: body.isDefault || false,
       },
     });

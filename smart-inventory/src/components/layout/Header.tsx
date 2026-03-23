@@ -26,7 +26,7 @@ export const Header = memo(function Header() {
   const handleSignOut = async () => {
     if (isSigningOut) return;
     setIsSigningOut(true);
-    await signOut({ callbackUrl: "/login" });
+    await signOut({ callbackUrl: `${window.location.origin}/login` });
   };
 
   const getUserInitials = (name: string) => {

@@ -162,7 +162,6 @@ export default function NewSalesReturnPage() {
       }
 
       const invoice = await response.json();
-      console.log("Fetched invoice:", invoice); // Debug log
 
       // Check if invoice already has a completed return
       if (invoice.salesReturns && invoice.salesReturns.length > 0) {
@@ -175,7 +174,6 @@ export default function NewSalesReturnPage() {
       }
 
       const invoiceItems: InvoiceItem[] = invoice.items || [];
-      console.log("Invoice items:", invoiceItems); // Debug log
 
       if (invoiceItems.length === 0) {
         setReturnItems([]);
@@ -205,7 +203,6 @@ export default function NewSalesReturnPage() {
           };
         });
 
-      console.log("Loaded return items:", loadedItems); // Debug log
       setReturnItems(loadedItems);
     } catch (err) {
       console.error("Error fetching invoice items:", err);

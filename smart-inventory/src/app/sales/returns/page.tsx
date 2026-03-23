@@ -40,6 +40,7 @@ import {
   Eye,
   CheckCircle2,
   Ban,
+  Trash2,
   Filter,
 } from "lucide-react";
 import { useState, useMemo } from "react";
@@ -147,7 +148,7 @@ export default function SalesReturnsPage() {
   const handleCancel = async (returnId: string) => {
     if (!confirm("Are you sure you want to cancel this return?")) return;
     try {
-      const response = await fetch(`/api/sales-returns/${returnId}`, { method: "DELETE" });
+      const response = await fetch(`/api/sales-returns/${returnId}/cancel`, { method: "POST" });
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Failed to cancel return");
@@ -157,6 +158,22 @@ export default function SalesReturnsPage() {
     } catch (err) {
       console.error("Error cancelling return:", err);
       alert(err instanceof Error ? err.message : "Failed to cancel return");
+    }
+  };
+
+  const handleDelete = async (returnId: string) => {
+    if (!confirm("Permanently delete this return? This cannot be undone.")) return;
+    try {
+      const response = await fetch(`/api/sales-returns/${returnId}`, { method: "DELETE" });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to delete return");
+      }
+      setSelectedReturn(null);
+      mutate();
+    } catch (err) {
+      console.error("Error deleting return:", err);
+      alert(err instanceof Error ? err.message : "Failed to delete return");
     }
   };
 
@@ -382,10 +399,15 @@ export default function SalesReturnsPage() {
                                 <DropdownMenuItem onClick={() => handleComplete(ret.id)}>
                                   <CheckCircle2 className="h-4 w-4 mr-2" /> Complete Return
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleCancel(ret.id)} className="text-red-600">
+                                <DropdownMenuItem onClick={() => handleCancel(ret.id)} className="text-orange-600">
                                   <Ban className="h-4 w-4 mr-2" /> Cancel Return
                                 </DropdownMenuItem>
                               </>
+                            )}
+                            {(ret.status === "OPEN" || ret.status === "CANCELLED") && (
+                              <DropdownMenuItem onClick={() => handleDelete(ret.id)} className="text-red-600">
+                                <Trash2 className="h-4 w-4 mr-2" /> Delete Return
+                              </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -476,10 +498,15 @@ export default function SalesReturnsPage() {
                     <Button size="sm" onClick={() => handleComplete(selectedReturn.id)} className="bg-green-600 hover:bg-green-700 text-white">
                       <CheckCircle2 className="h-4 w-4 mr-1.5" /> Complete
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleCancel(selectedReturn.id)} className="text-red-600 border-red-200 hover:bg-red-50">
+                    <Button size="sm" variant="outline" onClick={() => handleCancel(selectedReturn.id)} className="text-orange-600 border-orange-200 hover:bg-orange-50">
                       <Ban className="h-4 w-4 mr-1.5" /> Cancel
                     </Button>
                   </>
+                )}
+                {(selectedReturn.status === "OPEN" || selectedReturn.status === "CANCELLED") && (
+                  <Button size="sm" variant="outline" onClick={() => handleDelete(selectedReturn.id)} className="text-red-600 border-red-200 hover:bg-red-50">
+                    <Trash2 className="h-4 w-4 mr-1.5" /> Delete
+                  </Button>
                 )}
                 <Button
                   size="sm"

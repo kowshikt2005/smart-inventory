@@ -53,6 +53,7 @@ export async function GET(
               },
             },
           },
+          orderBy: { id: 'asc' },
         },
         vendorPayments: {
           select: {
@@ -405,29 +406,17 @@ export async function DELETE(
     await transaction(async (tx) => {
       // Reverse inventory changes - decrease physical stock
       for (const invoiceItem of existingInvoice.items) {
-        const inventory = await tx.inventory.findUnique({
+        if (!invoiceItem.itemId) continue; // skip unlinked imported items
+        await tx.inventory.updateMany({
           where: { itemId: invoiceItem.itemId },
+          data: { physicalStock: { decrement: Number(invoiceItem.quantity) } },
         });
-
-        if (inventory) {
-          await tx.inventory.update({
-            where: { itemId: invoiceItem.itemId },
-            data: {
-              physicalStock: {
-                decrement: Number(invoiceItem.quantity),
-              },
-            },
-          });
-
-          // Delete the stock movement
-          await tx.stockMovement.deleteMany({
-            where: {
-              referenceType: 'PURCHASE_INVOICE',
-              referenceId: id,
-            },
-          });
-        }
       }
+
+      // Delete stock movements for this invoice
+      await tx.stockMovement.deleteMany({
+        where: { referenceType: 'PURCHASE_INVOICE', referenceId: id },
+      });
 
       // Delete the ledger entry and recalculate (only if vendor is linked)
       if (existingInvoice.vendorId) {

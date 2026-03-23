@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,14 +12,15 @@ import {
   AlertCircle,
   AlertTriangle,
   Loader2,
+  FileSpreadsheet,
+  FileText,
+  Download,
+  BookMarked,
   Save,
   Trash2,
-  FileSpreadsheet,
-  Download,
 } from "lucide-react";
 import {
   ENTITY_FIELDS,
-  autoMatchColumns,
   type EntityType,
   type ImportField,
 } from "@/lib/import-utils";
@@ -32,12 +33,6 @@ interface ImportModalProps {
   onSuccess: () => void;
   entityType: EntityType;
   entityLabel: string;
-}
-
-interface SavedMapping {
-  id: string;
-  name: string;
-  mapping: Record<string, string>;
 }
 
 interface RowValidation {
@@ -76,6 +71,84 @@ function downloadSampleFile(entityType: EntityType, entityLabel: string) {
   XLSX.writeFile(wb, `${entityLabel}-sample.xlsx`);
 }
 
+// ── Reusable mapping table ─────────────────────────────────────────────────
+function MappingTable({
+  fields,
+  headers,
+  mapping,
+  rawRows,
+  onUpdate,
+}: {
+  fields: ImportField[];
+  headers: string[];
+  mapping: Record<string, string>;
+  rawRows: Record<string, unknown>[];
+  onUpdate: (field: string, col: string) => void;
+}) {
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-muted/30 text-left">
+            <th className="px-3 py-2 font-medium w-6" />
+            <th className="px-3 py-2 font-medium">System Field</th>
+            <th className="px-3 py-2 font-medium">File Column</th>
+            <th className="px-3 py-2 font-medium w-36">Sample Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {fields.map((field) => {
+            const selectedCol = mapping[field.key] || "";
+            const isMapped = !!selectedCol;
+            const sampleValue = isMapped && rawRows.length > 0
+              ? String(rawRows[0][selectedCol] ?? "")
+              : "";
+            const dotColor = isMapped
+              ? "bg-teal-500"
+              : field.required
+                ? "bg-red-400"
+                : "bg-gray-300";
+
+            return (
+              <tr key={field.key} className={`border-t ${field.required && !isMapped ? "bg-red-50/40" : isMapped ? "bg-teal-50/20" : ""}`}>
+                <td className="px-3 py-2.5">
+                  <span className={`inline-block w-2 h-2 rounded-full ${dotColor}`} />
+                </td>
+                <td className="px-3 py-2.5">
+                  <span className="font-medium text-gray-800">{field.label}</span>
+                  {field.required && <span className="ml-1 text-red-500 font-bold text-xs">*</span>}
+                  {field.unit && (
+                    <span className={`ml-1.5 text-[10px] font-semibold px-1 py-0.5 rounded ${field.unit === '%' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {field.unit}
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2.5">
+                  <select
+                    className={`border rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-teal-400 ${
+                      isMapped ? "border-teal-300 bg-white" : field.required ? "border-red-300 bg-red-50" : "bg-white"
+                    }`}
+                    value={selectedCol}
+                    onChange={(e) => onUpdate(field.key, e.target.value)}
+                  >
+                    <option value="">— Skip —</option>
+                    {headers.map((h, i) => (
+                      <option key={i} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </td>
+                <td className="px-3 py-2.5 text-xs text-muted-foreground truncate max-w-[140px]">
+                  {sampleValue}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function ImportModal({
   isOpen,
   onClose,
@@ -92,13 +165,17 @@ export function ImportModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [vendorInvoiceInfo, setVendorInvoiceInfo] = useState<string | null>(null);
+  const [pdfParsing, setPdfParsing] = useState(false);
+  const [pdfParseError, setPdfParseError] = useState<string | null>(null);
 
   // Step 2: Mapping
   const [mapping, setMapping] = useState<Record<string, string>>({});
-  const [savedMappings, setSavedMappings] = useState<SavedMapping[]>([]);
-  const [selectedMappingId, setSelectedMappingId] = useState("");
-  const [saveName, setSaveName] = useState("");
-  const [saveLoading, setSaveLoading] = useState(false);
+
+  // Saved mappings
+  const [savedMappings, setSavedMappings] = useState<{ id: string; name: string; mapping: Record<string, string> }[]>([]);
+  const [selectedSavedId, setSelectedSavedId] = useState("");
+  const [saveAsName, setSaveAsName] = useState("");
+  const [savingMapping, setSavingMapping] = useState(false);
 
   // Step 3: Validate
   const [validationResults, setValidationResults] = useState<RowValidation[]>([]);
@@ -114,20 +191,6 @@ export function ImportModal({
 
   const fields: ImportField[] = ENTITY_FIELDS[entityType] || [];
 
-  const fetchSavedMappings = useCallback(async () => {
-    try {
-      const res = await fetch(
-        `/api/import/mappings?entityType=${entityType}`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setSavedMappings(data.mappings || []);
-      }
-    } catch {
-      // ignore
-    }
-  }, [entityType]);
-
   // Reset on open/close
   useEffect(() => {
     if (isOpen) {
@@ -136,14 +199,25 @@ export function ImportModal({
       setHeaders([]);
       setRawRows([]);
       setMapping({});
-      setSelectedMappingId("");
-      setSaveName("");
       setValidationResults([]);
       setImportResult(null);
       setVendorInvoiceInfo(null);
-      fetchSavedMappings();
+      setPdfParsing(false);
+      setPdfParseError(null);
+      setSavedMappings([]);
+      setSelectedSavedId("");
+      setSaveAsName("");
     }
-  }, [isOpen, entityType, fetchSavedMappings]);
+  }, [isOpen, entityType]);
+
+  // Fetch saved mappings when reaching the mapping step
+  useEffect(() => {
+    if (step !== 1) return;
+    fetch(`/api/import/mappings?entityType=${entityType}`)
+      .then(r => r.json())
+      .then(d => setSavedMappings(d.mappings ?? []))
+      .catch(() => {});
+  }, [step, entityType]);
 
   // Escape key
   useEffect(() => {
@@ -156,7 +230,50 @@ export function ImportModal({
 
   // ── File parsing ───────────────────────────────────────
 
-  function processFile(file: File) {
+  const isInvoiceType = entityType === "SALES_INVOICE" || entityType === "PURCHASE_INVOICE";
+
+  async function processPdfFile(file: File) {
+    setPdfParsing(true);
+    setPdfParseError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("invoiceType", entityType === "SALES_INVOICE" ? "SALES" : "PURCHASE");
+      const res = await fetch("/api/import/parse-pdf", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "PDF parsing failed");
+
+      // Build an in-memory workbook to run vendor-format detection
+      const ws = XLSX.utils.json_to_sheet(data.rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Invoice");
+
+      const vendorResult = tryParseVendorInvoice(wb);
+      if (vendorResult) {
+        setFileName(file.name);
+        setHeaders(vendorResult.headers);
+        setRawRows(vendorResult.rows);
+        setVendorInvoiceInfo(vendorResult.info);
+        setMapping(buildAutoMapping(fields, vendorResult.headers));
+        setStep(1);
+        return;
+      }
+
+      setFileName(file.name);
+      setHeaders(data.headers);
+      setRawRows(data.rows);
+      setVendorInvoiceInfo(data.info);
+      setMapping(buildAutoMapping(fields, data.headers));
+      setStep(1);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "PDF parsing failed";
+      setPdfParseError(msg);
+    } finally {
+      setPdfParsing(false);
+    }
+  }
+
+  function processExcelFile(file: File) {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -170,8 +287,7 @@ export function ImportModal({
           setHeaders(vendorResult.headers);
           setRawRows(vendorResult.rows);
           setVendorInvoiceInfo(vendorResult.info);
-          const auto = autoMatchColumns(vendorResult.headers, entityType);
-          setMapping(auto);
+          setMapping(buildAutoMapping(fields, vendorResult.headers));
           setStep(1);
           return;
         }
@@ -179,9 +295,7 @@ export function ImportModal({
         // Normal flat file parsing
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-          defval: "",
-        });
+        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
 
         if (json.length === 0) {
           alert("File is empty or has no data rows.");
@@ -193,10 +307,7 @@ export function ImportModal({
         setHeaders(hdrs);
         setRawRows(json);
         setVendorInvoiceInfo(null);
-
-        // Auto-match columns
-        const auto = autoMatchColumns(hdrs, entityType);
-        setMapping(auto);
+        setMapping(buildAutoMapping(fields, hdrs));
         setStep(1);
       } catch {
         alert("Failed to parse file. Please ensure it is a valid .xlsx or .csv file.");
@@ -205,9 +316,23 @@ export function ImportModal({
     reader.readAsArrayBuffer(file);
   }
 
+  function processFile(file: File) {
+    if (file.name.toLowerCase().endsWith(".pdf")) {
+      if (!isInvoiceType) {
+        alert("PDF upload is only supported for Sales and Purchase Invoices.");
+        return;
+      }
+      processPdfFile(file);
+    } else {
+      processExcelFile(file);
+    }
+  }
+
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file) processFile(file);
+    // Reset input so same file can be re-selected
+    e.target.value = "";
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -220,67 +345,82 @@ export function ImportModal({
   // ── Mapping helpers ────────────────────────────────────
   // mapping is { dbField: excelColumn }
 
+  function buildAutoMapping(fieldList: ImportField[], columnHeaders: string[]): Record<string, string> {
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const result: Record<string, string> = {};
+    for (const field of fieldList) {
+      const candidates = [field.label, ...(field.aliases ?? [])].map(norm);
+      for (const header of columnHeaders) {
+        if (candidates.includes(norm(header))) {
+          result[field.key] = header;
+          break;
+        }
+      }
+    }
+    return result;
+  }
+
   function updateMapping(dbField: string, excelCol: string) {
     setMapping((prev) => ({ ...prev, [dbField]: excelCol }));
   }
 
-  function loadSavedMapping(id: string) {
-    const found = savedMappings.find((m) => m.id === id);
-    if (found) {
-      setSelectedMappingId(id);
-      setMapping(found.mapping as Record<string, string>);
-      setSaveName(found.name);
+  function applyTemplate(id: string) {
+    const tpl = savedMappings.find(m => m.id === id);
+    if (!tpl) return;
+    // Only apply entries whose column value exists in the current file's headers
+    const merged: Record<string, string> = { ...mapping };
+    for (const [field, col] of Object.entries(tpl.mapping)) {
+      if (headers.includes(col)) merged[field] = col;
     }
+    setMapping(merged);
+    setSelectedSavedId(id);
   }
 
-  async function saveMapping() {
-    if (!saveName.trim()) return;
-    setSaveLoading(true);
+  async function saveCurrentMapping() {
+    const name = saveAsName.trim();
+    if (!name) return;
+    setSavingMapping(true);
     try {
-      if (selectedMappingId) {
-        await fetch("/api/import/mappings", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: selectedMappingId,
-            name: saveName,
-            mapping,
-          }),
-        });
-      } else {
-        const res = await fetch("/api/import/mappings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            entityType,
-            name: saveName,
-            mapping,
-          }),
-        });
-        if (res.ok) {
-          const created = await res.json();
-          setSelectedMappingId(created.id);
-        }
+      // Check if a mapping with this name already exists
+      const existing = savedMappings.find(m => m.name === name);
+      const res = await fetch("/api/import/mappings" + (existing ? "" : ""), {
+        method: existing ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(existing
+          ? { id: existing.id, mapping }
+          : { entityType, name, mapping }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        alert(d.error || "Failed to save mapping");
+        return;
       }
-      await fetchSavedMappings();
+      const saved = await res.json();
+      setSavedMappings(prev =>
+        existing
+          ? prev.map(m => m.id === existing.id ? { ...m, mapping } : m)
+          : [...prev, saved]
+      );
+      setSelectedSavedId(saved.id);
+      setSaveAsName("");
     } catch {
-      // ignore
+      alert("Failed to save mapping");
+    } finally {
+      setSavingMapping(false);
     }
-    setSaveLoading(false);
   }
 
-  async function deleteMapping(id: string) {
+  async function deleteSavedMapping(id: string) {
+    if (!confirm("Delete this saved mapping?")) return;
     try {
       await fetch(`/api/import/mappings/${id}`, { method: "DELETE" });
-      if (selectedMappingId === id) {
-        setSelectedMappingId("");
-        setSaveName("");
-      }
-      await fetchSavedMappings();
+      setSavedMappings(prev => prev.filter(m => m.id !== id));
+      if (selectedSavedId === id) setSelectedSavedId("");
     } catch {
-      // ignore
+      alert("Failed to delete mapping");
     }
   }
+
 
   // ── Validate ──────────────────────────────────────────
 
@@ -422,54 +562,71 @@ export function ImportModal({
           {step === 0 && (
             <div className="space-y-4">
               <div
-                className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors ${
+                className={`border-2 border-dashed rounded-xl p-10 text-center transition-colors ${
                   dragOver
                     ? "border-primary bg-primary/5"
                     : "border-border hover:border-primary/50"
                 }`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(true);
-                }}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleDrop}
               >
-                <FileSpreadsheet className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-lg font-medium mb-1">
-                  Drag & drop your file here
-                </p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Supports .xlsx and .csv files
-                </p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-                <div className="flex items-center justify-center gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Choose File
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => downloadSampleFile(entityType, entityLabel)}
-                    className="text-teal-700 border-teal-200 hover:bg-teal-50"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download Sample
-                  </Button>
-                </div>
+                {pdfParsing ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="h-10 w-10 animate-spin text-teal-500" />
+                    <p className="text-sm font-medium text-gray-600">Converting PDF to Excel…</p>
+                    <p className="text-xs text-muted-foreground">Extracting invoice data and downloading Excel</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-center gap-3 mb-3">
+                      <FileSpreadsheet className="h-9 w-9 text-muted-foreground" />
+                      {isInvoiceType && <FileText className="h-9 w-9 text-muted-foreground" />}
+                    </div>
+                    <p className="text-lg font-medium mb-1">Drag &amp; drop your file here</p>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      {isInvoiceType
+                        ? "Supports .xlsx, .csv and .pdf files"
+                        : "Supports .xlsx and .csv files"}
+                    </p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept={isInvoiceType ? ".xlsx,.xls,.csv,.pdf" : ".xlsx,.xls,.csv"}
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                    <div className="flex items-center justify-center gap-3">
+                      <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                        <Upload className="h-4 w-4 mr-2" />
+                        Choose File
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => downloadSampleFile(entityType, entityLabel)}
+                        className="text-teal-700 border-teal-200 hover:bg-teal-50"
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download Sample
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
-              {fileName && (
+
+              {pdfParseError && (
+                <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex gap-2">
+                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-medium">PDF could not be parsed</p>
+                    <p className="mt-0.5">{pdfParseError}</p>
+                  </div>
+                </div>
+              )}
+
+              {fileName && !pdfParsing && (
                 <p className="text-sm text-muted-foreground">
-                  Selected: <span className="font-medium">{fileName}</span> (
-                  {rawRows.length} rows)
+                  Selected: <span className="font-medium">{fileName}</span> ({rawRows.length} rows)
                 </p>
               )}
             </div>
@@ -477,140 +634,82 @@ export function ImportModal({
 
           {/* ── Step 1: Map Columns ── */}
           {step === 1 && (
-            <div className="space-y-4">
-              {/* Vendor invoice auto-detection banner */}
+            <div className="space-y-3">
               {vendorInvoiceInfo && (
                 <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
-                  <FileSpreadsheet className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <FileSpreadsheet className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
                   <span className="text-blue-800">{vendorInvoiceInfo}</span>
                 </div>
               )}
 
-              {/* Saved mappings */}
-              <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/30 rounded-lg">
-                <span className="text-sm font-medium">Saved Mappings:</span>
-                <select
-                  className="border rounded px-2 py-1 text-sm bg-white"
-                  value={selectedMappingId}
-                  onChange={(e) => {
-                    if (e.target.value) loadSavedMapping(e.target.value);
-                    else {
-                      setSelectedMappingId("");
-                      setSaveName("");
-                    }
-                  }}
-                >
-                  <option value="">-- Select --</option>
-                  {savedMappings.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-                {selectedMappingId && (
-                  <button
-                    onClick={() => deleteMapping(selectedMappingId)}
-                    className="text-red-500 hover:text-red-700"
-                    title="Delete mapping"
+              {/* ── Saved mapping templates ── */}
+              <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/30 border rounded-lg">
+                <BookMarked className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-sm font-medium text-muted-foreground mr-1">Templates:</span>
+
+                {/* Apply saved mapping */}
+                <div className="flex items-center gap-1 flex-1 min-w-0">
+                  <select
+                    className="border rounded px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-400 flex-1 min-w-0"
+                    value={selectedSavedId}
+                    onChange={e => applyTemplate(e.target.value)}
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                )}
-                <div className="flex-1" />
-                <Input
-                  placeholder="Mapping name..."
-                  value={saveName}
-                  onChange={(e) => setSaveName(e.target.value)}
-                  className="w-48 h-8 text-sm"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={saveMapping}
-                  disabled={!saveName.trim() || saveLoading}
-                >
-                  {saveLoading ? (
-                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                  ) : (
-                    <Save className="h-3 w-3 mr-1" />
+                    <option value="">— Load a saved template —</option>
+                    {savedMappings.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                  {selectedSavedId && (
+                    <button
+                      onClick={() => deleteSavedMapping(selectedSavedId)}
+                      className="p-1 text-red-400 hover:text-red-600 shrink-0"
+                      title="Delete this template"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   )}
-                  Save
-                </Button>
+                </div>
+
+                <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
+
+                {/* Save current mapping */}
+                <div className="flex items-center gap-1">
+                  <Input
+                    placeholder="Save as…"
+                    value={saveAsName}
+                    onChange={e => setSaveAsName(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") saveCurrentMapping(); }}
+                    className="h-8 text-sm w-36"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={saveCurrentMapping}
+                    disabled={!saveAsName.trim() || savingMapping}
+                    className="h-8 px-2"
+                    title="Save current mapping as template"
+                  >
+                    {savingMapping ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  </Button>
+                </div>
               </div>
 
-              {/* Required fields status */}
               {missingRequired.length > 0 && (
                 <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm">
-                  <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <span className="font-medium">
-                      Missing required mappings:{" "}
-                    </span>
+                  <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                  <span>
+                    <span className="font-medium">Required fields not mapped: </span>
                     {missingRequired.map((f) => f.label).join(", ")}
-                  </div>
+                  </span>
                 </div>
               )}
-
-              {/* Mapping table — DB fields on left, Excel columns on right */}
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/30 text-left">
-                      <th className="px-4 py-2 font-medium w-8">#</th>
-                      <th className="px-4 py-2 font-medium">
-                        System Field
-                      </th>
-                      <th className="px-4 py-2 font-medium">
-                        Excel Column
-                      </th>
-                      <th className="px-4 py-2 font-medium w-32">
-                        Sample Value
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {fields.map((field, idx) => {
-                      const selectedCol = mapping[field.key] || "";
-                      const sampleValue = selectedCol && rawRows.length > 0
-                        ? String(rawRows[0][selectedCol] ?? "")
-                        : "";
-                      return (
-                        <tr key={field.key} className={`border-t ${field.required && !selectedCol ? "bg-amber-50/50" : ""}`}>
-                          <td className="px-4 py-2 text-xs text-muted-foreground">{idx + 1}</td>
-                          <td className="px-4 py-2">
-                            <span className="font-medium">{field.label}</span>
-                            {field.required && (
-                              <span className="ml-1 text-xs text-red-500 font-semibold">*</span>
-                            )}
-                            {!field.required && (
-                              <span className="ml-1 text-xs text-muted-foreground">(optional)</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2">
-                            <select
-                              className="border rounded px-2 py-1 text-sm bg-white w-full"
-                              value={selectedCol}
-                              onChange={(e) =>
-                                updateMapping(field.key, e.target.value)
-                              }
-                            >
-                              <option value="">-- Skip --</option>
-                              {headers.map((h) => (
-                                <option key={h} value={h}>
-                                  {h}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="px-4 py-2 text-xs text-muted-foreground truncate max-w-[150px]">
-                            {sampleValue}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <MappingTable
+                fields={fields}
+                headers={headers}
+                mapping={mapping}
+                rawRows={rawRows}
+                onUpdate={updateMapping}
+              />
             </div>
           )}
 

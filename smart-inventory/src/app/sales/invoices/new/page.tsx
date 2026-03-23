@@ -296,9 +296,10 @@ function NewSalesInvoiceContent() {
         }
 
         if (invoice.items && invoice.items.length > 0) {
-          setInvoiceItems(invoice.items.map((item: { id?: string; itemId?: string; item?: { id: string; unit?: string }; quantity: number; rate: number; taxRate: number; taxAmount: number; amount: number; discountPercent?: number }) => ({
+          setInvoiceItems(invoice.items.map((item: { id?: string; itemId?: string; itemName?: string | null; item?: { id: string; name?: string; unit?: string }; quantity: number; rate: number; taxRate: number; taxAmount: number; amount: number; discountPercent?: number }) => ({
             id: item.id || generateId(),
             itemId: item.itemId || item.item?.id || "",
+            itemName: item.itemName || item.item?.name || null,
             quantity: Number(item.quantity),
             unit: item.item?.unit,
             uomFactor: 1,
@@ -448,8 +449,12 @@ function NewSalesInvoiceContent() {
       let discountPercent = 0;
       const effectiveDiscounts = localDiscounts || rateSheet.inclusionDiscounts;
 
-      if (useInclusionModel && effectiveDiscounts) {
-        discountPercent = resolveInclusionDiscount(item.id, item.brandId, item.subBrandId, effectiveDiscounts);
+      if (useInclusionModel) {
+        const overrideDiscount = effectiveDiscounts
+          ? resolveInclusionDiscount(item.id, item.brandId, item.subBrandId, effectiveDiscounts)
+          : 0;
+        // Fall back to rate sheet's default discount if no specific override found
+        discountPercent = overrideDiscount > 0 ? overrideDiscount : (Number(rateSheet.discountPercent) || 0);
       } else {
         const excludedItemIds = rateSheet.excludedItemIds || [];
         const excludedBrandIds = rateSheet.excludedBrandIds || [];

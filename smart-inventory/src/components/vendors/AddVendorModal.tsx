@@ -5,21 +5,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X } from "lucide-react";
 import { getStateFromGSTIN } from "@/lib/gst-state-codes";
+import { normalizeGstin, validateGstin } from "@/lib/gst-validation";
 import { GstinVerifyButton, type GstinVerifyResult } from "@/components/ui/GstinVerifyButton";
 
 interface AddVendorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (vendor: { id: string }) => void;
+  prefillName?: string;
 }
 
 export function AddVendorModal({
   isOpen,
   onClose,
   onSuccess,
+  prefillName,
 }: AddVendorModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gstinWarning, setGstinWarning] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
@@ -60,10 +64,11 @@ export function AddVendorModal({
       }
 
       // Success
-      onSuccess?.();
+      onSuccess?.(data);
       onClose();
 
       // Reset form
+      setGstinWarning(null);
       setFormData({
         name: "",
         email: "",
@@ -90,14 +95,16 @@ export function AddVendorModal({
     const { name, value } = e.target;
 
     if (name === "gstin") {
-      const upperValue = value.toUpperCase();
-      const stateInfo = getStateFromGSTIN(upperValue);
+      const normalized = normalizeGstin(value);
+      const stateInfo = getStateFromGSTIN(normalized);
+      const validation = normalized.length > 0 ? validateGstin(normalized) : null;
+      setGstinWarning(validation && !validation.valid ? (validation.error ?? null) : null);
       setFormData((prev) => ({
         ...prev,
-        gstin: upperValue,
+        gstin: normalized,
         ...(stateInfo
           ? { state: stateInfo.stateName }
-          : upperValue.length < 2
+          : normalized.length < 2
             ? { state: "" }
             : {}),
       }));
@@ -119,6 +126,13 @@ export function AddVendorModal({
       pincode: prev.pincode.trim() ? prev.pincode : result.pincode,
     }));
   };
+
+  // Pre-fill name when redirected from an invoice page
+  useEffect(() => {
+    if (isOpen && prefillName) {
+      setFormData((prev) => ({ ...prev, name: prefillName }));
+    }
+  }, [isOpen, prefillName]);
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -222,7 +236,7 @@ export function AddVendorModal({
                   placeholder="+91 98765 43210"
                 />
               </div>
-              <div>
+              <div className="md:col-span-2">
                 <label
                   htmlFor="vendor-gstin"
                   className="block text-sm font-medium text-gray-700 mb-1"
@@ -238,16 +252,16 @@ export function AddVendorModal({
                     onChange={handleChange}
                     maxLength={15}
                     placeholder="22AAAAA0000A1Z5"
-                    className="flex-1 uppercase"
+                    className="flex-1 font-mono uppercase"
                   />
                   <GstinVerifyButton
                     gstin={formData.gstin}
                     onVerified={handleGstinVerified}
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  15 characters (optional)
-                </p>
+                {gstinWarning && (
+                  <p className="text-xs text-amber-600 mt-1">{gstinWarning}</p>
+                )}
               </div>
               <div>
                 <label
@@ -262,12 +276,25 @@ export function AddVendorModal({
                   value={formData.gstin.length >= 12 ? formData.gstin.substring(2, 12) : ""}
                   readOnly
                   placeholder="Auto-filled from GSTIN"
-                  className="bg-gray-100 uppercase"
+                  className="bg-gray-50 font-mono uppercase"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  {formData.gstin.length >= 12
-                    ? "Auto-filled from GSTIN"
-                    : "Enter GSTIN to auto-fill"}
+                  {formData.gstin.length >= 12 ? "Auto-filled from GSTIN" : "Enter GSTIN to auto-fill"}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  State Code
+                </label>
+                <Input
+                  type="text"
+                  value={formData.gstin.length >= 2 ? formData.gstin.substring(0, 2) : ""}
+                  readOnly
+                  placeholder="Auto-filled from GSTIN"
+                  className="bg-gray-50 font-mono"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {formData.gstin.length >= 2 ? "Auto-filled from GSTIN" : "Enter GSTIN to auto-fill"}
                 </p>
               </div>
             </div>
@@ -410,7 +437,7 @@ export function AddVendorModal({
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
+              className="bg-primary hover:bg-primary/90 text-white"
             >
               {isSubmitting ? "Creating..." : "Create Vendor"}
             </Button>

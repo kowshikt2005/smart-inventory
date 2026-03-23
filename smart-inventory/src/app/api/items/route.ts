@@ -86,7 +86,6 @@ export async function POST(request: Request) {
     const missing: string[] = [];
     if (!body.name) missing.push('Item Name');
     if (!body.brandId) missing.push('Brand');
-    if (!body.subBrandId) missing.push('Sub-brand');
 
     if (missing.length > 0) {
       return NextResponse.json(
@@ -115,7 +114,7 @@ export async function POST(request: Request) {
           name: body.name,
           description: body.description || null,
           brandId: body.brandId,
-          subBrandId: body.subBrandId,
+          subBrandId: body.subBrandId || null,
           hsnCode: body.hsnCode || null,
           gstRate: body.gstRate || 0,
           purchasePrice: body.purchasePrice || 0,
