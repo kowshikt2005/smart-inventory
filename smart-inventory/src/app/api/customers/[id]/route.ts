@@ -77,6 +77,17 @@ export async function PUT(
       }
     }
 
+    // Validate financial fields
+    if (body.creditLimit !== undefined && Number(body.creditLimit) < 0) {
+      return NextResponse.json({ error: 'Credit limit cannot be negative' }, { status: 400 });
+    }
+    if (body.creditDays !== undefined && Number(body.creditDays) < 0) {
+      return NextResponse.json({ error: 'Credit days cannot be negative' }, { status: 400 });
+    }
+    if (body.openingBalance !== undefined && Number(body.openingBalance) < 0) {
+      return NextResponse.json({ error: 'Opening balance cannot be negative' }, { status: 400 });
+    }
+
     // Build update data
     const updateData: any = {};
 

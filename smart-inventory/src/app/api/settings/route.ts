@@ -39,6 +39,24 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Allowlist of valid setting keys
+const ALLOWED_SETTING_KEYS = new Set([
+  'negative_billing',
+  'invoice_roundoff_mode',
+  'stock_scan_time',
+  'company_name',
+  'company_address',
+  'company_city',
+  'company_state',
+  'company_pincode',
+  'company_phone',
+  'company_email',
+  'company_gstin',
+  'company_pan',
+  'company_msme',
+  'company_fssai',
+]);
+
 // PUT /api/settings - Update a setting
 export async function PUT(request: NextRequest) {
   try {
@@ -51,6 +69,13 @@ export async function PUT(request: NextRequest) {
     if (!key || value === undefined) {
       return NextResponse.json(
         { error: "Key and value are required" },
+        { status: 400 }
+      );
+    }
+
+    if (!ALLOWED_SETTING_KEYS.has(key)) {
+      return NextResponse.json(
+        { error: `Invalid setting key: '${key}'` },
         { status: 400 }
       );
     }

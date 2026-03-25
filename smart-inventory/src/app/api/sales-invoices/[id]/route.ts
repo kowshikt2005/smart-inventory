@@ -146,6 +146,20 @@ export async function PUT(
 
     // If items are provided, do a full update
     if (body.items && Array.isArray(body.items) && body.items.length > 0) {
+      // Validate item values
+      for (const item of body.items) {
+        const dp = Number(item.discountPercent || 0);
+        if (dp < 0 || dp > 100) {
+          return NextResponse.json({ error: 'Discount percent must be between 0 and 100' }, { status: 400 });
+        }
+        if (Number(item.rate) < 0) {
+          return NextResponse.json({ error: 'Item rate cannot be negative' }, { status: 400 });
+        }
+        if (Number(item.quantity) <= 0) {
+          return NextResponse.json({ error: 'Item quantity must be greater than 0' }, { status: 400 });
+        }
+      }
+
       // Reject duplicate itemIds
       const incomingItemIds = body.items.map((i: { itemId: string }) => i.itemId).filter(Boolean);
       if (new Set(incomingItemIds).size !== incomingItemIds.length) {

@@ -197,7 +197,7 @@ export const Sidebar = memo(function Sidebar() {
       <div className="flex items-center justify-center px-3 py-4 border-b border-white/[0.12]">
         <div className="w-full rounded-lg bg-white p-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.jpg" alt="Sri Balaji Enterprises" className="w-full h-auto object-contain" />
+          <img src="/logo-sbe.jpg" alt="Sri Balaji Enterprises" className="w-full h-auto object-contain" />
         </div>
       </div>
 
@@ -367,46 +367,9 @@ export const Sidebar = memo(function Sidebar() {
       </nav>
 
       {/* Footer - KSolutions branding */}
-      <div className="border-t border-white/[0.12] px-3 py-4 bg-black/20 flex flex-col items-center gap-2">
-        {/* Circuit-board K logo */}
-        <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Outer ring */}
-          <circle cx="26" cy="26" r="22" stroke="#29B6CF" strokeWidth="1.4" strokeDasharray="3 1.5" opacity="0.7"/>
-          {/* Top arm */}
-          <line x1="26" y1="4" x2="26" y2="14" stroke="#29B6CF" strokeWidth="1.6"/>
-          <line x1="26" y1="9" x2="31" y2="9" stroke="#29B6CF" strokeWidth="1.2"/>
-          <circle cx="31" cy="9" r="1.8" fill="#29B6CF"/>
-          <circle cx="26" cy="4" r="1.8" fill="#29B6CF"/>
-          {/* Bottom arm */}
-          <line x1="26" y1="48" x2="26" y2="38" stroke="#4CAF75" strokeWidth="1.6"/>
-          <line x1="26" y1="43" x2="21" y2="43" stroke="#4CAF75" strokeWidth="1.2"/>
-          <circle cx="21" cy="43" r="1.8" fill="#4CAF75"/>
-          <circle cx="26" cy="48" r="1.8" fill="#4CAF75"/>
-          {/* Left arm */}
-          <line x1="4" y1="26" x2="14" y2="26" stroke="#29B6CF" strokeWidth="1.6"/>
-          <line x1="9" y1="26" x2="9" y2="21" stroke="#29B6CF" strokeWidth="1.2"/>
-          <circle cx="9" cy="21" r="1.8" fill="#29B6CF"/>
-          <circle cx="4" cy="26" r="1.8" fill="#29B6CF"/>
-          {/* Right arm */}
-          <line x1="48" y1="26" x2="38" y2="26" stroke="#4CAF75" strokeWidth="1.6"/>
-          <line x1="43" y1="26" x2="43" y2="31" stroke="#4CAF75" strokeWidth="1.2"/>
-          <circle cx="43" cy="31" r="1.8" fill="#4CAF75"/>
-          <circle cx="48" cy="26" r="1.8" fill="#4CAF75"/>
-          {/* Inner ring */}
-          <circle cx="26" cy="26" r="11" fill="#1A1740" stroke="#29B6CF" strokeWidth="1.6"/>
-          {/* K letter */}
-          <text x="26" y="30.5" textAnchor="middle" fill="white" fontSize="11" fontWeight="800" fontFamily="Arial, sans-serif">K</text>
-        </svg>
-
-        {/* KSOLUTIONS text */}
-        <p className="text-[13px] font-black tracking-[0.22em] text-white leading-none">
-          KSOLUTIONS
-        </p>
-
-        {/* Tagline */}
-        <p className="text-[8.5px] font-semibold tracking-[0.12em] text-amber-400 text-center leading-tight opacity-90">
-          YOUR GATEWAY TO<br />DIGITAL EXCELLENCE
-        </p>
+      <div className="border-t border-white/[0.12] bg-black/20 flex items-center justify-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo-ksolutions.jpg" alt="KSolutions - Your Gateway to Digital Excellence" className="w-full h-auto object-cover" />
       </div>
     </aside>
   );

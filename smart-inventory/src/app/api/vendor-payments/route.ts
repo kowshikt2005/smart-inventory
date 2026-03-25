@@ -108,6 +108,9 @@ export async function GET(request: Request) {
 // POST /api/vendor-payments - Create a new vendor payment
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('purchases_payments', 'edit');
+    if (error) return error;
+
     const body = await request.json();
 
     // Validate required fields

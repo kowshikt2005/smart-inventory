@@ -4,9 +4,23 @@ import { PrismaClient } from '@/generated/prisma';
 export const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 /**
+ * Acquire a named MySQL lock to prevent race conditions in number generation.
+ */
+async function acquireNumberLock(db: PrismaClient, lockName: string): Promise<void> {
+  const result = await db.$queryRawUnsafe<{ lock_result: number }[]>(
+    `SELECT GET_LOCK(?, 10) as lock_result`, lockName
+  );
+  if (!result[0] || result[0].lock_result !== 1) {
+    throw new Error(`Failed to acquire lock for ${lockName} generation`);
+  }
+}
+
+/**
  * Generate the next purchase order number in sequence (PO-0001, PO-0002, etc.)
  */
 export async function generatePurchaseOrderNumber(db: PrismaClient): Promise<string> {
+  await acquireNumberLock(db, 'po_number_lock');
+
   const lastOrder = await db.purchaseOrder.findFirst({
     orderBy: { orderNumber: 'desc' },
     select: { orderNumber: true },
@@ -27,6 +41,8 @@ export async function generatePurchaseOrderNumber(db: PrismaClient): Promise<str
  * Generate the next purchase invoice number in sequence (PI-0001, PI-0002, etc.)
  */
 export async function generatePurchaseInvoiceNumber(db: PrismaClient): Promise<string> {
+  await acquireNumberLock(db, 'pi_number_lock');
+
   const lastInvoice = await db.purchaseInvoice.findFirst({
     orderBy: { invoiceNumber: 'desc' },
     select: { invoiceNumber: true },
@@ -47,6 +63,8 @@ export async function generatePurchaseInvoiceNumber(db: PrismaClient): Promise<s
  * Generate the next vendor payment number in sequence (VP-0001, VP-0002, etc.)
  */
 export async function generateVendorPaymentNumber(db: PrismaClient): Promise<string> {
+  await acquireNumberLock(db, 'vp_number_lock');
+
   const lastPayment = await db.vendorPayment.findFirst({
     orderBy: { paymentNumber: 'desc' },
     select: { paymentNumber: true },
@@ -67,6 +85,8 @@ export async function generateVendorPaymentNumber(db: PrismaClient): Promise<str
  * Generate the next purchase return number in sequence (PR-0001, PR-0002, etc.)
  */
 export async function generatePurchaseReturnNumber(db: PrismaClient): Promise<string> {
+  await acquireNumberLock(db, 'pr_number_lock');
+
   const lastReturn = await db.purchaseReturn.findFirst({
     orderBy: { returnNumber: 'desc' },
     select: { returnNumber: true },

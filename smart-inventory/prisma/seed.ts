@@ -56,21 +56,18 @@ async function main() {
   console.log('⚙️  Creating app settings...');
   await prisma.appSetting.createMany({
     data: [
-      {
-        key: 'negative_billing',
-        value: 'false',
-        label: 'Negative Billing',
-      },
-      {
-        key: 'invoice_roundoff_mode',
-        value: 'MANUAL',
-        label: 'Invoice Round-off Mode',
-      },
-      {
-        key: 'company_gstin',
-        value: '27AABCM9012F1Z5',
-        label: 'Company GSTIN',
-      },
+      { key: 'negative_billing', value: 'false', label: 'Negative Billing' },
+      { key: 'invoice_roundoff_mode', value: 'MANUAL', label: 'Invoice Round-off Mode' },
+      { key: 'company_name', value: 'Sri Balaji Enterprises', label: 'Company Name' },
+      { key: 'company_gstin', value: '37AABCS1234F1Z5', label: 'Company GSTIN' },
+      { key: 'company_pan', value: 'AABCS1234F', label: 'Company PAN' },
+      { key: 'company_address', value: '12-1-45, Suryapet Road, Kodad', label: 'Company Address' },
+      { key: 'company_city', value: 'Kodad', label: 'Company City' },
+      { key: 'company_state', value: 'Telangana', label: 'Company State' },
+      { key: 'company_pincode', value: '508206', label: 'Company Pincode' },
+      { key: 'company_phone', value: '+91-8639347263', label: 'Company Phone' },
+      { key: 'company_email', value: 'info@sbe.in', label: 'Company Email' },
+      { key: 'company_msme', value: '', label: 'Company MSME' },
     ],
   });
 
@@ -1060,7 +1057,7 @@ async function main() {
   await prisma.vendorLedger.create({
     data: {
       vendorId: vendors[0].id,
-      date: new Date('2024-12-20'),
+      date: new Date('2025-12-20'),
       description: 'Purchase Invoice PI-0001',
       type: 'PURCHASE_INVOICE',
       debit: 0,
@@ -3202,6 +3199,314 @@ async function main() {
 
   console.log('🧾 GST test invoices seeded (2 sales + 2 purchase for March 2026)');
 
+  // ============================================
+  // ADDITIONAL OUTSTANDING INVOICES — varied overdue scenarios
+  // ============================================
+  console.log('\n📄 Creating additional outstanding invoices...');
+
+  // INV-0008: Retail Hub — 60+ days overdue, completely unpaid (old invoice)
+  const invoice8 = await prisma.invoice.create({
+    data: {
+      invoiceNumber: 'INV-0008',
+      invoiceDate: new Date('2026-01-10'),
+      customerId: customers[2].id, // Retail Hub, Chennai
+      subtotal: 135800,
+      cgst: 12222,
+      sgst: 12222,
+      taxAmount: 24444,
+      roundOff: 0,
+      totalAmount: 160244,
+      paidAmount: 0,
+      balanceAmount: 160244,
+      paymentStatus: 'PENDING',
+      dueDate: new Date('2026-02-09'),
+      notes: 'iPhone 14 bulk — unpaid, 45+ days overdue',
+      items: {
+        create: [
+          {
+            itemId: items[4].id, // iPhone 14
+            itemName: items[4].name,
+            quantity: 2,
+            rate: 67900,
+            taxRate: 18,
+            taxAmount: 24444,
+            amount: 135800,
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.customerLedger.create({
+    data: {
+      customerId: customers[2].id,
+      date: new Date('2026-01-10'),
+      description: 'Sales Invoice INV-0008',
+      type: 'SALES_INVOICE',
+      debit: 160244,
+      credit: 0,
+      balance: 217109 + 160244,
+      referenceType: 'sales_invoice',
+      referenceId: invoice8.id,
+    },
+  });
+
+  // INV-0009: Smart Electronics — partially paid, 20 days overdue
+  const invoice9 = await prisma.invoice.create({
+    data: {
+      invoiceNumber: 'INV-0009',
+      invoiceDate: new Date('2026-02-15'),
+      customerId: customers[3].id, // Smart Electronics, Ahmedabad
+      subtotal: 54999,
+      cgst: 4950,
+      sgst: 4950,
+      taxAmount: 9900,
+      roundOff: -1,
+      totalAmount: 64898,
+      paidAmount: 30000,
+      balanceAmount: 34898,
+      paymentStatus: 'PARTIAL',
+      dueDate: new Date('2026-03-17'),
+      notes: 'Dell Inspiron — partial payment received',
+      items: {
+        create: [
+          {
+            itemId: items[10].id, // Dell Inspiron
+            itemName: items[10].name,
+            quantity: 1,
+            rate: 54999,
+            taxRate: 18,
+            taxAmount: 9900,
+            amount: 54999,
+          },
+        ],
+      },
+    },
+  });
+
+  // Payment for INV-0009
+  const payment5 = await prisma.payment.create({
+    data: {
+      paymentNumber: 'PAY-0005',
+      paymentDate: new Date('2026-02-20'),
+      customerId: customers[3].id,
+      invoiceId: invoice9.id,
+      amount: 30000,
+      mode: 'UPI',
+      referenceNumber: 'UPI2026022015432',
+      bankAccountId: iciciAccount.id,
+      notes: 'Partial payment for INV-0009',
+      allocations: {
+        create: [{ invoiceId: invoice9.id, amount: 30000 }],
+      },
+    },
+  });
+
+  await prisma.bankLedger.create({
+    data: {
+      bankAccountId: iciciAccount.id,
+      date: new Date('2026-02-20'),
+      description: 'Sales Receipt PAY-0005 from Smart Electronics',
+      type: 'SALES_RECEIPT',
+      debit: 0,
+      credit: 30000,
+      balance: 1662213 + 30000,
+      referenceType: 'sales_receipt',
+      referenceId: payment5.id,
+    },
+  });
+  await prisma.bankAccount.update({
+    where: { id: iciciAccount.id },
+    data: { currentBalance: { increment: 30000 } },
+  });
+
+  await prisma.customerLedger.create({
+    data: {
+      customerId: customers[3].id,
+      date: new Date('2026-02-15'),
+      description: 'Sales Invoice INV-0009',
+      type: 'SALES_INVOICE',
+      debit: 64898,
+      credit: 0,
+      balance: 106812 + 64898,
+      referenceType: 'sales_invoice',
+      referenceId: invoice9.id,
+    },
+  });
+  await prisma.customerLedger.create({
+    data: {
+      customerId: customers[3].id,
+      date: new Date('2026-02-20'),
+      description: 'Payment received PAY-0005',
+      type: 'SALES_RECEIPT',
+      debit: 0,
+      credit: 30000,
+      balance: 106812 + 64898 - 30000,
+      referenceType: 'sales_receipt',
+      referenceId: payment5.id,
+    },
+  });
+
+  // INV-0010: Digital World — recent invoice, not yet due
+  const invoice10 = await prisma.invoice.create({
+    data: {
+      invoiceNumber: 'INV-0010',
+      invoiceDate: new Date('2026-03-18'),
+      customerId: customers[1].id, // Digital World, Bangalore
+      subtotal: 231800,
+      cgst: 20862,
+      sgst: 20862,
+      taxAmount: 41724,
+      roundOff: 0,
+      totalAmount: 273524,
+      paidAmount: 0,
+      balanceAmount: 273524,
+      paymentStatus: 'PENDING',
+      dueDate: new Date('2026-05-02'),
+      notes: 'MacBook Air order — due in 38 days',
+      items: {
+        create: [
+          {
+            itemId: items[6].id, // MacBook Air
+            itemName: items[6].name,
+            quantity: 2,
+            rate: 115900,
+            taxRate: 18,
+            taxAmount: 41724,
+            amount: 231800,
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.customerLedger.create({
+    data: {
+      customerId: customers[1].id,
+      date: new Date('2026-03-18'),
+      description: 'Sales Invoice INV-0010',
+      type: 'SALES_INVOICE',
+      debit: 273524,
+      credit: 0,
+      balance: 85000 + 273524,
+      referenceType: 'sales_invoice',
+      referenceId: invoice10.id,
+    },
+  });
+
+  // INV-0011: Tech Solutions — another recent one, 7 days overdue
+  const invoice11 = await prisma.invoice.create({
+    data: {
+      invoiceNumber: 'INV-0011',
+      invoiceDate: new Date('2026-02-25'),
+      customerId: customers[0].id, // Tech Solutions, Mumbai
+      subtotal: 129000,
+      cgst: 11610,
+      sgst: 11610,
+      taxAmount: 23220,
+      roundOff: 0,
+      totalAmount: 152220,
+      paidAmount: 50000,
+      balanceAmount: 102220,
+      paymentStatus: 'PARTIAL',
+      dueDate: new Date('2026-03-27'),
+      notes: 'Lenovo ThinkPad — partial payment, recently overdue',
+      items: {
+        create: [
+          {
+            itemId: items[7].id, // ThinkPad X1
+            itemName: items[7].name,
+            quantity: 1,
+            rate: 129000,
+            taxRate: 18,
+            taxAmount: 23220,
+            amount: 129000,
+          },
+        ],
+      },
+    },
+  });
+
+  const payment6 = await prisma.payment.create({
+    data: {
+      paymentNumber: 'PAY-0006',
+      paymentDate: new Date('2026-03-01'),
+      customerId: customers[0].id,
+      amount: 50000,
+      mode: 'BANK_TRANSFER',
+      referenceNumber: 'NEFT20260301009',
+      bankAccountId: hdfcAccount.id,
+      notes: 'Advance against INV-0011',
+      invoiceId: invoice11.id,
+      allocations: {
+        create: [{ invoiceId: invoice11.id, amount: 50000 }],
+      },
+    },
+  });
+
+  await prisma.bankLedger.create({
+    data: {
+      bankAccountId: hdfcAccount.id,
+      date: new Date('2026-03-01'),
+      description: 'Sales Receipt PAY-0006 from Tech Solutions Pvt Ltd',
+      type: 'SALES_RECEIPT',
+      debit: 0,
+      credit: 50000,
+      balance: 2100000 + 50000,
+      referenceType: 'sales_receipt',
+      referenceId: payment6.id,
+    },
+  });
+  await prisma.bankAccount.update({
+    where: { id: hdfcAccount.id },
+    data: { currentBalance: { increment: 50000 } },
+  });
+
+  await prisma.customerLedger.create({
+    data: {
+      customerId: customers[0].id,
+      date: new Date('2026-02-25'),
+      description: 'Sales Invoice INV-0011',
+      type: 'SALES_INVOICE',
+      debit: 152220,
+      credit: 0,
+      balance: 178339 + 118000 + 152220,
+      referenceType: 'sales_invoice',
+      referenceId: invoice11.id,
+    },
+  });
+  await prisma.customerLedger.create({
+    data: {
+      customerId: customers[0].id,
+      date: new Date('2026-03-01'),
+      description: 'Payment received PAY-0006',
+      type: 'SALES_RECEIPT',
+      debit: 0,
+      credit: 50000,
+      balance: 178339 + 118000 + 152220 - 50000,
+      referenceType: 'sales_receipt',
+      referenceId: payment6.id,
+    },
+  });
+
+  console.log('📄 Additional outstanding invoices created (INV-0008 to INV-0011)');
+
+  // Outstanding summary after seeding:
+  // ┌─────────────────────┬───────────┬──────────────┬────────────────┬─────────────┐
+  // │ Customer            │ Invoice   │ Outstanding  │ Due Date       │ Status      │
+  // ├─────────────────────┼───────────┼──────────────┼────────────────┼─────────────┤
+  // │ Tech Solutions      │ INV-0001  │ ₹178,339     │ 2026-02-21     │ 32d overdue │
+  // │ Tech Solutions      │ INV-0006  │ ₹118,000     │ 2026-04-04     │ Pending     │
+  // │ Tech Solutions      │ INV-0011  │ ₹102,220     │ 2026-03-27     │ Partial     │
+  // │ Digital World       │ INV-0010  │ ₹273,524     │ 2026-05-02     │ Not yet due │
+  // │ Retail Hub          │ INV-0003  │ ₹217,109     │ 2026-02-26     │ 27d overdue │
+  // │ Retail Hub          │ INV-0008  │ ₹160,244     │ 2026-02-09     │ 44d overdue │
+  // │ Smart Electronics   │ INV-0004  │ ₹106,812     │ 2026-03-01     │ 24d overdue │
+  // │ Smart Electronics   │ INV-0009  │ ₹34,898      │ 2026-03-17     │ 8d overdue  │
+  // ├─────────────────────┼───────────┼──────────────┼────────────────┼─────────────┤
+  // │ TOTAL               │ 8 inv     │ ₹1,191,146   │                │             │
+  // └─────────────────────┴───────────┴──────────────┴────────────────┴─────────────┘
+
   // ── Email Recipients (for Email Report feature) ──────────────
   await prisma.emailRecipient.createMany({
     data: [
@@ -3210,6 +3515,14 @@ async function main() {
     ],
   });
   console.log('📧 Email recipients seeded (2)');
+
+  console.log('\n📊 Outstanding Report (as of today):');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('  Tech Solutions:    ₹398,559 (3 invoices — INV-0001, INV-0006, INV-0011)');
+  console.log('  Digital World:     ₹273,524 (1 invoice  — INV-0010, not yet due)');
+  console.log('  Retail Hub:        ₹377,353 (2 invoices — INV-0003, INV-0008, both overdue)');
+  console.log('  Smart Electronics: ₹141,710 (2 invoices — INV-0004, INV-0009)');
+  console.log('  TOTAL:             ₹1,191,146 across 8 outstanding invoices');
 
   console.log('\n🔐 Test Login Credentials:');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

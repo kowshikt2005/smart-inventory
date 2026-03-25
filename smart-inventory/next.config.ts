@@ -101,7 +101,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
 
   // pdf2json uses Node.js Buffer APIs — must stay server-side only
-  serverExternalPackages: ['pdf2json'],
+  serverExternalPackages: ['pdf2json', 'sharp'],
 
   generateBuildId: async () => {
     return `build-${Date.now()}`;

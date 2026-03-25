@@ -38,7 +38,7 @@ export async function GET(request: Request) {
         },
         include: {
           vendor: {
-            select: { id: true, name: true, creditDays: true },
+            select: { id: true, name: true, creditDays: true, phone: true },
           },
         },
         orderBy: { date: 'desc' },
@@ -76,6 +76,7 @@ export async function GET(request: Request) {
             vendorId: inv.vendor?.id || '',
             vendorName: inv.vendor?.name || inv.vendorName || 'Unknown Vendor',
             creditDays: inv.vendor?.creditDays ?? 30,
+            partyPhone: inv.vendor?.phone || '',
             // Use common field names for UI
             partyId: inv.vendor?.id || '',
             partyName: inv.vendor?.name || inv.vendorName || 'Unknown Vendor',
@@ -103,7 +104,7 @@ export async function GET(request: Request) {
       },
       include: {
         customer: {
-          select: { id: true, name: true, creditDays: true },
+          select: { id: true, name: true, creditDays: true, phone: true },
         },
       },
       orderBy: { invoiceDate: 'desc' },
@@ -141,6 +142,7 @@ export async function GET(request: Request) {
           customerId: inv.customer?.id || '',
           customerName: inv.customer?.name || inv.customerName || 'Unknown Customer',
           creditDays: inv.customer?.creditDays ?? 30,
+          partyPhone: inv.customer?.phone || '',
           // Use common field names for UI
           partyId: inv.customer?.id || '',
           partyName: inv.customer?.name || inv.customerName || 'Unknown Customer',

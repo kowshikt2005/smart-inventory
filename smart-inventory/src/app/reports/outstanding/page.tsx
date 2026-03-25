@@ -17,6 +17,7 @@ import { Loader2, ChevronDown, X, Calendar, Eye } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
 import { exportToExcel, exportToPDF, generatePDFBase64, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
 import { EmailReportDialog } from "@/components/reports/EmailReportDialog";
+import { WhatsAppReportDialog } from "@/components/reports/WhatsAppReportDialog";
 
 interface OutstandingInvoice {
   invoiceId: string;
@@ -30,6 +31,7 @@ interface OutstandingInvoice {
   status: string;
   partyId: string;
   partyName: string;
+  partyPhone?: string;
   creditDays: number;
   // Customer-specific
   customerId?: string;
@@ -387,6 +389,13 @@ export default function OutstandingReportPage() {
               onSendEmail={handleEmailSend}
               disabled={isLoading || invoices.length === 0}
             />
+            {tab === "customer" && (
+              <WhatsAppReportDialog
+                invoices={invoices}
+                companyName="Sri Balaji Enterprises"
+                disabled={isLoading || invoices.length === 0}
+              />
+            )}
           </div>
         </div>
 

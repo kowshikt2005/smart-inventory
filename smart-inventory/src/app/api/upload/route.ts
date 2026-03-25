@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import path from 'path';
+import { checkAuth } from '@/lib/api-auth';
 
 const ALLOWED_TYPES: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -14,6 +15,8 @@ const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
 export async function POST(request: Request) {
   try {
+    const { error } = await checkAuth();
+    if (error) return error;
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
 

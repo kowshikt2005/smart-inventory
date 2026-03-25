@@ -41,6 +41,20 @@ export async function POST(request: Request) {
     });
     const effectiveRoundOffMode = normalizeRoundOffMode(body.roundOffMode || roundOffSetting?.value);
 
+    // Validate discount bounds on all items
+    for (const item of items) {
+      const dp = Number(item.discountPercent || 0);
+      if (dp < 0 || dp > 100) {
+        return NextResponse.json({ error: 'Discount percent must be between 0 and 100' }, { status: 400 });
+      }
+      if (Number(item.rate) < 0) {
+        return NextResponse.json({ error: 'Item rate cannot be negative' }, { status: 400 });
+      }
+      if (Number(item.quantity) < 0) {
+        return NextResponse.json({ error: 'Item quantity cannot be negative' }, { status: 400 });
+      }
+    }
+
     const validItems: Array<{ itemId: string; quantity: number; rate: number; taxRate: number; discountPercent: number; amount: number; taxAmount: number }> = items.filter(
       (item: { itemId?: string; quantity?: number; rate?: number }) => item.itemId && Number(item.quantity) > 0 && Number(item.rate) >= 0
     ).map((item: { itemId: string; quantity: number; rate: number; taxRate?: number; discountPercent?: number; isGstInclusive?: boolean }) => {
