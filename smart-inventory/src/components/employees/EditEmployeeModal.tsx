@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, User, Upload } from "lucide-react";
 import useSWR from "swr";
 import { EmployeeDocuments } from "./EmployeeDocuments";
 import { useSession } from "next-auth/react";
@@ -34,6 +34,7 @@ interface Employee {
   department?: string;
   salary?: number;
   joinDate: string;
+  photoUrl?: string;
   role?: string;
   roleId?: string;
   roleName?: string;
@@ -58,6 +59,12 @@ export function EditEmployeeModal({
   const [error, setError] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
   const canEditDocs = session?.user?.permissions?.masters_employees?.edit === true;
+
+  // Photo state
+  const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch roles dynamically
   const { data: roles } = useSWR<RoleOption[]>(
@@ -100,9 +107,55 @@ export function EditEmployeeModal({
         joinDate: employee.joinDate ? employee.joinDate.split("T")[0] : "",
         isActive: employee.isActive,
       });
+      setCurrentPhotoUrl(employee.photoUrl || null);
+      setPhotoPreview(null);
       setError(null);
     }
   }, [employee, isOpen, roles]);
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !employee) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Photo must be JPEG, PNG, or WebP");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Photo must be under 5MB");
+      return;
+    }
+
+    // Show preview immediately
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhotoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+
+    // Upload immediately
+    setPhotoUploading(true);
+    try {
+      const form = new FormData();
+      form.append("photo", file);
+      const res = await fetch(`/api/employees/${employee.id}/photo`, {
+        method: "POST",
+        body: form,
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setCurrentPhotoUrl(updated.photoUrl);
+        setPhotoPreview(null); // now served from server
+        onSuccess?.(); // refresh list
+      } else {
+        setError("Failed to upload photo");
+        setPhotoPreview(null);
+      }
+    } catch {
+      setError("Failed to upload photo");
+      setPhotoPreview(null);
+    } finally {
+      setPhotoUploading(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,6 +252,48 @@ export function EditEmployeeModal({
               {error}
             </div>
           )}
+
+          {/* ── Profile Photo ── */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Profile Photo</h3>
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 rounded-full border-2 border-gray-200 overflow-hidden bg-gray-50 shrink-0 flex items-center justify-center">
+                {photoPreview || currentPhotoUrl ? (
+                  <img
+                    src={photoPreview || currentPhotoUrl!}
+                    alt={employee.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <User className="h-8 w-8 text-gray-400" />
+                )}
+              </div>
+              <div className="space-y-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={photoUploading}
+                >
+                  {photoUploading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  {photoUploading ? "Uploading…" : currentPhotoUrl ? "Change Photo" : "Upload Photo"}
+                </Button>
+                <p className="text-xs text-gray-500">JPEG, PNG, or WebP — max 5 MB</p>
+              </div>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handlePhotoChange}
+              />
+            </div>
+          </div>
 
           {/* Basic Information */}
           <div>

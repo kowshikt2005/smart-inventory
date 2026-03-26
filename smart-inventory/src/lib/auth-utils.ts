@@ -19,17 +19,13 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 
 /**
  * Generate the next employee number in sequence (EMP-0001, EMP-0002, etc.)
- * Uses MySQL GET_LOCK to prevent race conditions.
+ * Pass the Prisma transaction client so this runs on the same connection as
+ * the surrounding employee INSERT — the @unique constraint prevents duplicates.
  */
-export async function generateEmployeeNumber(): Promise<string> {
-  const lockResult = await db.$queryRawUnsafe<{ lock_result: number }[]>(
-    `SELECT GET_LOCK(?, 10) as lock_result`, 'emp_number_lock'
-  );
-  if (!lockResult[0] || lockResult[0].lock_result !== 1) {
-    throw new Error('Failed to acquire lock for employee number generation');
-  }
-
-  const lastEmployee = await db.employee.findFirst({
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export async function generateEmployeeNumber(client?: { employee: { findFirst: (...args: any[]) => Promise<any> } }): Promise<string> {
+  const c = client || db;
+  const lastEmployee = await c.employee.findFirst({
     orderBy: { employeeNumber: 'desc' },
     select: { employeeNumber: true },
   });
@@ -44,6 +40,7 @@ export async function generateEmployeeNumber(): Promise<string> {
 
   return `EMP-${String(nextNum).padStart(4, '0')}`;
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
  * Check if a role's permissions grant view access to a page

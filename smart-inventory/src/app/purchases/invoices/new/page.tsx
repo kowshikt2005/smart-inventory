@@ -867,7 +867,7 @@ function NewPurchaseInvoicePageContent() {
                       <option value="NONE">None</option>
                     </select>
                     <Input
-                      type="number" step="0.01" min="-1" max="1"
+                      type="number" step="0.001" min="-10" max="10"
                       value={roundOffMode === "MANUAL" ? roundOff : totals.roundOff}
                       onChange={(e) => setRoundOff(parseFloat(e.target.value) || 0)}
                       className="w-24 text-right h-8"

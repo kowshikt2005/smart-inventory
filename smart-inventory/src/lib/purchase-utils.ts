@@ -112,9 +112,9 @@ export function calculateTax(amount: number, taxRate: number): { taxAmount: numb
   const sgst = taxAmount / 2;
 
   return {
-    taxAmount: Math.round(taxAmount * 100) / 100,
-    cgst: Math.round(cgst * 100) / 100,
-    sgst: Math.round(sgst * 100) / 100,
+    taxAmount: Math.round(taxAmount * 1000) / 1000,
+    cgst: Math.round(cgst * 1000) / 1000,
+    sgst: Math.round(sgst * 1000) / 1000,
   };
 }
 
@@ -135,9 +135,9 @@ export function calculatePurchaseLineItem(
   const totalAmount = amount + taxAmount;
 
   return {
-    amount: Math.round(amount * 100) / 100,
-    taxAmount: Math.round(taxAmount * 100) / 100,
-    totalAmount: Math.round(totalAmount * 100) / 100,
+    amount: Math.round(amount * 1000) / 1000,
+    taxAmount: Math.round(taxAmount * 1000) / 1000,
+    totalAmount: Math.round(totalAmount * 1000) / 1000,
   };
 }
 
@@ -157,9 +157,9 @@ export function calculatePurchaseTotals(
   const totalAmount = subtotal + totalTax + roundOff;
 
   return {
-    subtotal: Math.round(subtotal * 100) / 100,
-    totalTax: Math.round(totalTax * 100) / 100,
-    totalAmount: Math.round(totalAmount * 100) / 100,
+    subtotal: Math.round(subtotal * 1000) / 1000,
+    totalTax: Math.round(totalTax * 1000) / 1000,
+    totalAmount: Math.round(totalAmount * 1000) / 1000,
   };
 }
 
@@ -225,7 +225,7 @@ export function formatCurrency(amount: number, currency: string = 'INR'): string
     style: 'currency',
     currency,
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 3,
   }).format(amount);
 }
 

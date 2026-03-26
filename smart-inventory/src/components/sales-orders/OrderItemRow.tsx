@@ -105,7 +105,7 @@ export function OrderItemRow({
       newFactor = conv?.factor || 1;
     }
     const baseRate = item.rate / currentFactor;
-    const newRate = Math.round(baseRate * newFactor * 100) / 100;
+    const newRate = Math.round(baseRate * newFactor * 1000) / 1000;
 
     let baseAmount: number;
     let taxAmount: number;
@@ -123,8 +123,8 @@ export function OrderItemRow({
       unit: newUnitName,
       uomFactor: newFactor,
       rate: newRate,
-      taxAmount: Math.round(taxAmount * 100) / 100,
-      amount: Math.round(baseAmount * 100) / 100,
+      taxAmount: Math.round(taxAmount * 1000) / 1000,
+      amount: Math.round(baseAmount * 1000) / 1000,
     });
   };
 
@@ -144,8 +144,8 @@ export function OrderItemRow({
     const baseAmount = inclusiveAmount / (1 + taxRate / 100);
     const taxAmount = inclusiveAmount - baseAmount;
     return {
-      baseAmount: Math.round(baseAmount * 100) / 100,
-      taxAmount: Math.round(taxAmount * 100) / 100,
+      baseAmount: Math.round(baseAmount * 1000) / 1000,
+      taxAmount: Math.round(taxAmount * 1000) / 1000,
     };
   };
 
@@ -154,8 +154,8 @@ export function OrderItemRow({
   const calculateTaxExclusive = (exclusiveAmount: number, taxRate: number) => {
     const taxAmount = exclusiveAmount * (taxRate / 100);
     return {
-      baseAmount: Math.round(exclusiveAmount * 100) / 100,
-      taxAmount: Math.round(taxAmount * 100) / 100,
+      baseAmount: Math.round(exclusiveAmount * 1000) / 1000,
+      taxAmount: Math.round(taxAmount * 1000) / 1000,
     };
   };
 

@@ -34,6 +34,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
+    // Sanitize captchaCookie — strip any chars that could inject headers (\r \n ; ,)
+    const safeCaptchaCookie = captchaCookie.replace(/[\r\n;,]/g, "");
+
     // Call GST portal — forward the CaptchaCookie as a session identifier
     const gstResponse = await fetch(
       "https://services.gst.gov.in/services/api/search/taxpayerDetails",
@@ -41,7 +44,7 @@ export async function POST(req: NextRequest) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Cookie": `CaptchaCookie=${captchaCookie}`,
+          "Cookie": `CaptchaCookie=${safeCaptchaCookie}`,
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "Referer": "https://services.gst.gov.in/services/searchtp",
           "Origin": "https://services.gst.gov.in",

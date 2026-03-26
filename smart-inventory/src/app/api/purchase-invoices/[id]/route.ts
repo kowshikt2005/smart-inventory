@@ -203,10 +203,10 @@ export async function PUT(
           return {
             itemId: item.itemId,
             quantity: Math.round(baseQuantity * 1000) / 1000,
-            rate: Math.round(baseRate * 100) / 100,
+            rate: Math.round(baseRate * 1000) / 1000,
             taxRate: Number(item.taxRate),
-            taxAmount: Math.round(taxAmount * 100) / 100,
-            amount: Math.round(amount * 100) / 100,
+            taxAmount: Math.round(taxAmount * 1000) / 1000,
+            amount: Math.round(amount * 1000) / 1000,
           };
         });
 
@@ -221,8 +221,8 @@ export async function PUT(
 
         // Validate new total covers already paid amount
         const paidAmount = Number(existingInvoice.paidAmount || 0);
-        if (paidAmount > 0 && Math.round(totalAmount * 100) / 100 < paidAmount) {
-          throw new Error(`New total (₹${(Math.round(totalAmount * 100) / 100).toFixed(2)}) cannot be less than already paid amount (₹${paidAmount.toFixed(2)})`);
+        if (paidAmount > 0 && Math.round(totalAmount * 1000) / 1000 < paidAmount) {
+          throw new Error(`New total (₹${(Math.round(totalAmount * 1000) / 1000).toFixed(2)}) cannot be less than already paid amount (₹${paidAmount.toFixed(2)})`);
         }
 
         // Look up vendor for name
@@ -242,11 +242,11 @@ export async function PUT(
             date: body.date ? new Date(body.date) : existingInvoice.date,
             dueDate: body.dueDate ? new Date(body.dueDate) : existingInvoice.dueDate,
             notes: body.notes !== undefined ? body.notes : existingInvoice.notes,
-            amount: Math.round(subtotal * 100) / 100,
-            taxAmount: Math.round(totalTax * 100) / 100,
+            amount: Math.round(subtotal * 1000) / 1000,
+            taxAmount: Math.round(totalTax * 1000) / 1000,
             roundOff: roundOffDecision.roundOff,
-            totalAmount: Math.round(totalAmount * 100) / 100,
-            balanceAmount: Math.round((totalAmount - paidAmount) * 100) / 100,
+            totalAmount: Math.round(totalAmount * 1000) / 1000,
+            balanceAmount: Math.round((totalAmount - paidAmount) * 1000) / 1000,
             items: { create: newItems },
           },
           include: {
@@ -301,7 +301,7 @@ export async function PUT(
             runningBalance = runningBalance + Number(entry.credit) - Number(entry.debit);
           }
 
-          const newBalance = runningBalance + Math.round(totalAmount * 100) / 100;
+          const newBalance = runningBalance + Math.round(totalAmount * 1000) / 1000;
 
           await tx.vendorLedger.create({
             data: {
@@ -309,7 +309,7 @@ export async function PUT(
               date: body.date ? new Date(body.date) : existingInvoice.date,
               description: `Purchase Invoice ${updated.invoiceNumber}`,
               type: 'PURCHASE_INVOICE',
-              credit: Math.round(totalAmount * 100) / 100,
+              credit: Math.round(totalAmount * 1000) / 1000,
               debit: 0,
               balance: newBalance,
               referenceType: 'purchase_invoice',

@@ -29,6 +29,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No customers provided" }, { status: 400 });
     }
 
+    const MAX_CUSTOMERS = 100;
+    if (customers.length > MAX_CUSTOMERS) {
+      return NextResponse.json(
+        { error: `Too many customers. Maximum ${MAX_CUSTOMERS} per request.` },
+        { status: 400 }
+      );
+    }
+
     if (!companyName) {
       return NextResponse.json({ error: "Company name is required" }, { status: 400 });
     }

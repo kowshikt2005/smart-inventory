@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, MoreHorizontal, Eye, Edit, Loader2, X, Package, Trash2, Tag, Layers, ArrowRight, PowerOff, Power, Wand2 } from "lucide-react";
 import { ImportButton } from "@/components/import/ImportButton";
-import { useState, useMemo, useEffect, useRef, Suspense } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import useSWR from "swr";
@@ -69,6 +69,7 @@ function ItemsContent() {
   const prefillRate = searchParams.get("prefillRate");
   const prefillGstRate = searchParams.get("prefillGstRate");
   const prefillHsnCode = searchParams.get("prefillHsnCode");
+  const prefillQuantity = searchParams.get("prefillQuantity");
   const openCreate = searchParams.get("openCreate") === "true";
 
   // Auto-open modal when redirected from an invoice page
@@ -78,20 +79,22 @@ function ItemsContent() {
     }
   }, [openCreate]);
 
-  // Stable reference — only computed once from URL params so AddItemModal's
-  // useEffect doesn't re-fire on every SWR revalidation re-render.
-  const prefillDataRef = useRef(
-    openCreate
-      ? {
-          name: prefillName || undefined,
-          purchasePrice: invoiceType === "PURCHASE" && prefillRate ? prefillRate : undefined,
-          sellingPrice: invoiceType === "SALES" && prefillRate ? prefillRate : undefined,
-          gstRate: prefillGstRate || undefined,
-          hsnCode: prefillHsnCode || undefined,
-        }
-      : undefined
+  // useMemo ensures prefill data updates on soft navigation (when URL params change)
+  // while staying stable across SWR re-renders (deps don't change within a page visit)
+  const prefillData = useMemo(
+    () =>
+      openCreate
+        ? {
+            name: prefillName || undefined,
+            purchasePrice: invoiceType === "PURCHASE" && prefillRate ? prefillRate : undefined,
+            sellingPrice: invoiceType === "SALES" && prefillRate ? prefillRate : undefined,
+            gstRate: prefillGstRate || undefined,
+            hsnCode: prefillHsnCode || undefined,
+            quantity: prefillQuantity || undefined,
+          }
+        : undefined,
+    [openCreate, prefillName, prefillRate, prefillGstRate, prefillHsnCode, prefillQuantity, invoiceType]
   );
-  const prefillData = prefillDataRef.current;
   const [adjustingStockItem, setAdjustingStockItem] = useState<Item | null>(null);
   const [newStockValue, setNewStockValue] = useState("");
   const [stockNotes, setStockNotes] = useState("");

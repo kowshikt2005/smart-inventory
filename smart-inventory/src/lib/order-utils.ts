@@ -61,10 +61,10 @@ export function calculateTaxInclusive(inclusiveAmount: number, taxRate: number):
   const sgst = taxAmount / 2;
 
   return {
-    baseAmount: Math.round(baseAmount * 100) / 100,
-    taxAmount: Math.round(taxAmount * 100) / 100,
-    cgst: Math.round(cgst * 100) / 100,
-    sgst: Math.round(sgst * 100) / 100,
+    baseAmount: Math.round(baseAmount * 1000) / 1000,
+    taxAmount: Math.round(taxAmount * 1000) / 1000,
+    cgst: Math.round(cgst * 1000) / 1000,
+    sgst: Math.round(sgst * 1000) / 1000,
   };
 }
 
@@ -77,9 +77,9 @@ export function calculateTax(amount: number, taxRate: number): { taxAmount: numb
   const sgst = taxAmount / 2;
 
   return {
-    taxAmount: Math.round(taxAmount * 100) / 100,
-    cgst: Math.round(cgst * 100) / 100,
-    sgst: Math.round(sgst * 100) / 100,
+    taxAmount: Math.round(taxAmount * 1000) / 1000,
+    cgst: Math.round(cgst * 1000) / 1000,
+    sgst: Math.round(sgst * 1000) / 1000,
   };
 }
 
@@ -108,7 +108,7 @@ export function calculateLineItem(
   return {
     amount: baseAmount,  // Base amount (taxable value)
     taxAmount: taxAmount,
-    totalAmount: Math.round(totalAmount * 100) / 100,
+    totalAmount: Math.round(totalAmount * 1000) / 1000,
   };
 }
 
@@ -143,7 +143,7 @@ export function calculateLineItemV2(
     return {
       amount: baseAmount,
       taxAmount: taxAmount,
-      totalAmount: Math.round(grossTotal * 100) / 100,
+      totalAmount: Math.round(grossTotal * 1000) / 1000,
       isGstInclusive: true,
     };
   } else {
@@ -153,9 +153,9 @@ export function calculateLineItemV2(
     const totalAmount = baseAmount + taxAmount;
 
     return {
-      amount: Math.round(baseAmount * 100) / 100,
+      amount: Math.round(baseAmount * 1000) / 1000,
       taxAmount: taxAmount,
-      totalAmount: Math.round(totalAmount * 100) / 100,
+      totalAmount: Math.round(totalAmount * 1000) / 1000,
       isGstInclusive: false,
     };
   }
@@ -181,11 +181,11 @@ export function calculateOrderTotals(
   const totalAmount = subtotal + totalTax + roundOff;
 
   return {
-    subtotal: Math.round(subtotal * 100) / 100,
-    totalTax: Math.round(totalTax * 100) / 100,
-    cgst: Math.round(cgst * 100) / 100,
-    sgst: Math.round(sgst * 100) / 100,
-    totalAmount: Math.round(totalAmount * 100) / 100,
+    subtotal: Math.round(subtotal * 1000) / 1000,
+    totalTax: Math.round(totalTax * 1000) / 1000,
+    cgst: Math.round(cgst * 1000) / 1000,
+    sgst: Math.round(sgst * 1000) / 1000,
+    totalAmount: Math.round(totalAmount * 1000) / 1000,
   };
 }
 
@@ -278,7 +278,7 @@ export function getEffectiveRate(
   // Apply rate sheet discount on MRP
   const effectiveRate = basePrice * (1 - discountPercent / 100);
 
-  return Math.round(effectiveRate * 100) / 100;
+  return Math.round(effectiveRate * 1000) / 1000;
 }
 
 /**
@@ -330,7 +330,7 @@ export function calculateInclusiveTaxRate(
   const gstFactor = 1 + (gstRate / 100);
   // Extract base price, apply discount, then add tax back
   const result = (baseAmount / gstFactor) * (1 - discountPercent / 100) * gstFactor;
-  return Math.round(result * 100) / 100;
+  return Math.round(result * 1000) / 1000;
 }
 
 /**
@@ -443,7 +443,7 @@ export function formatCurrency(amount: number, currency: string = 'INR'): string
     style: 'currency',
     currency,
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 3,
   }).format(amount);
 }
 

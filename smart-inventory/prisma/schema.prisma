@@ -41,9 +41,9 @@ model Customer {
   city              String?
   state             String?
   pincode           String?
-  creditLimit       Decimal                   @default(0.00) @db.Decimal(15, 2)
+  creditLimit       Decimal                   @default(0.00) @db.Decimal(15, 3)
   creditDays        Int                       @default(0)
-  openingBalance    Decimal                   @default(0.00) @db.Decimal(15, 2)
+  openingBalance    Decimal                   @default(0.00) @db.Decimal(15, 3)
   status            CustomerStatus            @default(ACTIVE)
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
@@ -86,9 +86,9 @@ model CustomerLedger {
   date          DateTime
   description   String
   type          LedgerEntryType
-  debit         Decimal         @default(0.00) @db.Decimal(15, 2)
-  credit        Decimal         @default(0.00) @db.Decimal(15, 2)
-  balance       Decimal         @default(0.00) @db.Decimal(15, 2)
+  debit         Decimal         @default(0.00) @db.Decimal(15, 3)
+  credit        Decimal         @default(0.00) @db.Decimal(15, 3)
+  balance       Decimal         @default(0.00) @db.Decimal(15, 3)
   referenceType String
   referenceId   String
   createdAt     DateTime        @default(now())
@@ -113,7 +113,7 @@ model Vendor {
   state            String?
   pincode          String?
   creditDays       Int               @default(0)
-  openingBalance   Decimal           @default(0.00) @db.Decimal(15, 2)
+  openingBalance   Decimal           @default(0.00) @db.Decimal(15, 3)
   isActive         Boolean           @default(true)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -177,10 +177,10 @@ model Item {
   isImported           Boolean               @default(false)
   hsnCode              String?               @db.VarChar(8)
   gstRate              Decimal               @default(0.00) @db.Decimal(5, 2)
-  purchasePrice        Decimal               @default(0.00) @db.Decimal(15, 2)
-  mrp                  Decimal               @default(0.00) @db.Decimal(15, 2)
-  sellingPrice         Decimal               @default(0.00) @db.Decimal(15, 2)
-  margin               Decimal?              @db.Decimal(15, 2)
+  purchasePrice        Decimal               @default(0.00) @db.Decimal(15, 3)
+  mrp                  Decimal               @default(0.00) @db.Decimal(15, 3)
+  sellingPrice         Decimal               @default(0.00) @db.Decimal(15, 3)
+  margin               Decimal?              @db.Decimal(15, 3)
   marginType           String                @default("PERCENTAGE")
   discountPercent      Decimal?              @db.Decimal(5, 2)
   minStock             Decimal               @default(0.000) @db.Decimal(15, 3)
@@ -271,10 +271,10 @@ model SalesOrder {
   expectedDelivery DateTime?
   referenceNumber  String?
   status           SalesOrderStatus     @default(OPEN)
-  subtotal         Decimal              @default(0.00) @db.Decimal(15, 2)
-  discountAmount   Decimal              @default(0.00) @db.Decimal(15, 2)
-  taxAmount        Decimal              @default(0.00) @db.Decimal(15, 2)
-  totalAmount      Decimal              @default(0.00) @db.Decimal(15, 2)
+  subtotal         Decimal              @default(0.00) @db.Decimal(15, 3)
+  discountAmount   Decimal              @default(0.00) @db.Decimal(15, 3)
+  taxAmount        Decimal              @default(0.00) @db.Decimal(15, 3)
+  totalAmount      Decimal              @default(0.00) @db.Decimal(15, 3)
   notes            String?              @db.Text
   terms            String?              @db.Text
   createdAt        DateTime             @default(now())
@@ -301,11 +301,11 @@ model SalesOrderItem {
   itemId           String
   quantity         Decimal    @db.Decimal(15, 3)
   invoicedQuantity Decimal    @default(0.000) @db.Decimal(15, 3)
-  rate             Decimal    @db.Decimal(15, 2)
+  rate             Decimal    @db.Decimal(15, 3)
   discountPercent  Decimal    @default(0.00) @db.Decimal(5, 2)
   taxRate          Decimal    @default(0.00) @db.Decimal(5, 2)
-  taxAmount        Decimal    @default(0.00) @db.Decimal(15, 2)
-  amount           Decimal    @default(0.00) @db.Decimal(15, 2)
+  taxAmount        Decimal    @default(0.00) @db.Decimal(15, 3)
+  amount           Decimal    @default(0.00) @db.Decimal(15, 3)
   item             Item       @relation(fields: [itemId], references: [id])
   salesOrder       SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
 
@@ -338,9 +338,9 @@ model PurchaseOrder {
   vendorName       String
   date             DateTime
   expectedDelivery DateTime?
-  amount           Decimal             @default(0.00) @db.Decimal(15, 2)
-  taxAmount        Decimal             @default(0.00) @db.Decimal(15, 2)
-  totalAmount      Decimal             @default(0.00) @db.Decimal(15, 2)
+  amount           Decimal             @default(0.00) @db.Decimal(15, 3)
+  taxAmount        Decimal             @default(0.00) @db.Decimal(15, 3)
+  totalAmount      Decimal             @default(0.00) @db.Decimal(15, 3)
   status           PurchaseOrderStatus @default(OPEN)
   notes            String?             @db.Text
   createdAt        DateTime            @default(now())
@@ -361,10 +361,10 @@ model PurchaseOrderItem {
   purchaseOrderId String
   itemId          String
   quantity        Decimal       @db.Decimal(15, 3)
-  rate            Decimal       @db.Decimal(15, 2)
+  rate            Decimal       @db.Decimal(15, 3)
   taxRate         Decimal       @default(0.00) @db.Decimal(5, 2)
-  taxAmount       Decimal       @default(0.00) @db.Decimal(15, 2)
-  amount          Decimal       @default(0.00) @db.Decimal(15, 2)
+  taxAmount       Decimal       @default(0.00) @db.Decimal(15, 3)
+  amount          Decimal       @default(0.00) @db.Decimal(15, 3)
   item            Item          @relation(fields: [itemId], references: [id])
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
@@ -417,14 +417,14 @@ model Invoice {
   customerId        String?
   customerName      String?
   shippingAddressId String?
-  subtotal          Decimal                  @default(0.00) @db.Decimal(15, 2)
-  cgst              Decimal                  @default(0.00) @db.Decimal(15, 2)
-  sgst              Decimal                  @default(0.00) @db.Decimal(15, 2)
-  taxAmount         Decimal                  @default(0.00) @db.Decimal(15, 2)
-  roundOff          Decimal                  @default(0.00) @db.Decimal(15, 2)
-  totalAmount       Decimal                  @default(0.00) @db.Decimal(15, 2)
-  paidAmount        Decimal                  @default(0.00) @db.Decimal(15, 2)
-  balanceAmount     Decimal                  @default(0.00) @db.Decimal(15, 2)
+  subtotal          Decimal                  @default(0.00) @db.Decimal(15, 3)
+  cgst              Decimal                  @default(0.00) @db.Decimal(15, 3)
+  sgst              Decimal                  @default(0.00) @db.Decimal(15, 3)
+  taxAmount         Decimal                  @default(0.00) @db.Decimal(15, 3)
+  roundOff          Decimal                  @default(0.00) @db.Decimal(15, 3)
+  totalAmount       Decimal                  @default(0.00) @db.Decimal(15, 3)
+  paidAmount        Decimal                  @default(0.00) @db.Decimal(15, 3)
+  balanceAmount     Decimal                  @default(0.00) @db.Decimal(15, 3)
   paymentStatus     PaymentStatus            @default(PENDING)
   dueDate           DateTime?
   notes             String?                  @db.Text
@@ -457,11 +457,11 @@ model InvoiceItem {
   salesOrderItemId String?
   ref              String?
   quantity         Decimal @db.Decimal(15, 3)
-  rate             Decimal @db.Decimal(15, 2)
+  rate             Decimal @db.Decimal(15, 3)
   discountPercent  Decimal @default(0.00) @db.Decimal(5, 2)
   taxRate          Decimal @default(0.00) @db.Decimal(5, 2)
-  taxAmount        Decimal @default(0.00) @db.Decimal(15, 2)
-  amount           Decimal @default(0.00) @db.Decimal(15, 2)
+  taxAmount        Decimal @default(0.00) @db.Decimal(15, 3)
+  amount           Decimal @default(0.00) @db.Decimal(15, 3)
   invoice          Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   item             Item?   @relation(fields: [itemId], references: [id])
 
@@ -477,7 +477,7 @@ model Payment {
   paymentDate         DateTime
   customerId          String
   invoiceId           String?
-  amount              Decimal             @db.Decimal(15, 2)
+  amount              Decimal             @db.Decimal(15, 3)
   mode                PaymentMode
   referenceNumber     String?
   bankAccountId       String?
@@ -503,7 +503,7 @@ model PaymentAllocation {
   id        String  @id @default(uuid())
   paymentId String
   invoiceId String
-  amount    Decimal @db.Decimal(15, 2)
+  amount    Decimal @db.Decimal(15, 3)
   invoice   Invoice @relation(fields: [invoiceId], references: [id])
   payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
@@ -518,11 +518,11 @@ model SalesReturn {
   returnDate   DateTime
   customerId   String
   invoiceId    String?
-  subtotal     Decimal           @default(0.00) @db.Decimal(15, 2)
-  cgst         Decimal           @default(0.00) @db.Decimal(15, 2)
-  sgst         Decimal           @default(0.00) @db.Decimal(15, 2)
-  taxAmount    Decimal           @default(0.00) @db.Decimal(15, 2)
-  totalAmount  Decimal           @default(0.00) @db.Decimal(15, 2)
+  subtotal     Decimal           @default(0.00) @db.Decimal(15, 3)
+  cgst         Decimal           @default(0.00) @db.Decimal(15, 3)
+  sgst         Decimal           @default(0.00) @db.Decimal(15, 3)
+  taxAmount    Decimal           @default(0.00) @db.Decimal(15, 3)
+  totalAmount  Decimal           @default(0.00) @db.Decimal(15, 3)
   reason       String?           @db.Text
   status       SalesReturnStatus @default(OPEN)
   createdAt    DateTime          @default(now())
@@ -544,10 +544,10 @@ model SalesReturnItem {
   salesReturnId String
   itemId        String
   quantity      Decimal     @db.Decimal(15, 3)
-  rate          Decimal     @db.Decimal(15, 2)
+  rate          Decimal     @db.Decimal(15, 3)
   taxRate       Decimal     @default(0.00) @db.Decimal(5, 2)
-  taxAmount     Decimal     @default(0.00) @db.Decimal(15, 2)
-  amount        Decimal     @default(0.00) @db.Decimal(15, 2)
+  taxAmount     Decimal     @default(0.00) @db.Decimal(15, 3)
+  amount        Decimal     @default(0.00) @db.Decimal(15, 3)
   item          Item        @relation(fields: [itemId], references: [id])
   salesReturn   SalesReturn @relation(fields: [salesReturnId], references: [id], onDelete: Cascade)
 
@@ -564,8 +564,9 @@ model Employee {
   phone          String?
   designation    String?
   department     String?
-  salary         Decimal?           @db.Decimal(15, 2)
+  salary         Decimal?           @db.Decimal(15, 3)
   joinDate       DateTime
+  photoUrl       String?            @db.VarChar(500)
   isActive       Boolean            @default(true)
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
@@ -583,8 +584,8 @@ model BankAccount {
   ifscCode       String?
   branch         String?
   accountType    BankAccountType @default(SAVINGS)
-  openingBalance Decimal         @default(0.00) @db.Decimal(15, 2)
-  currentBalance Decimal         @default(0.00) @db.Decimal(15, 2)
+  openingBalance Decimal         @default(0.00) @db.Decimal(15, 3)
+  currentBalance Decimal         @default(0.00) @db.Decimal(15, 3)
   isDefault      Boolean         @default(false)
   isActive       Boolean         @default(true)
   createdAt      DateTime        @default(now())
@@ -603,9 +604,9 @@ model BankLedger {
   date          DateTime
   description   String
   type          LedgerEntryType
-  debit         Decimal         @default(0.00) @db.Decimal(15, 2)
-  credit        Decimal         @default(0.00) @db.Decimal(15, 2)
-  balance       Decimal         @default(0.00) @db.Decimal(15, 2)
+  debit         Decimal         @default(0.00) @db.Decimal(15, 3)
+  credit        Decimal         @default(0.00) @db.Decimal(15, 3)
+  balance       Decimal         @default(0.00) @db.Decimal(15, 3)
   referenceType String
   referenceId   String
   createdAt     DateTime        @default(now())
@@ -626,12 +627,12 @@ model PurchaseInvoice {
   purchaseOrderId String?
   date            DateTime
   dueDate         DateTime
-  amount          Decimal               @default(0.00) @db.Decimal(15, 2)
-  taxAmount       Decimal               @default(0.00) @db.Decimal(15, 2)
-  roundOff        Decimal               @default(0.00) @db.Decimal(15, 2)
-  totalAmount     Decimal               @default(0.00) @db.Decimal(15, 2)
-  paidAmount      Decimal               @default(0.00) @db.Decimal(15, 2)
-  balanceAmount   Decimal               @default(0.00) @db.Decimal(15, 2)
+  amount          Decimal               @default(0.00) @db.Decimal(15, 3)
+  taxAmount       Decimal               @default(0.00) @db.Decimal(15, 3)
+  roundOff        Decimal               @default(0.00) @db.Decimal(15, 3)
+  totalAmount     Decimal               @default(0.00) @db.Decimal(15, 3)
+  paidAmount      Decimal               @default(0.00) @db.Decimal(15, 3)
+  balanceAmount   Decimal               @default(0.00) @db.Decimal(15, 3)
   status          PurchaseInvoiceStatus @default(PENDING)
   notes           String?               @db.Text
   ref             String?
@@ -659,11 +660,11 @@ model PurchaseInvoiceItem {
   itemName          String?
   ref               String?
   quantity          Decimal         @db.Decimal(15, 3)
-  rate              Decimal         @db.Decimal(15, 2)
+  rate              Decimal         @db.Decimal(15, 3)
   discountPercent   Decimal         @default(0.00) @db.Decimal(5, 2)
   taxRate           Decimal         @default(0.00) @db.Decimal(5, 2)
-  taxAmount         Decimal         @default(0.00) @db.Decimal(15, 2)
-  amount            Decimal         @default(0.00) @db.Decimal(15, 2)
+  taxAmount         Decimal         @default(0.00) @db.Decimal(15, 3)
+  amount            Decimal         @default(0.00) @db.Decimal(15, 3)
   item              Item?           @relation(fields: [itemId], references: [id])
   purchaseInvoice   PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
 
@@ -678,7 +679,7 @@ model VendorPayment {
   vendorId            String
   purchaseInvoiceId   String?
   date                DateTime
-  amount              Decimal          @db.Decimal(15, 2)
+  amount              Decimal          @db.Decimal(15, 3)
   mode                PaymentMode
   paidFrom            String
   bankAccountId       String?
@@ -707,9 +708,9 @@ model PurchaseReturn {
   vendorName        String
   purchaseInvoiceId String?
   date              DateTime
-  amount            Decimal              @default(0.00) @db.Decimal(15, 2)
-  taxAmount         Decimal              @default(0.00) @db.Decimal(15, 2)
-  totalAmount       Decimal              @default(0.00) @db.Decimal(15, 2)
+  amount            Decimal              @default(0.00) @db.Decimal(15, 3)
+  taxAmount         Decimal              @default(0.00) @db.Decimal(15, 3)
+  totalAmount       Decimal              @default(0.00) @db.Decimal(15, 3)
   status            PurchaseReturnStatus @default(OPEN)
   reason            String?              @db.Text
   notes             String?              @db.Text
@@ -732,10 +733,10 @@ model PurchaseReturnItem {
   purchaseReturnId String
   itemId           String
   quantity         Decimal        @db.Decimal(15, 3)
-  rate             Decimal        @db.Decimal(15, 2)
+  rate             Decimal        @db.Decimal(15, 3)
   taxRate          Decimal        @default(0.00) @db.Decimal(5, 2)
-  taxAmount        Decimal        @default(0.00) @db.Decimal(15, 2)
-  amount           Decimal        @default(0.00) @db.Decimal(15, 2)
+  taxAmount        Decimal        @default(0.00) @db.Decimal(15, 3)
+  amount           Decimal        @default(0.00) @db.Decimal(15, 3)
   item             Item           @relation(fields: [itemId], references: [id])
   purchaseReturn   PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
 
@@ -750,9 +751,9 @@ model VendorLedger {
   date          DateTime
   description   String
   type          LedgerEntryType
-  debit         Decimal         @default(0.00) @db.Decimal(15, 2)
-  credit        Decimal         @default(0.00) @db.Decimal(15, 2)
-  balance       Decimal         @default(0.00) @db.Decimal(15, 2)
+  debit         Decimal         @default(0.00) @db.Decimal(15, 3)
+  credit        Decimal         @default(0.00) @db.Decimal(15, 3)
+  balance       Decimal         @default(0.00) @db.Decimal(15, 3)
   referenceType String
   referenceId   String
   createdAt     DateTime        @default(now())
@@ -789,7 +790,7 @@ model StockReorderItem {
   reorderId   String
   itemId      String
   requiredQty Decimal             @db.Decimal(15, 3)
-  rate        Decimal             @db.Decimal(15, 2)
+  rate        Decimal             @db.Decimal(15, 3)
   reorder     StockReorder        @relation(fields: [reorderId], references: [id], onDelete: Cascade)
   item        Item                @relation(fields: [itemId], references: [id])
   salesOrders SalesOrderReorder[]

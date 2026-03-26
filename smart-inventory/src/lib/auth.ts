@@ -5,6 +5,30 @@ import { db } from "@/lib/db";
 import { verifyPassword } from "@/lib/auth-utils";
 import { verifyOTP } from "@/lib/otp";
 import { fillMissingPermissions, ALL_PERMISSION_KEYS, type RolePermissions } from "@/types/permissions";
+import { cache } from "@/lib/cache";
+
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_SECONDS = 900; // 15 minutes
+const LOGIN_ATTEMPTS_PREFIX = "login_attempts:";
+
+function checkLoginRateLimit(identifier: string): string | null {
+  const key = `${LOGIN_ATTEMPTS_PREFIX}${identifier}`;
+  const attempts = cache.get<number>(key) ?? 0;
+  if (attempts >= MAX_LOGIN_ATTEMPTS) {
+    return "Too many login attempts. Please try again in 15 minutes.";
+  }
+  return null;
+}
+
+function recordFailedLogin(identifier: string): void {
+  const key = `${LOGIN_ATTEMPTS_PREFIX}${identifier}`;
+  const attempts = (cache.get<number>(key) ?? 0) + 1;
+  cache.set(key, attempts, LOGIN_LOCKOUT_SECONDS);
+}
+
+function clearLoginAttempts(identifier: string): void {
+  cache.delete(`${LOGIN_ATTEMPTS_PREFIX}${identifier}`);
+}
 
 /**
  * Load role data (id, name, permissions) for a user record.
@@ -77,19 +101,30 @@ export const authConfig: NextAuthConfig = {
           return null;
         }
 
+        const email = (credentials.email as string).toLowerCase();
+
+        const rateLimitError = checkLoginRateLimit(email);
+        if (rateLimitError) {
+          throw new Error(rateLimitError);
+        }
+
         try {
           const user = await db.user.findUnique({
-            where: { email: credentials.email as string },
+            where: { email },
           });
 
           if (!user || !user.isActive) {
+            recordFailedLogin(email);
             return null;
           }
 
           const isValidPassword = await verifyPassword(credentials.password as string, user.password);
           if (!isValidPassword) {
+            recordFailedLogin(email);
             return null;
           }
+
+          clearLoginAttempts(email);
 
           const roleData = await loadUserRole(user);
 
@@ -104,6 +139,7 @@ export const authConfig: NextAuthConfig = {
           };
         } catch (error) {
           console.error("Auth error:", error);
+          if (error instanceof Error && error.message.startsWith("Too many")) throw error;
           return null;
         }
       }
@@ -120,6 +156,14 @@ export const authConfig: NextAuthConfig = {
           return null;
         }
 
+        const phone = (credentials.phone as string).replace(/[\s-]/g, "");
+        const phoneKey = `phone:${phone}`;
+
+        const rateLimitError = checkLoginRateLimit(phoneKey);
+        if (rateLimitError) {
+          throw new Error(rateLimitError);
+        }
+
         try {
           const isValid = await verifyOTP(
             credentials.phone as string,
@@ -127,11 +171,12 @@ export const authConfig: NextAuthConfig = {
           );
 
           if (!isValid) {
+            recordFailedLogin(phoneKey);
             return null;
           }
 
           // Normalize phone for lookup
-          let normalizedPhone = (credentials.phone as string).replace(/[\s-]/g, "");
+          let normalizedPhone = phone;
           if (!normalizedPhone.startsWith("+")) {
             normalizedPhone = "+91" + normalizedPhone;
           }
@@ -141,8 +186,11 @@ export const authConfig: NextAuthConfig = {
           });
 
           if (!user || !user.isActive) {
+            recordFailedLogin(phoneKey);
             return null;
           }
+
+          clearLoginAttempts(phoneKey);
 
           const roleData = await loadUserRole(user);
 
@@ -157,6 +205,7 @@ export const authConfig: NextAuthConfig = {
           };
         } catch (error) {
           console.error("Phone OTP auth error:", error);
+          if (error instanceof Error && error.message.startsWith("Too many")) throw error;
           return null;
         }
       }
@@ -237,6 +286,8 @@ export const authConfig: NextAuthConfig = {
   },
   session: {
     strategy: "jwt",
+    maxAge: 8 * 60 * 60,    // 8 hours — session expires after 8h of inactivity
+    updateAge: 60 * 60,      // refresh cookie every 1h if user is active
   },
   secret: process.env.NEXTAUTH_SECRET,
   trustHost: true,

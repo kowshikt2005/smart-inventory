@@ -337,6 +337,10 @@ export default function PurchaseInvoiceDetailPage() {
                               className="text-xs text-amber-600 hover:text-amber-700 underline underline-offset-2 mt-0.5"
                               onClick={() => {
                                 const hsnFromRef = item.ref?.startsWith("HSN:") ? item.ref.slice(4) : "";
+                                // Snap tax rate to nearest valid GST slab
+                                const rawRate = Number(item.taxRate);
+                                const gstSlabs = [0, 5, 12, 18, 28];
+                                const snappedGst = gstSlabs.reduce((prev, curr) => Math.abs(curr - rawRate) < Math.abs(prev - rawRate) ? curr : prev);
                                 const params = new URLSearchParams({
                                   openCreate: "true",
                                   returnTo: `/purchases/invoices/${invoiceId}`,
@@ -344,8 +348,9 @@ export default function PurchaseInvoiceDetailPage() {
                                   invoiceType: "PURCHASE",
                                   prefillName: item.itemName || "",
                                   prefillRate: String(Number(item.rate)),
-                                  prefillGstRate: String(Math.round(Number(item.taxRate))),
+                                  prefillGstRate: String(snappedGst),
                                   prefillHsnCode: hsnFromRef,
+                                  prefillQuantity: String(Number(item.quantity)),
                                 });
                                 router.push(`/masters/items?${params.toString()}`);
                               }}

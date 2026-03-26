@@ -38,6 +38,7 @@ import {
   X,
   Users,
   Search,
+  User,
 } from "lucide-react";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
@@ -57,6 +58,7 @@ interface Employee {
   department?: string;
   salary?: number;
   joinDate: string;
+  photoUrl?: string;
   roleName?: string;
   isActive: boolean;
   createdAt: string;
@@ -243,7 +245,22 @@ export default function EmployeesPage() {
                     <TableCell className="font-mono font-medium">
                       {employee.employeeNumber}
                     </TableCell>
-                    <TableCell className="font-medium">{employee.name}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-gray-100 overflow-hidden shrink-0 flex items-center justify-center border border-gray-200">
+                          {employee.photoUrl ? (
+                            <img
+                              src={employee.photoUrl}
+                              alt={employee.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <User className="h-4 w-4 text-gray-400" />
+                          )}
+                        </div>
+                        <span className="font-medium">{employee.name}</span>
+                      </div>
+                    </TableCell>
                     <TableCell className="text-sm text-gray-600">{employee.email}</TableCell>
                     <TableCell>
                       <Badge variant="outline">

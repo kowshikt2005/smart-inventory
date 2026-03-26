@@ -26,6 +26,7 @@ export async function GET(
         department: true,
         salary: true,
         joinDate: true,
+        photoUrl: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,

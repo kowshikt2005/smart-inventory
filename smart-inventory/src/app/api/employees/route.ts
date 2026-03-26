@@ -39,6 +39,7 @@ export async function GET(request: Request) {
           department: true,
           salary: true,
           joinDate: true,
+          photoUrl: true,
           isActive: true,
           createdAt: true,
         },
@@ -125,14 +126,15 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate employee number
-    const employeeNumber = await generateEmployeeNumber();
-
-    // Hash password
+    // Hash password before transaction (CPU-bound, no DB connection needed)
     const hashedPassword = await hashPassword(body.password);
 
-    // Create employee and user in transaction
+    // Create employee and user in transaction (single DB connection throughout)
     const result = await transaction(async (tx) => {
+      // Generate employee number inside the transaction so it uses the same
+      // connection as the INSERT — prevents the GET_LOCK connection-split bug
+      const employeeNumber = await generateEmployeeNumber(tx);
+
       // Create user account with roleId
       const user = await (tx.user.create as any)({
         data: {

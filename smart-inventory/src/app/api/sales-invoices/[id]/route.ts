@@ -256,11 +256,11 @@ export async function PUT(
           data: {
             notes: body.notes !== undefined ? body.notes : invoice.notes,
             dueDate: body.dueDate ? new Date(body.dueDate) : invoice.dueDate,
-            subtotal: Math.round(subtotal * 100) / 100,
-            cgst: Math.round(totalTax / 2 * 100) / 100,
-            sgst: Math.round(totalTax / 2 * 100) / 100,
-            taxAmount: Math.round(totalTax * 100) / 100,
-            roundOff: Math.round(roundOff * 100) / 100,
+            subtotal: Math.round(subtotal * 1000) / 1000,
+            cgst: Math.round(totalTax / 2 * 1000) / 1000,
+            sgst: Math.round(totalTax / 2 * 1000) / 1000,
+            taxAmount: Math.round(totalTax * 1000) / 1000,
+            roundOff: Math.round(roundOff * 1000) / 1000,
             totalAmount,
             balanceAmount: totalAmount - paidAmount,
             items: { create: newItems },
@@ -427,7 +427,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
     }
 
-    const errorMessage = error instanceof Error ? error.message : 'Failed to delete invoice';
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to delete invoice' }, { status: 500 });
   }
 }

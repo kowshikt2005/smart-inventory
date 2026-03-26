@@ -1,7 +1,7 @@
 export type InvoiceRoundOffMode = "NONE" | "NEAREST" | "UP" | "DOWN" | "MANUAL";
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
+function round3(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }
 
 function fractional(value: number): number {
@@ -18,7 +18,7 @@ export function normalizeRoundOffMode(value: string | null | undefined): Invoice
 }
 
 export function calculateAutoRoundOff(baseAmount: number, mode: Exclude<InvoiceRoundOffMode, "MANUAL">): number {
-  const roundedBase = round2(baseAmount);
+  const roundedBase = round3(baseAmount);
 
   if (mode === "NONE") {
     return 0;
@@ -30,17 +30,17 @@ export function calculateAutoRoundOff(baseAmount: number, mode: Exclude<InvoiceR
   const ceilAbs = Math.ceil(absAmount);
 
   if (mode === "UP") {
-    return round2(sign * ceilAbs - roundedBase);
+    return round3(sign * ceilAbs - roundedBase);
   }
 
   if (mode === "DOWN") {
-    return round2(sign * floorAbs - roundedBase);
+    return round3(sign * floorAbs - roundedBase);
   }
 
   // NEAREST: below 0.50 -> down, 0.50 and above -> up
   const frac = fractional(absAmount);
   const targetAbs = frac < 0.5 ? floorAbs : ceilAbs;
-  return round2(sign * targetAbs - roundedBase);
+  return round3(sign * targetAbs - roundedBase);
 }
 
 export function resolveRoundOff(
@@ -49,7 +49,7 @@ export function resolveRoundOff(
   manualRoundOff: number | null | undefined
 ): { mode: InvoiceRoundOffMode; roundOff: number } {
   if (mode === "MANUAL") {
-    return { mode, roundOff: round2(Number(manualRoundOff || 0)) };
+    return { mode, roundOff: round3(Number(manualRoundOff || 0)) };
   }
 
   return {

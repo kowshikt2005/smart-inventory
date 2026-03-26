@@ -47,11 +47,18 @@ Next.js 15 App Router + Prisma ORM + MySQL (Railway/AWS RDS) + shadcn/ui + Tailw
 
 ## ⚠ SECURITY — Remaining Items
 
-### HIGH
-1. Negative invoice amounts allowed — no validation of quantity/rate in sales-invoices handlers.
-2. Financial fields accept negative values — `creditLimit`, `openingBalance` (customer), `mrp`, `sellingPrice` (item) PUT handlers.
-3. No login rate limiting in `src/lib/auth.ts`.
+### LOW
+1. MIME type spoofing in `/api/upload` — validates `file.type` (client header), not magic bytes. Low risk since filenames are UUID-based.
+2. Pre-existing routes (outside recent commits) still expose `error.message` to clients — see `Grep` for `error\.message` pattern in `src/app/api`.
 
-### MEDIUM
-4. Invoice number race condition — use DB transaction lock in `generateInvoiceNumber()`.
-5. `console.error` logs full Prisma error objects — may leak DB details in production.
+### FIXED (2026-03-25)
+- ~~Negative invoice amounts~~ — rate/quantity validation added to direct invoice and invoice PUT handlers.
+- ~~Financial fields accept negative values~~ — customer and item PUT handlers now reject negative `creditLimit`, `openingBalance`, `mrp`, `sellingPrice`, `purchasePrice`.
+- ~~No login rate limiting~~ — 5-attempt lockout (15 min) added for credentials and phone OTP in `src/lib/auth.ts`.
+- ~~Invoice number race condition~~ — MySQL `GET_LOCK()` in `src/lib/invoice-utils.ts`.
+- ~~`Math.random()` for OTP~~ — replaced with `crypto.randomInt()` in `src/lib/otp.ts`.
+- ~~Error message leakage~~ — import, invoice, and email routes now return generic messages.
+- ~~WhatsApp batch abuse~~ — 100-customer limit on `/api/whatsapp/send-outstanding`.
+- ~~Header injection in gstin-lookup~~ — `captchaCookie` sanitized.
+- ~~PDF parse DoS~~ — 20MB file size limit on `/api/import/parse-pdf`.
+- ~~Email open relay~~ — 20-recipient cap + format validation on `/api/reports/send-email`.

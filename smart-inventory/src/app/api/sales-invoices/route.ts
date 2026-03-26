@@ -502,9 +502,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create invoice';
     return NextResponse.json(
-      { error: errorMessage },
+      { error: 'Failed to create invoice' },
       { status: 500 }
     );
   }

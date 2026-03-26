@@ -324,7 +324,7 @@ export default function NewDummyInvoicePage() {
   }, [customer, invoiceDate]);
 
   const fmt = (n: number) =>
-    new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+    new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 3 }).format(n);
 
   const handleSubmit = async () => {
     if (isSubmitting) return;

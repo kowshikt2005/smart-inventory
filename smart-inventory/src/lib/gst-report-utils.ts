@@ -17,7 +17,7 @@ export function toUQC(unit: string | null | undefined): string {
 
 // ─── Rounding ─────────────────────────────────────────────────────────────────
 export function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+  return Math.round(n * 1000) / 1000;
 }
 
 // ─── IGST / CGST+SGST Split ──────────────────────────────────────────────────

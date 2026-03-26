@@ -14,6 +14,18 @@ export async function POST(req: Request) {
   if (!emails?.length) {
     return NextResponse.json({ error: "No recipients specified" }, { status: 400 });
   }
+
+  const MAX_RECIPIENTS = 20;
+  if (emails.length > MAX_RECIPIENTS) {
+    return NextResponse.json({ error: `Too many recipients. Maximum ${MAX_RECIPIENTS}.` }, { status: 400 });
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const invalidEmail = emails.find((e: string) => !emailRegex.test(e));
+  if (invalidEmail) {
+    return NextResponse.json({ error: `Invalid email address: ${invalidEmail}` }, { status: 400 });
+  }
+
   if (!pdfBase64) {
     return NextResponse.json({ error: "No report PDF data provided" }, { status: 400 });
   }
@@ -31,7 +43,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("Email send error:", err);
-    const message = err instanceof Error ? err.message : "Failed to send email";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
   }
 }

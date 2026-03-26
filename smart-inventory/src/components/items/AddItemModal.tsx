@@ -60,6 +60,7 @@ interface PrefillData {
   sellingPrice?: string;
   gstRate?: string;
   hsnCode?: string;
+  quantity?: string;
 }
 
 interface AddItemModalProps {
@@ -122,6 +123,7 @@ export function AddItemModal({
   // or it will re-run (and wipe user input) every time SWR revalidates those queries.
   useEffect(() => {
     if (!editItem && isOpen) {
+      const hasInvoicePrefill = !!(prefillData?.name || prefillData?.quantity);
       setFormData({
         name: prefillData?.name || "",
         userCode: "",
@@ -137,7 +139,7 @@ export function AddItemModal({
         margin: "",
         marginType: "PERCENTAGE",
         minStock: "0",
-        unit: "PCS",
+        unit: hasInvoicePrefill ? "CTN" : "PCS",
       });
       setUomConversions([]);
       setImageUrl(null);
@@ -214,7 +216,7 @@ export function AddItemModal({
       }
       setFormData(prev => ({
         ...prev,
-        sellingPrice: (Math.round(calculatedPrice * 100) / 100).toString(),
+        sellingPrice: (Math.round(calculatedPrice * 1000) / 1000).toString(),
       }));
     }
   }, [formData.purchasePrice, formData.margin, formData.marginType]);
@@ -818,6 +820,7 @@ export function AddItemModal({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="PCS">PCS (Pieces)</SelectItem>
+                    <SelectItem value="CTN">CTN (Cartons)</SelectItem>
                     <SelectItem value="KG">KG (Kilograms)</SelectItem>
                     <SelectItem value="LTR">LTR (Liters)</SelectItem>
                     <SelectItem value="MTR">MTR (Meters)</SelectItem>

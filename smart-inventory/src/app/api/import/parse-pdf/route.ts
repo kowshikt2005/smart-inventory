@@ -216,6 +216,10 @@ export async function POST(request: Request) {
     if (!file.name.toLowerCase().endsWith('.pdf'))
       return NextResponse.json({ error: 'File must be a PDF' }, { status: 400 });
 
+    const MAX_PDF_SIZE = 20 * 1024 * 1024; // 20MB
+    if (file.size > MAX_PDF_SIZE)
+      return NextResponse.json({ error: 'File too large. Maximum size is 20MB.' }, { status: 400 });
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const rows = await extractRows(buffer);
     const result = parsePdfInvoice(rows, invoiceType as 'SALES' | 'PURCHASE');

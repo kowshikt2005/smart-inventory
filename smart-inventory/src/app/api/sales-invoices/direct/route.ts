@@ -81,8 +81,8 @@ export async function POST(request: Request) {
         rate: Number(item.rate),
         taxRate,
         discountPercent: Number(item.discountPercent || 0),
-        amount: Math.round(baseAmount * 100) / 100,
-        taxAmount: Math.round(taxAmount * 100) / 100,
+        amount: Math.round(baseAmount * 1000) / 1000,
+        taxAmount: Math.round(taxAmount * 1000) / 1000,
       };
     });
 

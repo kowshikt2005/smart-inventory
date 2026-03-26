@@ -80,8 +80,8 @@ export function PurchaseOrderItemRow({
       rate,
       taxRate,
       quantity,
-      amount: Math.round(baseAmount * 100) / 100,
-      taxAmount: Math.round(taxAmount * 100) / 100,
+      amount: Math.round(baseAmount * 1000) / 1000,
+      taxAmount: Math.round(taxAmount * 1000) / 1000,
     });
   };
 
@@ -99,7 +99,7 @@ export function PurchaseOrderItemRow({
     const baseQuantity = item.quantity * currentFactor;
     const baseRate = item.rate / currentFactor;
     const newQuantity = Math.round((baseQuantity / newFactor) * 1000) / 1000;
-    const newRate = Math.round(baseRate * newFactor * 100) / 100;
+    const newRate = Math.round(baseRate * newFactor * 1000) / 1000;
 
     const baseAmount = newQuantity * newRate;
     const taxAmount = baseAmount * (item.taxRate / 100);
@@ -110,8 +110,8 @@ export function PurchaseOrderItemRow({
       uomFactor: newFactor,
       quantity: newQuantity,
       rate: newRate,
-      amount: Math.round(baseAmount * 100) / 100,
-      taxAmount: Math.round(taxAmount * 100) / 100,
+      amount: Math.round(baseAmount * 1000) / 1000,
+      taxAmount: Math.round(taxAmount * 1000) / 1000,
     });
   };
 
@@ -124,8 +124,8 @@ export function PurchaseOrderItemRow({
     onUpdate({
       ...item,
       quantity,
-      amount: Math.round(baseAmount * 100) / 100,
-      taxAmount: Math.round(taxAmount * 100) / 100,
+      amount: Math.round(baseAmount * 1000) / 1000,
+      taxAmount: Math.round(taxAmount * 1000) / 1000,
     });
   };
 
@@ -138,8 +138,8 @@ export function PurchaseOrderItemRow({
     onUpdate({
       ...item,
       rate,
-      amount: Math.round(baseAmount * 100) / 100,
-      taxAmount: Math.round(taxAmount * 100) / 100,
+      amount: Math.round(baseAmount * 1000) / 1000,
+      taxAmount: Math.round(taxAmount * 1000) / 1000,
     });
   };
 

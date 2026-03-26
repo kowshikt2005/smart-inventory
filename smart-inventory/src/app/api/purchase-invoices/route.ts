@@ -356,7 +356,7 @@ export async function POST(request: Request) {
         return {
           itemId: invoiceItem.itemId,
           quantity: Math.round(baseQuantity * 1000) / 1000,
-          rate: Math.round(baseRate * 100) / 100,
+          rate: Math.round(baseRate * 1000) / 1000,
           taxRate,
           taxAmount,
           amount,

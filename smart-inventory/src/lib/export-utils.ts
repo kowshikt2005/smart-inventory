@@ -273,7 +273,7 @@ export function generatePDFBase64(config: Omit<PDFConfig, "fileName">): string {
 export function fmtNum(n: number): string {
   return new Intl.NumberFormat("en-IN", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 3,
   }).format(n);
 }
 

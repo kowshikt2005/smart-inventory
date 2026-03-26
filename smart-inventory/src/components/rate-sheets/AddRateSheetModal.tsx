@@ -473,7 +473,7 @@ export function AddRateSheetModal({
       };
       const { percent, source } = getDiscount();
       const mrp = Number(item.mrp) || 0;
-      const finalRate = mrp > 0 && percent > 0 ? Math.round(mrp * (1 - percent / 100) * 100) / 100 : mrp;
+      const finalRate = mrp > 0 && percent > 0 ? Math.round(mrp * (1 - percent / 100) * 1000) / 1000 : mrp;
       const brand = brands.find((b) => b.id === item.brandId);
       return { item, percent, source, mrp, finalRate, brand };
     }).sort((a, b) => (a.brand?.name || "\uFFFF").localeCompare(b.brand?.name || "\uFFFF"));

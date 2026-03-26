@@ -19,6 +19,16 @@ function num(v: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
+function numLast(v: unknown): number {
+  // Takes the LAST numeric token — for Tally "rate amount" cells like "2.50 292.03" → 292.03
+  // If only one token, returns that (works for plain amounts too)
+  const s = v === null || v === undefined ? '' : String(v).replace(/,/g, '').trim();
+  const tokens = s.split(/\s+/);
+  const last = tokens[tokens.length - 1];
+  const n = Number(last);
+  return isNaN(n) ? 0 : n;
+}
+
 function parseDate(v: unknown): Date {
   if (!v) return new Date();
   // handle Excel serial dates (numbers like 45678)
@@ -90,15 +100,34 @@ function findBankAccount(ref: RefData, name: string) {
 }
 
 // ── tax calculation helper ───────────────────────────────
-// Priority: cgstRate+sgstRate > taxRate > item gstRate
-// num() handles comma-formatted values and Tally "rate amount" cells by taking the first token
+// Priority: amounts (₹) > rates (%) > item gstRate
+// If cgstAmount+sgstAmount or taxAmount provided, use directly as ₹ values.
+// Otherwise fall back to rate-based calculation.
 function calcLineTax(row: Record<string, unknown>, lineAmount: number, item: { gstRate: any } | undefined): { taxRate: number; taxAmount: number } {
+  // 1. Check for direct ₹ amounts first
+  const hasCgstAmt = str(row.cgstAmount) !== '';
+  const hasSgstAmt = str(row.sgstAmount) !== '';
+  const hasTaxAmt = str(row.taxAmount) !== '';
+
+  if (hasCgstAmt || hasSgstAmt) {
+    const totalTaxAmt = numLast(row.cgstAmount) + numLast(row.sgstAmount);
+    const taxRate = lineAmount > 0 ? Math.round((totalTaxAmt / lineAmount) * 100 * 100) / 100 : 0;
+    return { taxRate, taxAmount: totalTaxAmt };
+  }
+
+  if (hasTaxAmt) {
+    const totalTaxAmt = numLast(row.taxAmount);
+    const taxRate = lineAmount > 0 ? Math.round((totalTaxAmt / lineAmount) * 100 * 100) / 100 : 0;
+    return { taxRate, taxAmount: totalTaxAmt };
+  }
+
+  // 2. Fall back to rate-based calculation (%)
   const explicitRate = str(row.taxRate) !== '' ? num(row.taxRate) : null;
   const cgstSgstRate = (str(row.cgstRate) !== '' || str(row.sgstRate) !== '')
     ? num(row.cgstRate) + num(row.sgstRate)
     : null;
   const taxRate = explicitRate ?? cgstSgstRate ?? (item ? Number(item.gstRate) : 0);
-  const taxAmount = Math.round(lineAmount * (taxRate / 100) * 100) / 100;
+  const taxAmount = Math.round(lineAmount * (taxRate / 100) * 1000) / 1000;
   return { taxRate, taxAmount };
 }
 
@@ -140,8 +169,12 @@ async function validateRows(entityType: EntityType, rows: Record<string, unknown
         errors.push({ field: field.key, message: `${field.label} max ${field.maxLength} chars` });
       }
 
-      if ((field.type === 'number' || field.type === 'decimal') && isNaN(Number(sv))) {
-        errors.push({ field: field.key, message: `${field.label} must be a number` });
+      if ((field.type === 'number' || field.type === 'decimal')) {
+        // Use same parsing as num(): strip commas, take first token (handles Tally "2.50 292.03" format)
+        const firstToken = sv.replace(/,/g, '').trim().split(/\s+/)[0];
+        if (isNaN(Number(firstToken))) {
+          errors.push({ field: field.key, message: `${field.label} must be a number` });
+        }
       }
 
       if (field.type === 'date') {
@@ -714,6 +747,9 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
         const lineItems: { itemId: string | null; itemName: string; ref: string | null; quantity: number; rate: number; discountPercent: number; taxRate: number; taxAmount: number; amount: number; inventoryId: string | null }[] = [];
         let subtotal = 0;
         let totalTax = 0;
+        let totalCgstAmt = 0;
+        let totalSgstAmt = 0;
+        let hasDirectAmounts = false;
 
         for (const row of invRows) {
           const item = findItem(ref, str(row.itemCode) || str(row.itemName), str(row.hsnCode));
@@ -722,6 +758,13 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
           const disc = num(row.discountPercent);
           const lineAmount = qty * rate * (1 - disc / 100);
           const { taxRate, taxAmount } = calcLineTax(row, lineAmount, item);
+
+          // Track direct CGST/SGST amounts if provided
+          if (str(row.cgstAmount) !== '' || str(row.sgstAmount) !== '') {
+            totalCgstAmt += numLast(row.cgstAmount);
+            totalSgstAmt += numLast(row.sgstAmount);
+            hasDirectAmounts = true;
+          }
 
           lineItems.push({
             itemId: item?.id || null,
@@ -732,7 +775,7 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
             discountPercent: disc,
             taxRate,
             taxAmount,
-            amount: Math.round(lineAmount * 100) / 100,
+            amount: Math.round(lineAmount * 1000) / 1000,
             inventoryId: item?.inventory?.id || null,
           });
 
@@ -740,11 +783,12 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
           totalTax += taxAmount;
         }
 
-        subtotal = Math.round(subtotal * 100) / 100;
-        totalTax = Math.round(totalTax * 100) / 100;
-        const totalAmount = Math.round((subtotal + totalTax) * 100) / 100;
-        const cgst = Math.round(totalTax / 2 * 100) / 100;
-        const sgst = totalTax - cgst;
+        subtotal = Math.round(subtotal * 1000) / 1000;
+        totalTax = Math.round(totalTax * 1000) / 1000;
+        const totalAmount = Math.round((subtotal + totalTax) * 1000) / 1000;
+        // Use actual CGST/SGST amounts if provided, otherwise split 50/50
+        const cgst = hasDirectAmounts ? Math.round(totalCgstAmt * 1000) / 1000 : Math.round(totalTax / 2 * 1000) / 1000;
+        const sgst = hasDirectAmounts ? Math.round(totalSgstAmt * 1000) / 1000 : totalTax - cgst;
 
         const importDate = new Date();
         const invoice = await (tx.invoice.create as any)({
@@ -884,7 +928,7 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
             discountPercent: disc,
             taxRate,
             taxAmount,
-            amount: Math.round(lineAmount * 100) / 100,
+            amount: Math.round(lineAmount * 1000) / 1000,
             inventoryId: item?.inventory?.id || null,
           });
 
@@ -892,9 +936,9 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
           totalTax += taxAmount;
         }
 
-        subtotal = Math.round(subtotal * 100) / 100;
-        totalTax = Math.round(totalTax * 100) / 100;
-        const totalAmount = Math.round((subtotal + totalTax) * 100) / 100;
+        subtotal = Math.round(subtotal * 1000) / 1000;
+        totalTax = Math.round(totalTax * 1000) / 1000;
+        const totalAmount = Math.round((subtotal + totalTax) * 1000) / 1000;
 
         const importDate = new Date();
         const invoice = await (tx.purchaseInvoice.create as any)({
@@ -1018,8 +1062,8 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ error: 'action must be "validate" or "import"' }, { status: 400 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Import execute error:', error);
-    return NextResponse.json({ error: error.message || 'Import failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Import failed' }, { status: 500 });
   }
 }
