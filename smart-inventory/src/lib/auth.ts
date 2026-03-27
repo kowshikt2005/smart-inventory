@@ -284,6 +284,19 @@ export const authConfig: NextAuthConfig = {
     signIn: "/login",
     signOut: "/login",
   },
+  cookies: {
+    sessionToken: {
+      name: process.env.NODE_ENV === "production"
+        ? "__Secure-authjs.session-token"
+        : "authjs.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+  },
   session: {
     strategy: "jwt",
     maxAge: 8 * 60 * 60,    // 8 hours — session expires after 8h of inactivity

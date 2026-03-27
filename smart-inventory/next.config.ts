@@ -19,8 +19,8 @@ const CSP = [
   // 'self'      → logo, images served from the app
   // data:        → jspdf uses data: URIs when generating PDFs
   // blob:        → xlsx exports create blob URLs
-  // https:       → allows loading images over HTTPS from any source (for invoice logos etc.)
-  "img-src 'self' data: blob: https:",
+  // lh3.googleusercontent.com → Google OAuth profile pictures
+  "img-src 'self' data: blob: https://lh3.googleusercontent.com",
 
   // Fonts served from the same origin only
   "font-src 'self'",
@@ -85,13 +85,18 @@ const securityHeaders = [
     ].join(", "),
   },
 
-  // ── Fix 5: Remove "x-powered-by: Next.js" header (server disclosure) ─────
-  // The poweredByHeader: false config option below handles this,
-  // but we also explicitly remove it here as a second layer
+  // ── Fix 5: Strict-Transport-Security (HSTS) ─────────────────────────────
+  // Forces browsers to always use HTTPS for this domain for 2 years.
+  // includeSubDomains covers all subdomains; preload allows HSTS preload list submission.
+  // Also set this in nginx for belt-and-suspenders coverage.
   {
-    key: "X-Powered-By",
-    value: "",
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains; preload",
   },
+
+  // Fix 6 (server disclosure): poweredByHeader: false in nextConfig removes this.
+  // Do NOT set X-Powered-By to "" here — that sends an empty header, which
+  // scanners still flag. Nginx should strip it: proxy_hide_header X-Powered-By;
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -120,23 +125,22 @@ const nextConfig: NextConfig = {
 
 export default nextConfig;
 
-// ─── NGINX CONFIG — do this on your server (fixes HSTS + nginx version) ──────
+// ─── NGINX CONFIG — do this on your server ──────────────────────────────────
 //
 // Edit: /etc/nginx/sites-available/mysbe.in  (or wherever your site config is)
 //
-// 1. Hide nginx version (server disclosure fix):
-//    In the `http {}` block:
+// 1. Hide nginx version (fixes "Server Leaks Version Information"):
+//    In the `http {}` block of /etc/nginx/nginx.conf:
 //      server_tokens off;
 //
-// 2. Add HSTS header (protocol downgrade fix):
+// 2. Strip X-Powered-By (fixes "Server Leaks Information via X-Powered-By"):
+//    In your `location` block that proxies to Next.js:
+//      proxy_hide_header X-Powered-By;
+//
+// 3. HSTS (belt-and-suspenders — also set in Next.js headers above):
 //    In your `server {}` block for port 443 (HTTPS only):
 //      add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
 //
-// 3. Optionally hide x-nextjs-cache header:
-//      proxy_hide_header X-Nextjs-Cache;
-//
 // Then run:
 //   sudo nginx -t && sudo systemctl reload nginx
-//
-// That completes all 7 fixes from the security scan.
 // ─────────────────────────────────────────────────────────────────────────────
