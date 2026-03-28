@@ -153,7 +153,7 @@ export async function GET(
         inQty,
         outQty,
         runningBalance,
-        rate: movement.rate != null ? Number(movement.rate) : null,
+        // rate: TODO — add back after running `npx prisma generate` with updated schema
       };
     });
 
