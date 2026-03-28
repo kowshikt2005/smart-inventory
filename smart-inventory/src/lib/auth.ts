@@ -87,6 +87,8 @@ async function loadUserRole(user: { roleId?: string | null; role?: string }) {
   };
 }
 
+const useSecureCookies = process.env.NEXTAUTH_URL?.startsWith("https://") ?? false;
+
 export const authConfig: NextAuthConfig = {
   providers: [
     CredentialsProvider({
@@ -301,14 +303,14 @@ export const authConfig: NextAuthConfig = {
   },
   cookies: {
     sessionToken: {
-      name: process.env.NODE_ENV === "production"
+      name: useSecureCookies
         ? "__Secure-authjs.session-token"
         : "authjs.session-token",
       options: {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: process.env.NODE_ENV === "production",
+        secure: useSecureCookies,
       },
     },
   },

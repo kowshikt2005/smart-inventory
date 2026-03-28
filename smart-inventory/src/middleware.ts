@@ -3,6 +3,11 @@ import { getToken } from "next-auth/jwt";
 import { PATH_TO_PERMISSION } from "@/types/permissions";
 import type { RolePermissions } from "@/types/permissions";
 
+const useSecureCookies = process.env.NEXTAUTH_URL?.startsWith("https://") ?? false;
+const cookieName = useSecureCookies
+  ? "__Secure-authjs.session-token"
+  : "authjs.session-token";
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -12,9 +17,12 @@ export async function middleware(request: NextRequest) {
   }
 
   // Get the token from the request
+  // Must specify cookieName explicitly because nginx proxies HTTPS → HTTP internally,
+  // so getToken() would auto-detect "http" and look for the wrong cookie name.
   const token = await getToken({
     req: request,
     secret: process.env.NEXTAUTH_SECRET,
+    cookieName,
   });
 
   // If no token and trying to access protected route, redirect to login
