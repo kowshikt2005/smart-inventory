@@ -230,6 +230,7 @@ model StockMovement {
   inventoryId   String
   itemId        String
   quantity      Decimal           @db.Decimal(15, 3)
+  rate          Decimal?          @db.Decimal(15, 2)
   type          StockMovementType
   referenceType String?
   referenceId   String?

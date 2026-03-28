@@ -153,6 +153,7 @@ export async function GET(
         inQty,
         outQty,
         runningBalance,
+        rate: movement.rate != null ? Number(movement.rate) : null,
       };
     });
 

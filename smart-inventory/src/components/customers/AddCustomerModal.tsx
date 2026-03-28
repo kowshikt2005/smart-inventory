@@ -118,8 +118,8 @@ export function AddCustomerModal({
     setError(null);
 
     // Validate customer fields
-    if (!formData.name.trim() || !formData.gstin.trim() || !formData.state.trim() || !formData.city.trim() || !formData.pincode.trim()) {
-      setError("Please fill all required customer fields (name, GSTIN, state, city, pincode)");
+    if (!formData.name.trim() || !formData.phone.trim() || !formData.gstin.trim() || !formData.state.trim() || !formData.city.trim() || !formData.pincode.trim()) {
+      setError("Please fill all required customer fields (name, phone, GSTIN, state, city, pincode)");
       setActiveTab("customer");
       setIsSubmitting(false);
       return;
@@ -455,13 +455,14 @@ export function AddCustomerModal({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Phone
+                      Phone <span className="text-red-500">*</span>
                     </label>
                     <Input
                       type="tel"
                       name="phone"
                       value={formData.phone}
                       onChange={handleChange}
+                      required
                       maxLength={20}
                       placeholder="+91 98765 43210"
                     />

@@ -43,6 +43,7 @@ interface StockMovement {
   inQty: number;
   outQty: number;
   runningBalance: number;
+  rate: number | null;
 }
 
 interface LedgerSummary {
@@ -61,14 +62,14 @@ interface ItemInfo {
   reservedQuantity: number;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  PURCHASE: "Purchase",
-  SALE: "Sale",
-  ADJUSTMENT_IN: "Adjustment In",
-  ADJUSTMENT_OUT: "Adjustment Out",
-  RETURN: "Return",
-  DAMAGE: "Damage",
-  TRANSFER: "Transfer",
+const TYPE_META: Record<string, { label: string; color: string }> = {
+  PURCHASE: { label: "Purchase", color: "bg-green-100 text-green-700 border-green-200" },
+  SALE: { label: "Sales", color: "bg-blue-100 text-blue-700 border-blue-200" },
+  ADJUSTMENT_IN: { label: "Adjustment In", color: "bg-gray-100 text-gray-600 border-gray-200" },
+  ADJUSTMENT_OUT: { label: "Adjustment Out", color: "bg-gray-100 text-gray-600 border-gray-200" },
+  RETURN: { label: "Return", color: "bg-orange-100 text-orange-700 border-orange-200" },
+  DAMAGE: { label: "Damage", color: "bg-red-100 text-red-700 border-red-200" },
+  TRANSFER: { label: "Transfer", color: "bg-purple-100 text-purple-700 border-purple-200" },
 };
 
 export default function StockLedgerPage() {
@@ -84,7 +85,7 @@ export default function StockLedgerPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Fetch items
-  const { data: itemsData, isLoading: isLoadingItems } = useSWR("/api/items?limit=9999&isActive=true");
+  const { data: itemsData, isLoading: isLoadingItems } = useSWR("/api/items?limit=9999&isActive=true", { revalidateOnFocus: false, revalidateOnReconnect: false });
   const items: Item[] = itemsData?.items || [];
 
   // Fetch ledger
@@ -120,26 +121,17 @@ export default function StockLedgerPage() {
     }
   }, [selectedItemId, fromDate, toDate]);
 
-  // Format date only
-  const formatDateOnly = (dateStr: string) => {
+  // Format date + time combined
+  const formatDateTime = (dateStr: string) => {
     const date = new Date(dateStr);
     const day = date.getDate().toString().padStart(2, '0');
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const year = date.getFullYear();
-    return `${day}-${month}-${year}`;
-  };
-
-  // Format time from createdAt (actual entry timestamp)
-  const formatTimeOnly = (dateStr: string | null | undefined) => {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    // Check if it's a valid date
-    if (isNaN(date.getTime())) return '-';
     const hours = date.getHours();
     const minutes = date.getMinutes().toString().padStart(2, '0');
     const ampm = hours >= 12 ? 'PM' : 'AM';
     const displayHours = (hours % 12 || 12).toString().padStart(2, '0');
-    return `${displayHours}:${minutes} ${ampm}`;
+    return `${day}-${month}-${year} ${displayHours}:${minutes} ${ampm}`;
   };
 
   const formatDate = (dateStr: string) => {
@@ -159,11 +151,11 @@ export default function StockLedgerPage() {
     if (!movements.length || !summary || !itemInfo) return;
     const { company } = await fetchCompanySettings();
     const unit = itemInfo.unit || "";
-    const headers = ["Date", "Particulars", "Type", "In Qty", "Out Qty", "Balance"];
+    const headers = ["Date & Time", "Particulars", "Type", "Rate", "In Qty", "Out Qty", "Balance"];
     const rows: (string | number)[][] = [];
-    rows.push([fromDate ? fmtDateExport(fromDate) : "Opening", "Opening Balance", "-", "-", "-", `${summary.openingBalance.toFixed(3)} ${unit}`]);
-    movements.forEach((m) => rows.push([fmtDateExport(m.date), m.particulars, m.type, m.inQty > 0 ? m.inQty : "-", m.outQty > 0 ? m.outQty : "-", `${m.runningBalance.toFixed(3)} ${unit}`]));
-    rows.push(["Closing", "Closing Balance", "-", summary.totalIn, summary.totalOut, `${summary.closingBalance.toFixed(3)} ${unit}`]);
+    rows.push([fromDate ? fmtDateExport(fromDate) : "Opening", "Opening Balance", "-", "-", "-", "-", `${summary.openingBalance.toFixed(3)} ${unit}`]);
+    movements.forEach((m) => rows.push([formatDateTime(m.date), m.particulars, TYPE_META[m.type]?.label || m.type, m.rate != null ? m.rate : "-", m.inQty > 0 ? m.inQty : "-", m.outQty > 0 ? m.outQty : "-", `${m.runningBalance.toFixed(3)} ${unit}`]));
+    rows.push(["Closing", "Closing Balance", "-", "-", summary.totalIn, summary.totalOut, `${summary.closingBalance.toFixed(3)} ${unit}`]);
     exportToExcel({ fileName: `Stock-Ledger_${itemInfo.name}.xlsx`, sheets: [{ name: "Stock Ledger", headers, rows }], company });
   };
 
@@ -171,11 +163,11 @@ export default function StockLedgerPage() {
     if (!movements.length || !summary || !itemInfo) return;
     const { company } = await fetchCompanySettings();
     const unit = itemInfo.unit || "";
-    const headers = ["Date", "Particulars", "Type", "In Qty", "Out Qty", "Balance"];
+    const headers = ["Date & Time", "Particulars", "Type", "Rate", "In Qty", "Out Qty", "Balance"];
     const rows: (string | number)[][] = [];
-    rows.push([fromDate ? fmtDateExport(fromDate) : "Opening", "Opening Balance", "-", "-", "-", `${summary.openingBalance.toFixed(3)} ${unit}`]);
-    movements.forEach((m) => rows.push([fmtDateExport(m.date), m.particulars, m.type, m.inQty > 0 ? `${m.inQty.toFixed(3)} ${unit}` : "-", m.outQty > 0 ? `${m.outQty.toFixed(3)} ${unit}` : "-", `${m.runningBalance.toFixed(3)} ${unit}`]));
-    rows.push(["Closing", "Closing Balance", "-", `${summary.totalIn.toFixed(3)} ${unit}`, `${summary.totalOut.toFixed(3)} ${unit}`, `${summary.closingBalance.toFixed(3)} ${unit}`]);
+    rows.push([fromDate ? fmtDateExport(fromDate) : "Opening", "Opening Balance", "-", "-", "-", "-", `${summary.openingBalance.toFixed(3)} ${unit}`]);
+    movements.forEach((m) => rows.push([formatDateTime(m.date), m.particulars, TYPE_META[m.type]?.label || m.type, m.rate != null ? `₹${m.rate.toFixed(2)}` : "-", m.inQty > 0 ? `${m.inQty.toFixed(3)} ${unit}` : "-", m.outQty > 0 ? `${m.outQty.toFixed(3)} ${unit}` : "-", `${m.runningBalance.toFixed(3)} ${unit}`]));
+    rows.push(["Closing", "Closing Balance", "-", "-", `${summary.totalIn.toFixed(3)} ${unit}`, `${summary.totalOut.toFixed(3)} ${unit}`, `${summary.closingBalance.toFixed(3)} ${unit}`]);
     const dateRange = fromDate && toDate ? `${fmtDateExport(fromDate)} to ${fmtDateExport(toDate)}` : "All dates";
     exportToPDF({ fileName: `Stock-Ledger_${itemInfo.name}.pdf`, title: `Stock Ledger — ${itemInfo.name} (${itemInfo.itemCode})`, subtitle: dateRange, sheets: [{ name: "Stock Ledger", headers, rows }], company });
   };
@@ -319,10 +311,10 @@ export default function StockLedgerPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-gray-50">
-                    <TableHead className="font-semibold">Date</TableHead>
-                    <TableHead className="font-semibold">Time</TableHead>
+                    <TableHead className="font-semibold">Date & Time</TableHead>
                     <TableHead className="font-semibold">Particulars</TableHead>
                     <TableHead className="font-semibold">Type</TableHead>
+                    <TableHead className="font-semibold text-right">Rate</TableHead>
                     <TableHead className="font-semibold text-right">In Qty</TableHead>
                     <TableHead className="font-semibold text-right">Out Qty</TableHead>
                     <TableHead className="font-semibold text-right">Balance</TableHead>
@@ -335,9 +327,9 @@ export default function StockLedgerPage() {
                       <TableCell className="font-medium">
                         {fromDate ? formatDate(fromDate) : "Opening"}
                       </TableCell>
-                      <TableCell className="text-sm text-gray-500">-</TableCell>
                       <TableCell className="font-medium">Opening Balance</TableCell>
                       <TableCell>-</TableCell>
+                      <TableCell className="text-right">-</TableCell>
                       <TableCell className="text-right">-</TableCell>
                       <TableCell className="text-right">-</TableCell>
                       <TableCell className="text-right font-medium">
@@ -347,41 +339,44 @@ export default function StockLedgerPage() {
                   )}
 
                   {/* Movement Rows */}
-                  {movements.map((movement) => (
-                    <TableRow key={movement.id} className="hover:bg-gray-50">
-                      <TableCell className="text-sm whitespace-nowrap">{formatDateOnly(movement.date)}</TableCell>
-                      <TableCell className="text-sm text-gray-600 whitespace-nowrap">
-                        {formatTimeOnly(movement.date)}
-                      </TableCell>
-                      <TableCell className="max-w-xs">
-                        <p className="truncate" title={movement.particulars}>
-                          {movement.particulars}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {TYPE_LABELS[movement.type] || movement.type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right text-green-600">
-                        {movement.inQty > 0 ? formatQty(movement.inQty, itemInfo?.unit) : "-"}
-                      </TableCell>
-                      <TableCell className="text-right text-red-600">
-                        {movement.outQty > 0 ? formatQty(movement.outQty, itemInfo?.unit) : "-"}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatQty(movement.runningBalance, itemInfo?.unit)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {movements.map((movement) => {
+                    const typeMeta = TYPE_META[movement.type] || { label: movement.type, color: "bg-gray-100 text-gray-600 border-gray-200" };
+                    return (
+                      <TableRow key={movement.id} className="hover:bg-gray-50">
+                        <TableCell className="text-sm whitespace-nowrap">{formatDateTime(movement.date)}</TableCell>
+                        <TableCell className="max-w-xs">
+                          <p className="truncate" title={movement.particulars}>
+                            {movement.particulars}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${typeMeta.color}`}>
+                            {typeMeta.label}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {movement.rate != null ? `₹${movement.rate.toFixed(2)}` : "-"}
+                        </TableCell>
+                        <TableCell className="text-right text-green-600">
+                          {movement.inQty > 0 ? formatQty(movement.inQty, itemInfo?.unit) : "-"}
+                        </TableCell>
+                        <TableCell className="text-right text-red-600">
+                          {movement.outQty > 0 ? formatQty(movement.outQty, itemInfo?.unit) : "-"}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatQty(movement.runningBalance, itemInfo?.unit)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
 
                   {/* Closing Balance Row */}
                   {summary && (
                     <TableRow className="bg-gray-100 font-semibold">
                       <TableCell>{toDate ? formatDate(toDate) : "Closing"}</TableCell>
-                      <TableCell className="text-gray-500">-</TableCell>
                       <TableCell>Closing Balance</TableCell>
                       <TableCell>-</TableCell>
+                      <TableCell className="text-right">-</TableCell>
                       <TableCell className="text-right text-green-600">
                         {formatQty(summary.totalIn, itemInfo?.unit)}
                       </TableCell>
