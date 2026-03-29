@@ -69,6 +69,8 @@ function ItemsContent() {
   const prefillRate = searchParams.get("prefillRate");
   const prefillGstRate = searchParams.get("prefillGstRate");
   const prefillHsnCode = searchParams.get("prefillHsnCode");
+  const prefillMrp = searchParams.get("prefillMrp");
+  const prefillUnit = searchParams.get("prefillUnit");
   const prefillQuantity = searchParams.get("prefillQuantity");
   const openCreate = searchParams.get("openCreate") === "true";
 
@@ -90,10 +92,12 @@ function ItemsContent() {
             sellingPrice: invoiceType === "SALES" && prefillRate ? prefillRate : undefined,
             gstRate: prefillGstRate || undefined,
             hsnCode: prefillHsnCode || undefined,
+            mrp: prefillMrp || undefined,
+            unit: prefillUnit || undefined,
             quantity: prefillQuantity || undefined,
           }
         : undefined,
-    [openCreate, prefillName, prefillRate, prefillGstRate, prefillHsnCode, prefillQuantity, invoiceType]
+    [openCreate, prefillName, prefillRate, prefillGstRate, prefillHsnCode, prefillMrp, prefillUnit, prefillQuantity, invoiceType]
   );
   const [adjustingStockItem, setAdjustingStockItem] = useState<Item | null>(null);
   const [newStockValue, setNewStockValue] = useState("");

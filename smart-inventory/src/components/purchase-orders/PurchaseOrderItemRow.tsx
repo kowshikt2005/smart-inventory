@@ -25,6 +25,8 @@ interface OrderItemData {
   id: string;
   itemId: string;
   itemName?: string | null;
+  hsnCode?: string | null;
+  discountPercent?: number;
   quantity: number;
   unit?: string;
   uomFactor?: number;
@@ -197,7 +199,7 @@ export function PurchaseOrderItemRow({
 
         {/* HSN/SAC */}
         <td className="px-3 py-2 text-sm text-gray-600 w-20">
-          {selectedItem?.hsnCode || "-"}
+          {selectedItem?.hsnCode || item.hsnCode || "-"}
         </td>
 
         {/* Tax % */}

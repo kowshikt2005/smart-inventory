@@ -455,6 +455,7 @@ model InvoiceItem {
   invoiceId        String
   itemId           String?
   itemName         String?
+  hsnCode          String? @db.VarChar(8)
   salesOrderItemId String?
   ref              String?
   quantity         Decimal @db.Decimal(15, 3)
@@ -659,6 +660,7 @@ model PurchaseInvoiceItem {
   purchaseInvoiceId String
   itemId            String?
   itemName          String?
+  hsnCode           String?         @db.VarChar(8)
   ref               String?
   quantity          Decimal         @db.Decimal(15, 3)
   rate              Decimal         @db.Decimal(15, 3)

@@ -744,7 +744,7 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
         const isImported = !cust || invRows.some(r => !findItem(ref, str(r.itemCode) || str(r.itemName), str(r.hsnCode)));
 
         // Calculate line items
-        const lineItems: { itemId: string | null; itemName: string; ref: string | null; quantity: number; rate: number; discountPercent: number; taxRate: number; taxAmount: number; amount: number; inventoryId: string | null }[] = [];
+        const lineItems: { itemId: string | null; itemName: string; hsnCode: string | null; ref: string | null; quantity: number; rate: number; discountPercent: number; taxRate: number; taxAmount: number; amount: number; inventoryId: string | null }[] = [];
         let subtotal = 0;
         let totalTax = 0;
         let totalCgstAmt = 0;
@@ -755,7 +755,12 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
           const item = findItem(ref, str(row.itemCode) || str(row.itemName), str(row.hsnCode));
           const qty = num(row.quantity);
           const rate = num(row.rate);
-          const disc = num(row.discountPercent);
+          let disc = num(row.discountPercent);
+          // If discount amount (Rs) is provided but no percentage, compute it
+          const discAmt = num(row.discountAmount);
+          if (disc === 0 && discAmt > 0 && qty * rate > 0) {
+            disc = Math.round((discAmt / (qty * rate)) * 100 * 100) / 100;
+          }
           const lineAmount = qty * rate * (1 - disc / 100);
           const { taxRate, taxAmount } = calcLineTax(row, lineAmount, item);
 
@@ -769,7 +774,8 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
           lineItems.push({
             itemId: item?.id || null,
             itemName: str(row.itemName) || str(row.itemCode),
-            ref: str(row.ref) || (str(row.hsnCode) ? `HSN:${str(row.hsnCode)}` : null),
+            hsnCode: str(row.hsnCode) || item?.hsnCode || null,
+            ref: str(row.ref) || null,
             quantity: qty,
             rate,
             discountPercent: disc,
@@ -818,6 +824,7 @@ async function importSalesInvoices(batch: Record<string, unknown>[], offset: num
               invoiceId: invoice.id,
               itemId: li.itemId,
               itemName: li.itemName,
+              hsnCode: li.hsnCode,
               ref: li.ref,
               quantity: li.quantity,
               rate: li.rate,
@@ -907,7 +914,7 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
         const vend = vendByName || (firstRow.vendorGstin ? findVendor(ref, str(firstRow.vendorGstin)) : undefined);
         const isImported = !vend || invRows.some(r => !findItem(ref, str(r.itemCode) || str(r.itemName), str(r.hsnCode)));
 
-        const lineItems: { itemId: string | null; itemName: string; ref: string | null; quantity: number; rate: number; discountPercent: number; taxRate: number; taxAmount: number; amount: number; inventoryId: string | null }[] = [];
+        const lineItems: { itemId: string | null; itemName: string; hsnCode: string | null; ref: string | null; quantity: number; rate: number; discountPercent: number; taxRate: number; taxAmount: number; amount: number; inventoryId: string | null }[] = [];
         let subtotal = 0;
         let totalTax = 0;
 
@@ -915,14 +922,19 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
           const item = findItem(ref, str(row.itemCode) || str(row.itemName), str(row.hsnCode));
           const qty = num(row.quantity);
           const rate = num(row.rate);
-          const disc = num(row.discountPercent);
+          let disc = num(row.discountPercent);
+          const discAmt = num(row.discountAmount);
+          if (disc === 0 && discAmt > 0 && qty * rate > 0) {
+            disc = Math.round((discAmt / (qty * rate)) * 100 * 100) / 100;
+          }
           const lineAmount = qty * rate * (1 - disc / 100);
           const { taxRate, taxAmount } = calcLineTax(row, lineAmount, item);
 
           lineItems.push({
             itemId: item?.id || null,
             itemName: str(row.itemName) || str(row.itemCode),
-            ref: str(row.ref) || (str(row.hsnCode) ? `HSN:${str(row.hsnCode)}` : null),
+            hsnCode: str(row.hsnCode) || item?.hsnCode || null,
+            ref: str(row.ref) || null,
             quantity: qty,
             rate,
             discountPercent: disc,
@@ -966,6 +978,7 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
               purchaseInvoiceId: invoice.id,
               itemId: li.itemId,
               itemName: li.itemName,
+              hsnCode: li.hsnCode,
               ref: li.ref,
               quantity: li.quantity,
               rate: li.rate,

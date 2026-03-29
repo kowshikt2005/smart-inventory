@@ -198,15 +198,18 @@ export async function PUT(
           const factor = Number(item.uomFactor || 1);
           const baseQuantity = Number(item.quantity) * factor;
           const baseRate = Number(item.rate) / factor;
-          const amount = baseQuantity * baseRate;
-          const taxAmount = amount * (Number(item.taxRate) / 100);
+          const discountPercent = Number(item.discountPercent || 0);
+          const taxableAmount = baseQuantity * baseRate * (1 - discountPercent / 100);
+          const taxAmount = taxableAmount * (Number(item.taxRate) / 100);
           return {
             itemId: item.itemId,
+            hsnCode: item.hsnCode || null,
             quantity: Math.round(baseQuantity * 1000) / 1000,
             rate: Math.round(baseRate * 1000) / 1000,
+            discountPercent,
             taxRate: Number(item.taxRate),
             taxAmount: Math.round(taxAmount * 1000) / 1000,
-            amount: Math.round(amount * 1000) / 1000,
+            amount: Math.round(taxableAmount * 1000) / 1000,
           };
         });
 

@@ -62,6 +62,8 @@ interface InvoiceItemData {
   id: string;
   itemId: string;
   itemName?: string | null;
+  hsnCode?: string | null;
+  discountPercent?: number;
   quantity: number;
   unit?: string;
   uomFactor?: number;
@@ -234,6 +236,8 @@ function NewPurchaseInvoicePageContent() {
               (item: {
                 itemId: string | null;
                 itemName: string | null;
+                hsnCode?: string | null;
+                discountPercent?: number;
                 quantity: number;
                 unit?: string | null;
                 uomFactor?: number | null;
@@ -245,6 +249,8 @@ function NewPurchaseInvoicePageContent() {
                 id: generateId(),
                 itemId: item.itemId || "",
                 itemName: item.itemName || null,
+                hsnCode: item.hsnCode || null,
+                discountPercent: Number(item.discountPercent || 0),
                 quantity: Number(item.quantity),
                 unit: item.unit || undefined,
                 uomFactor: Number(item.uomFactor || 1),
@@ -541,10 +547,12 @@ function NewPurchaseInvoicePageContent() {
         roundOffMode,
         items: validItems.map((item) => ({
           itemId: item.itemId,
+          hsnCode: item.hsnCode || null,
           quantity: item.quantity,
           unit: item.unit,
           uomFactor: item.uomFactor || 1,
           rate: item.rate,
+          discountPercent: item.discountPercent || 0,
           taxRate: item.taxRate,
         })),
       };

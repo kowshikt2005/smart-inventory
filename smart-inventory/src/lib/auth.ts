@@ -99,21 +99,13 @@ export const authConfig: NextAuthConfig = {
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        console.log("[AUTH DEBUG] === authorize() called ===");
-        console.log("[AUTH DEBUG] NODE_ENV:", process.env.NODE_ENV);
-        console.log("[AUTH DEBUG] DB host:", process.env.DATABASE_URL?.replace(/\/\/.*@/, "//***@"));
-        console.log("[AUTH DEBUG] credentials present:", { email: !!credentials?.email, password: !!credentials?.password });
-
         if (!credentials?.email || !credentials?.password) {
-          console.log("[AUTH DEBUG] FAIL: missing credentials");
           return null;
         }
 
         const email = (credentials.email as string).toLowerCase();
-        console.log("[AUTH DEBUG] email:", email);
 
         const rateLimitError = checkLoginRateLimit(email);
-        console.log("[AUTH DEBUG] rate limit:", rateLimitError ?? "OK");
         if (rateLimitError) {
           throw new Error(rateLimitError);
         }
@@ -123,19 +115,14 @@ export const authConfig: NextAuthConfig = {
             where: { email },
           });
 
-          console.log("[AUTH DEBUG] user found:", !!user, "| isActive:", user?.isActive, "| hasPassword:", !!user?.password, "| passwordLength:", user?.password?.length);
-
           if (!user || !user.isActive) {
-            console.log("[AUTH DEBUG] FAIL: user missing or inactive");
             recordFailedLogin(email);
             return null;
           }
 
           const isValidPassword = await verifyPassword(credentials.password as string, user.password);
-          console.log("[AUTH DEBUG] password match:", isValidPassword);
 
           if (!isValidPassword) {
-            console.log("[AUTH DEBUG] FAIL: wrong password");
             recordFailedLogin(email);
             return null;
           }
@@ -143,7 +130,6 @@ export const authConfig: NextAuthConfig = {
           clearLoginAttempts(email);
 
           const roleData = await loadUserRole(user);
-          console.log("[AUTH DEBUG] SUCCESS: role=", roleData.roleName, "roleId=", roleData.roleId);
 
           return {
             id: user.id,
@@ -155,7 +141,7 @@ export const authConfig: NextAuthConfig = {
             permissions: roleData.permissions,
           };
         } catch (error) {
-          console.error("[AUTH DEBUG] CAUGHT ERROR:", error);
+          console.error("Auth error:", error);
           if (error instanceof Error && error.message.startsWith("Too many")) throw error;
           return null;
         }

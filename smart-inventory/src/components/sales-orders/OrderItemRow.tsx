@@ -32,6 +32,8 @@ interface OrderItemData {
   id: string;
   itemId: string;
   itemName?: string | null;
+  hsnCode?: string | null;
+  mrp?: number;
   quantity: number;
   unit?: string;
   uomFactor?: number;
@@ -276,7 +278,7 @@ export function OrderItemRow({
 
         {/* HSN/SAC */}
         <td className="px-3 py-2 text-sm text-gray-600 w-20">
-          {selectedItem?.hsnCode || "-"}
+          {selectedItem?.hsnCode || item.hsnCode || "-"}
         </td>
 
         {/* Tax % */}
@@ -340,9 +342,16 @@ export function OrderItemRow({
 
         {/* MRP */}
         <td className="px-3 py-2 text-sm text-gray-900 font-medium text-right w-24">
-          {selectedItem && Number(selectedItem.mrp) > 0
-            ? formatCurrency(Number(selectedItem.mrp))
-            : "-"}
+          {(() => {
+            const masterMrp = Number(selectedItem?.mrp || item.mrp || 0);
+            if (masterMrp > 0) return formatCurrency(masterMrp);
+            // Reconstruct MRP from rate + discount when isGstInclusive (MRP-based pricing)
+            if (item.isGstInclusive && item.discountPercent > 0) {
+              const reconstructed = item.rate / (1 - item.discountPercent / 100);
+              return formatCurrency(Math.round(reconstructed * 100) / 100);
+            }
+            return "-";
+          })()}
         </td>
 
         {/* Discount % */}

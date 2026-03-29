@@ -89,48 +89,60 @@ export const ENTITY_FIELDS: Record<EntityType, ImportField[]> = {
     { key: 'notes', label: 'Notes', required: false, type: 'string' },
   ],
   SALES_INVOICE: [
-    { key: 'invoiceNumber', label: 'Invoice Number', required: true, type: 'string' },
-    { key: 'invoiceDate', label: 'Invoice Date', required: true, type: 'date' },
-    { key: 'customerName', label: 'Customer Name', required: true, type: 'fk', fkEntity: 'customer', fkMatchField: 'name' },
-    { key: 'customerGstin', label: 'Customer GSTIN', required: false, type: 'string', maxLength: 15 },
-    { key: 'dueDate', label: 'Due Date', required: false, type: 'date' },
-    { key: 'itemName', label: 'Item Name', required: true, type: 'fk', fkEntity: 'item', fkMatchField: 'name' },
-    { key: 'itemCode', label: 'Item Code', required: false, type: 'string' },
-    { key: 'hsnCode', label: 'HSN Code', required: false, type: 'string', maxLength: 8 },
-    { key: 'quantity', label: 'Quantity', required: true, type: 'decimal' },
-    { key: 'unit', label: 'Unit', required: false, type: 'string' },
-    { key: 'rate', label: 'Rate', required: true, type: 'decimal' },
-    { key: 'discountPercent', label: 'Discount %', required: false, type: 'decimal' },
-    { key: 'taxRate', label: 'Tax Rate %', required: false, type: 'decimal', unit: '%' },
-    { key: 'cgstRate', label: 'CGST %', required: false, type: 'decimal', unit: '%' },
-    { key: 'sgstRate', label: 'SGST %', required: false, type: 'decimal', unit: '%' },
-    { key: 'taxAmount', label: 'Tax Amount', required: false, type: 'decimal', unit: '₹', aliases: ['totaltax', 'gstamount', 'gstvalue', 'taxvalue'] },
-    { key: 'cgstAmount', label: 'CGST Amount', required: false, type: 'decimal', unit: '₹', aliases: ['cgstvalue', 'cgst'] },
-    { key: 'sgstAmount', label: 'SGST Amount', required: false, type: 'decimal', unit: '₹', aliases: ['sgstvalue', 'sgst'] },
-    { key: 'notes', label: 'Notes', required: false, type: 'string' },
-    { key: 'ref', label: 'Ref / Source', required: false, type: 'string' },
+    { key: 'invoiceNumber', label: 'Invoice Number', required: true, type: 'string', aliases: ['invno', 'invoiceno', 'billno', 'billnumber', 'saprefno', 'sapreferenceno', 'voucherno', 'docno', 'documentno', 'gstinvoiceno', 'receiptno'] },
+    { key: 'invoiceDate', label: 'Invoice Date', required: true, type: 'date', aliases: ['invoicedt', 'billdate', 'billdt', 'date', 'dt', 'invdate', 'invdt'] },
+    { key: 'customerName', label: 'Customer Name', required: true, type: 'fk', fkEntity: 'customer', fkMatchField: 'name', aliases: ['customername', 'partyname', 'buyername', 'buyer', 'customer', 'billto', 'soldto', 'consignee'] },
+    { key: 'customerGstin', label: 'Customer GSTIN', required: false, type: 'string', maxLength: 15, aliases: ['gstin', 'gstno', 'gstinno', 'buyergstin'] },
+    { key: 'dueDate', label: 'Due Date', required: false, type: 'date', aliases: ['duedt', 'paymentdue', 'paymentdate'] },
+    { key: 'itemName', label: 'Item Name', required: true, type: 'fk', fkEntity: 'item', fkMatchField: 'name', aliases: ['item', 'description', 'desc', 'particulars', 'product', 'productname', 'material', 'materialdesc', 'materialdescription', 'goodsdescription', 'packdesc', 'varpackdesc', 'variantpackdesc', 'itemdescription', 'itemdesc', 'nameofproduct', 'nameofgoods'] },
+    { key: 'itemCode', label: 'Item Code', required: false, type: 'string', aliases: ['packcode', 'productcode', 'materialcode', 'sku', 'code', 'partno', 'partnumber', 'cat', 'skucode', 'itemno', 'srno'] },
+    { key: 'hsnCode', label: 'HSN Code', required: false, type: 'string', maxLength: 8, aliases: ['hsn', 'hsnsac', 'saccode', 'hsncode', 'hsnsaccode'] },
+    { key: 'batchNo', label: 'Batch No', required: false, type: 'string', aliases: ['batch', 'batchnumber', 'batchno', 'lotno', 'lotnumber', 'batchid'] },
+    { key: 'mrp', label: 'MRP', required: false, type: 'decimal', aliases: ['mrppack', 'mrpunit', 'mrpperpack', 'maximumretailprice', 'mrpperunit', 'mrprs'] },
+    { key: 'quantity', label: 'Quantity', required: true, type: 'decimal', aliases: ['qty', 'qtyinunits', 'qtyin', 'noofunits', 'units', 'pcs', 'nos', 'pieces', 'qtyunits', 'quantityinunits', 'noofpkt', 'noofpktunits', 'totalqty', 'orderqty', 'despatchqty', 'dispatchqty', 'deliveredqty'] },
+    { key: 'unit', label: 'Unit', required: false, type: 'string', aliases: ['uom', 'unitofmeasure', 'unitofmeasurement'] },
+    { key: 'rate', label: 'Rate', required: true, type: 'decimal', aliases: ['rateunit', 'rateperunit', 'price', 'unitprice', 'unitrate', 'priceunit', 'priceperunit', 'ratepers', 'basicrate'] },
+    { key: 'baseValue', label: 'Base Value', required: false, type: 'decimal', unit: '₹', aliases: ['basevalue', 'basicvalue', 'basicamount', 'assessablevalue', 'baseamount'] },
+    { key: 'discountPercent', label: 'Discount %', required: false, type: 'decimal', aliases: ['disc', 'discpercent', 'discountpercent', 'discper'] },
+    { key: 'discountAmount', label: 'Discount Amount', required: false, type: 'decimal', unit: '₹', aliases: ['discntrs', 'discountrs', 'discamt', 'discountamount', 'discountvalue', 'discount', 'discrs', 'discntamount'] },
+    { key: 'taxableValue', label: 'Taxable Value', required: false, type: 'decimal', unit: '₹', aliases: ['taxableamt', 'taxableamount', 'taxableto', 'taxabletotal', 'taxablevalue', 'assessablevalue'] },
+    { key: 'taxRate', label: 'Tax Rate %', required: false, type: 'decimal', unit: '%', aliases: ['gstpercent', 'gstrate', 'taxratepercent', 'gstdisc'] },
+    { key: 'cgstRate', label: 'CGST %', required: false, type: 'decimal', unit: '%', aliases: ['cgstpercent', 'cgstrate', 'cgstratepercent'] },
+    { key: 'sgstRate', label: 'SGST %', required: false, type: 'decimal', unit: '%', aliases: ['sgstpercent', 'sgstrate', 'sgstratepercent'] },
+    { key: 'taxAmount', label: 'Tax Amount', required: false, type: 'decimal', unit: '₹', aliases: ['totaltax', 'gstamount', 'gstvalue', 'taxvalue', 'totaltaxamount', 'totalgst'] },
+    { key: 'cgstAmount', label: 'CGST Amount', required: false, type: 'decimal', unit: '₹', aliases: ['cgstvalue', 'cgstamt', 'cgstrs', 'cgstamtrs'] },
+    { key: 'sgstAmount', label: 'SGST Amount', required: false, type: 'decimal', unit: '₹', aliases: ['sgstvalue', 'sgstamt', 'sgstrs', 'sgstamtrs'] },
+    { key: 'grossValue', label: 'Gross Value', required: false, type: 'decimal', unit: '₹', aliases: ['grossamount', 'totalamount', 'total', 'netamount', 'invoiceamount', 'grandtotal', 'netvalue', 'grossvalue', 'invoicevalue'] },
+    { key: 'notes', label: 'Notes', required: false, type: 'string', aliases: ['remarks', 'comment', 'comments', 'narration'] },
+    { key: 'ref', label: 'Ref / Source', required: false, type: 'string', aliases: ['reference', 'referenceno', 'refno', 'source', 'orderno', 'orderref', 'pono', 'purchaseorderno'] },
   ],
   PURCHASE_INVOICE: [
-    { key: 'invoiceNumber', label: 'Invoice Number', required: true, type: 'string' },
-    { key: 'date', label: 'Date', required: true, type: 'date' },
-    { key: 'dueDate', label: 'Due Date', required: false, type: 'date' },
-    { key: 'vendorName', label: 'Vendor Name', required: true, type: 'fk', fkEntity: 'vendor', fkMatchField: 'name' },
-    { key: 'vendorGstin', label: 'Vendor GSTIN', required: false, type: 'string', maxLength: 15 },
-    { key: 'itemName', label: 'Item Name', required: true, type: 'fk', fkEntity: 'item', fkMatchField: 'name' },
-    { key: 'itemCode', label: 'Item Code', required: false, type: 'string' },
-    { key: 'hsnCode', label: 'HSN Code', required: false, type: 'string', maxLength: 8 },
-    { key: 'quantity', label: 'Quantity', required: true, type: 'decimal' },
-    { key: 'unit', label: 'Unit', required: false, type: 'string' },
-    { key: 'rate', label: 'Rate', required: true, type: 'decimal' },
-    { key: 'discountPercent', label: 'Discount %', required: false, type: 'decimal' },
-    { key: 'taxRate', label: 'Tax Rate %', required: false, type: 'decimal', unit: '%' },
-    { key: 'cgstRate', label: 'CGST %', required: false, type: 'decimal', unit: '%' },
-    { key: 'sgstRate', label: 'SGST %', required: false, type: 'decimal', unit: '%' },
-    { key: 'taxAmount', label: 'Tax Amount', required: false, type: 'decimal', unit: '₹', aliases: ['totaltax', 'gstamount', 'gstvalue', 'taxvalue'] },
-    { key: 'cgstAmount', label: 'CGST Amount', required: false, type: 'decimal', unit: '₹', aliases: ['cgstvalue', 'cgst'] },
-    { key: 'sgstAmount', label: 'SGST Amount', required: false, type: 'decimal', unit: '₹', aliases: ['sgstvalue', 'sgst'] },
-    { key: 'notes', label: 'Notes', required: false, type: 'string' },
-    { key: 'ref', label: 'Ref / Source', required: false, type: 'string' },
+    { key: 'invoiceNumber', label: 'Invoice Number', required: true, type: 'string', aliases: ['invno', 'invoiceno', 'billno', 'billnumber', 'saprefno', 'sapreferenceno', 'voucherno', 'docno', 'documentno', 'gstinvoiceno', 'receiptno'] },
+    { key: 'date', label: 'Date', required: true, type: 'date', aliases: ['invoicedate', 'invoicedt', 'billdate', 'billdt', 'dt', 'invdate', 'invdt'] },
+    { key: 'dueDate', label: 'Due Date', required: false, type: 'date', aliases: ['duedt', 'paymentdue', 'paymentdate'] },
+    { key: 'vendorName', label: 'Vendor Name', required: true, type: 'fk', fkEntity: 'vendor', fkMatchField: 'name', aliases: ['vendorname', 'partyname', 'suppliername', 'supplier', 'from', 'vendor', 'sellerName', 'seller', 'despatchedfrom', 'stockdespatchedfrom'] },
+    { key: 'vendorGstin', label: 'Vendor GSTIN', required: false, type: 'string', maxLength: 15, aliases: ['gstin', 'gstno', 'gstinno', 'sellergstin', 'suppliergstin'] },
+    { key: 'itemName', label: 'Item Name', required: true, type: 'fk', fkEntity: 'item', fkMatchField: 'name', aliases: ['item', 'description', 'desc', 'particulars', 'product', 'productname', 'material', 'materialdesc', 'materialdescription', 'goodsdescription', 'packdesc', 'varpackdesc', 'variantpackdesc', 'itemdescription', 'itemdesc', 'nameofproduct', 'nameofgoods'] },
+    { key: 'itemCode', label: 'Item Code', required: false, type: 'string', aliases: ['packcode', 'productcode', 'materialcode', 'sku', 'code', 'partno', 'partnumber', 'cat', 'skucode', 'itemno', 'srno'] },
+    { key: 'hsnCode', label: 'HSN Code', required: false, type: 'string', maxLength: 8, aliases: ['hsn', 'hsnsac', 'saccode', 'hsncode', 'hsnsaccode'] },
+    { key: 'batchNo', label: 'Batch No', required: false, type: 'string', aliases: ['batch', 'batchnumber', 'batchno', 'lotno', 'lotnumber', 'batchid'] },
+    { key: 'mrp', label: 'MRP', required: false, type: 'decimal', aliases: ['mrppack', 'mrpunit', 'mrpperpack', 'maximumretailprice', 'mrpperunit', 'mrprs'] },
+    { key: 'quantity', label: 'Quantity', required: true, type: 'decimal', aliases: ['qty', 'qtyinunits', 'qtyin', 'noofunits', 'units', 'pcs', 'nos', 'pieces', 'qtyunits', 'quantityinunits', 'noofpkt', 'noofpktunits', 'totalqty', 'orderqty', 'despatchqty', 'dispatchqty', 'deliveredqty'] },
+    { key: 'unit', label: 'Unit', required: false, type: 'string', aliases: ['uom', 'unitofmeasure', 'unitofmeasurement'] },
+    { key: 'rate', label: 'Rate', required: true, type: 'decimal', aliases: ['rateunit', 'rateperunit', 'price', 'unitprice', 'unitrate', 'priceunit', 'priceperunit', 'ratepers', 'basicrate'] },
+    { key: 'baseValue', label: 'Base Value', required: false, type: 'decimal', unit: '₹', aliases: ['basevalue', 'basicvalue', 'basicamount', 'assessablevalue', 'baseamount'] },
+    { key: 'discountPercent', label: 'Discount %', required: false, type: 'decimal', aliases: ['disc', 'discpercent', 'discountpercent', 'discper'] },
+    { key: 'discountAmount', label: 'Discount Amount', required: false, type: 'decimal', unit: '₹', aliases: ['discntrs', 'discountrs', 'discamt', 'discountamount', 'discountvalue', 'discount', 'discrs', 'discntamount'] },
+    { key: 'taxableValue', label: 'Taxable Value', required: false, type: 'decimal', unit: '₹', aliases: ['taxableamt', 'taxableamount', 'taxableto', 'taxabletotal', 'taxablevalue', 'assessablevalue'] },
+    { key: 'taxRate', label: 'Tax Rate %', required: false, type: 'decimal', unit: '%', aliases: ['gstpercent', 'gstrate', 'taxratepercent', 'gstdisc'] },
+    { key: 'cgstRate', label: 'CGST %', required: false, type: 'decimal', unit: '%', aliases: ['cgstpercent', 'cgstrate', 'cgstratepercent'] },
+    { key: 'sgstRate', label: 'SGST %', required: false, type: 'decimal', unit: '%', aliases: ['sgstpercent', 'sgstrate', 'sgstratepercent'] },
+    { key: 'taxAmount', label: 'Tax Amount', required: false, type: 'decimal', unit: '₹', aliases: ['totaltax', 'gstamount', 'gstvalue', 'taxvalue', 'totaltaxamount', 'totalgst'] },
+    { key: 'cgstAmount', label: 'CGST Amount', required: false, type: 'decimal', unit: '₹', aliases: ['cgstvalue', 'cgstamt', 'cgstrs', 'cgstamtrs'] },
+    { key: 'sgstAmount', label: 'SGST Amount', required: false, type: 'decimal', unit: '₹', aliases: ['sgstvalue', 'sgstamt', 'sgstrs', 'sgstamtrs'] },
+    { key: 'grossValue', label: 'Gross Value', required: false, type: 'decimal', unit: '₹', aliases: ['grossamount', 'totalamount', 'total', 'netamount', 'invoiceamount', 'grandtotal', 'netvalue', 'grossvalue', 'invoicevalue'] },
+    { key: 'notes', label: 'Notes', required: false, type: 'string', aliases: ['remarks', 'comment', 'comments', 'narration'] },
+    { key: 'ref', label: 'Ref / Source', required: false, type: 'string', aliases: ['reference', 'referenceno', 'refno', 'source', 'orderno', 'orderref', 'pono', 'purchaseorderno'] },
   ],
   EMPLOYEE: [
     { key: 'name', label: 'Name', required: true, type: 'string', maxLength: 255 },
@@ -151,9 +163,24 @@ export interface RowValidation {
   resolvedData: Record<string, unknown>;
 }
 
+// Normalize a string for comparison: lowercase, strip all non-alphanumeric
+function norm(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// Split a header like "Var / Pack Desc." into individual words for word-level matching
+function words(s: string): string[] {
+  return s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 0);
+}
+
 /**
- * Auto-match entity fields to Excel column headers using case-insensitive matching.
+ * Auto-match entity fields to Excel column headers using multi-strategy matching.
  * Returns { dbField: excelColumn } — i.e. for each system field, which Excel column best matches.
+ *
+ * Matching priority:
+ * 1. Exact match on normalized label, key, or alias
+ * 2. Substring match (header contains field name or vice versa)
+ * 3. Word-level match (any word in the header matches a key/alias word)
  */
 export function autoMatchColumns(
   headers: string[],
@@ -161,27 +188,75 @@ export function autoMatchColumns(
 ): Record<string, string> {
   const fields = ENTITY_FIELDS[entityType];
   const mapping: Record<string, string> = {};
+  // Track which headers are already claimed to avoid double-mapping
+  const claimed = new Set<string>();
 
+  // Pass 1: exact matches (highest confidence)
   for (const field of fields) {
-    const fieldLabel = field.label.toLowerCase().replace(/[_\-.\s]+/g, '');
-    const fieldKey = field.key.toLowerCase().replace(/[_\-.\s]+/g, '');
-    const fieldAliases = (field.aliases || []).map(a => a.toLowerCase().replace(/[_\-.\s]+/g, ''));
-    let bestMatch: string | null = null;
+    const fieldNorm = norm(field.label);
+    const keyNorm = norm(field.key);
+    const aliasNorms = (field.aliases || []).map(a => norm(a));
 
     for (const header of headers) {
-      const normalised = header.trim().toLowerCase().replace(/[_\-.\s]+/g, '');
-      // Exact match on label, key, or any alias — highest priority
-      if (normalised === fieldLabel || normalised === fieldKey || fieldAliases.includes(normalised)) {
-        bestMatch = header;
+      if (claimed.has(header)) continue;
+      const headerNorm = norm(header);
+      if (headerNorm === fieldNorm || headerNorm === keyNorm || aliasNorms.includes(headerNorm)) {
+        mapping[field.key] = header;
+        claimed.add(header);
         break;
       }
-      if (!bestMatch && (normalised.includes(fieldLabel) || fieldLabel.includes(normalised))) {
-        bestMatch = header;
+    }
+  }
+
+  // Pass 2: substring match (field label/key/alias is contained in header or vice versa)
+  for (const field of fields) {
+    if (mapping[field.key]) continue;
+    const fieldNorm = norm(field.label);
+    const keyNorm = norm(field.key);
+    const aliasNorms = (field.aliases || []).map(a => norm(a));
+    const allTerms = [fieldNorm, keyNorm, ...aliasNorms].filter(t => t.length >= 3);
+
+    for (const header of headers) {
+      if (claimed.has(header)) continue;
+      const headerNorm = norm(header);
+      const matched = allTerms.some(term =>
+        headerNorm.includes(term) || term.includes(headerNorm)
+      );
+      if (matched) {
+        mapping[field.key] = header;
+        claimed.add(header);
+        break;
       }
     }
+  }
 
-    if (bestMatch) {
-      mapping[field.key] = bestMatch;
+  // Pass 3: word-level match — split header into words and check if any
+  // significant word matches a key/alias. Handles cases like
+  // "Qty in Units" matching "qty" alias, "Var / Pack Desc." matching "desc" alias.
+  for (const field of fields) {
+    if (mapping[field.key]) continue;
+    const keyNorm = norm(field.key);
+    const aliasNorms = (field.aliases || []).map(a => norm(a));
+    // Only use words that are meaningful enough (>=3 chars) to avoid false positives
+    const matchTerms = new Set([keyNorm, ...aliasNorms].filter(t => t.length >= 3));
+
+    for (const header of headers) {
+      if (claimed.has(header)) continue;
+      const headerWords = words(header);
+      // Check if any header word matches, or if the concatenated header words form a match
+      const wordMatch = headerWords.some(w => w.length >= 3 && matchTerms.has(w));
+      // Also check concatenation of adjacent words: "pack desc" → "packdesc"
+      const concats: string[] = [];
+      for (let i = 0; i < headerWords.length - 1; i++) {
+        concats.push(headerWords[i] + headerWords[i + 1]);
+      }
+      const concatMatch = concats.some(c => matchTerms.has(c));
+
+      if (wordMatch || concatMatch) {
+        mapping[field.key] = header;
+        claimed.add(header);
+        break;
+      }
     }
   }
 

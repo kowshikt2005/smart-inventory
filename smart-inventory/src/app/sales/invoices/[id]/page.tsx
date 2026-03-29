@@ -14,6 +14,8 @@ import {
 import { ArrowLeft, Loader2, Ban, FileDown, MapPin, Edit } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { AddItemModal } from "@/components/items/AddItemModal";
+import { AddCustomerModal } from "@/components/customers/AddCustomerModal";
 import { generateInvoicePDF } from "@/lib/invoice-pdf";
 import { fetchCompanySettings } from "@/lib/export-utils";
 
@@ -35,6 +37,7 @@ interface InvoiceItem {
   id: string;
   itemId: string | null;
   itemName: string | null;
+  hsnCode: string | null;
   ref: string | null;
   quantity: number;
   rate: number;
@@ -113,6 +116,12 @@ export default function InvoiceDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Inline modal state — avoids redirect to masters pages
+  const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+  const [addItemOpen, setAddItemOpen] = useState(false);
+  const [activeInvoiceItem, setActiveInvoiceItem] = useState<{ id: string; prefill: Record<string, string> } | null>(null);
+  const [linking, setLinking] = useState(false);
 
   const fetchInvoice = useCallback(async () => {
     try {
@@ -321,15 +330,7 @@ export default function InvoiceDetailPage() {
                   <p className="text-xs text-amber-600 mb-1">Customer not linked to masters</p>
                   <button
                     className="text-xs text-teal-600 hover:text-teal-700 underline underline-offset-2"
-                    onClick={() => {
-                      const qs = new URLSearchParams({
-                        openCreate: "true",
-                        returnTo: `/sales/invoices/${id}`,
-                        salesInvoiceId: id,
-                        prefillName: invoice.customerName || "",
-                      });
-                      router.push(`/masters/customers?${qs.toString()}`);
-                    }}
+                    onClick={() => setAddCustomerOpen(true)}
                   >
                     Create &amp; link customer
                   </button>
@@ -401,30 +402,30 @@ export default function InvoiceDetailPage() {
                             <button
                               className="text-xs text-amber-600 hover:text-amber-700 underline underline-offset-2 mt-0.5"
                               onClick={() => {
-                                const hsnFromRef = item.ref?.startsWith("HSN:") ? item.ref.slice(4) : "";
-                                // Snap tax rate to nearest valid GST slab
+                                const hsn = item.hsnCode || (item.ref?.startsWith("HSN:") ? item.ref.slice(4) : "");
                                 const rawRate = Number(item.taxRate);
                                 const gstSlabs = [0, 5, 12, 18, 28];
                                 const snappedGst = gstSlabs.reduce((prev, curr) => Math.abs(curr - rawRate) < Math.abs(prev - rawRate) ? curr : prev);
-                                const params = new URLSearchParams({
-                                  openCreate: "true",
-                                  returnTo: `/sales/invoices/${id}`,
-                                  invoiceItemId: item.id,
-                                  invoiceType: "SALES",
-                                  prefillName: item.itemName || "",
-                                  prefillRate: String(Number(item.rate)),
-                                  prefillGstRate: String(snappedGst),
-                                  prefillHsnCode: hsnFromRef,
-                                  prefillQuantity: String(Number(item.quantity)),
+                                setActiveInvoiceItem({
+                                  id: item.id,
+                                  prefill: {
+                                    name: item.itemName || "",
+                                    sellingPrice: String(Number(item.rate)),
+                                    gstRate: String(snappedGst),
+                                    hsnCode: hsn,
+                                    mrp: String(Number(item.rate)),
+                                    unit: item.item?.unit || "PCS",
+                                    quantity: String(Number(item.quantity)),
+                                  },
                                 });
-                                router.push(`/masters/items?${params.toString()}`);
+                                setAddItemOpen(true);
                               }}
                             >
                               Not in masters — Create item
                             </button>
                           )}
                         </TableCell>
-                        <TableCell className="text-sm text-gray-500">{item.item?.hsnCode || "—"}</TableCell>
+                        <TableCell className="text-sm text-gray-500">{item.hsnCode || item.item?.hsnCode || (item.ref?.startsWith("HSN:") ? item.ref.slice(4) : null) || "—"}</TableCell>
                         <TableCell className="text-right text-sm">{Number(item.quantity)} {item.item?.unit || ""}</TableCell>
                         <TableCell className="text-right text-sm">{formatCurrency(Number(item.rate))}</TableCell>
                         <TableCell className="text-right text-sm">
@@ -564,6 +565,62 @@ export default function InvoiceDetailPage() {
           )}
         </div>
       </div>
+      {/* Inline modals — no redirect needed */}
+      <AddCustomerModal
+        isOpen={addCustomerOpen}
+        onClose={() => setAddCustomerOpen(false)}
+        prefillName={invoice?.customerName || ""}
+        onSuccess={async ({ id: customerId }) => {
+          setAddCustomerOpen(false);
+          setLinking(true);
+          try {
+            await fetch("/api/import/link-invoice-customer", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ customerId, salesInvoiceId: id }),
+            });
+            fetchInvoice();
+          } finally {
+            setLinking(false);
+          }
+        }}
+      />
+      <AddItemModal
+        isOpen={addItemOpen}
+        onClose={() => { setAddItemOpen(false); setActiveInvoiceItem(null); }}
+        prefillData={activeInvoiceItem ? {
+          name: activeInvoiceItem.prefill.name,
+          sellingPrice: activeInvoiceItem.prefill.sellingPrice,
+          gstRate: activeInvoiceItem.prefill.gstRate,
+          hsnCode: activeInvoiceItem.prefill.hsnCode,
+          mrp: activeInvoiceItem.prefill.mrp,
+          unit: activeInvoiceItem.prefill.unit,
+        } : undefined}
+        onSuccess={async ({ id: itemId }) => {
+          setAddItemOpen(false);
+          if (!activeInvoiceItem) return;
+          setLinking(true);
+          try {
+            await fetch("/api/import/link-invoice-item", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ itemId, invoiceItemId: activeInvoiceItem.id, invoiceType: "SALES" }),
+            });
+            fetchInvoice();
+          } finally {
+            setLinking(false);
+            setActiveInvoiceItem(null);
+          }
+        }}
+      />
+      {linking && (
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg px-6 py-4 flex items-center gap-3 shadow-lg">
+            <Loader2 className="h-5 w-5 animate-spin text-teal-600" />
+            <span className="text-sm font-medium">Linking…</span>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

@@ -60,6 +60,8 @@ interface PrefillData {
   sellingPrice?: string;
   gstRate?: string;
   hsnCode?: string;
+  mrp?: string;
+  unit?: string;
   quantity?: string;
 }
 
@@ -134,12 +136,12 @@ export function AddItemModal({
         hsnCode: prefillData?.hsnCode || "",
         gstRate: prefillData?.gstRate || "18",
         purchasePrice: prefillData?.purchasePrice || "0",
-        mrp: "0",
+        mrp: prefillData?.mrp || "0",
         sellingPrice: prefillData?.sellingPrice || "0",
         margin: "",
         marginType: "PERCENTAGE",
         minStock: "0",
-        unit: hasInvoicePrefill ? "CTN" : "PCS",
+        unit: prefillData?.unit || (hasInvoicePrefill ? "CTN" : "PCS"),
       });
       setUomConversions([]);
       setImageUrl(null);

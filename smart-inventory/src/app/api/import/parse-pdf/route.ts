@@ -10,12 +10,21 @@ const PDFParser = require('pdf2json');
 interface TextItem { x: number; y: number; text: string; }
 interface PageRow  { y: number; items: TextItem[]; text: string; }
 
+// Column with explicit left/right boundaries
+interface Column {
+  name: string;
+  x: number;       // header x-position (center reference)
+  left: number;    // left boundary
+  right: number;   // right boundary
+}
+
 // ── PDF → positional rows ─────────────────────────────────
 
-/**
- * Parse the PDF buffer and return all text rows across all pages,
- * each row being the text items on a single visual line sorted left→right.
- */
+// Y-tolerance: items within this range are on the same visual line.
+// pdf2json y-units are ~1/72 inch, so 0.3 ≈ 4px — tight enough to
+// separate real rows but wide enough to catch slight vertical offsets.
+const Y_TOLERANCE = 0.3;
+
 async function extractRows(buffer: Buffer): Promise<PageRow[]> {
   return new Promise((resolve, reject) => {
     const parser = new PDFParser(null, 1);
@@ -24,7 +33,7 @@ async function extractRows(buffer: Buffer): Promise<PageRow[]> {
       const allRows: PageRow[] = [];
 
       for (const page of (data.Pages ?? []) as Record<string, unknown>[]) {
-        const buckets = new Map<number, TextItem[]>();
+        const items: TextItem[] = [];
 
         for (const t of (page.Texts ?? []) as Record<string, unknown>[]) {
           const run = (t.R as Record<string, unknown>[])?.[0];
@@ -34,15 +43,35 @@ async function extractRows(buffer: Buffer): Promise<PageRow[]> {
           catch { raw = encoded.trim(); }
           if (!raw) continue;
 
-          const y = Math.round((t.y as number) * 10) / 10;
-          if (!buckets.has(y)) buckets.set(y, []);
-          buckets.get(y)!.push({ x: t.x as number, y: t.y as number, text: raw });
+          items.push({ x: t.x as number, y: t.y as number, text: raw });
         }
 
-        const sortedYs = [...buckets.keys()].sort((a, b) => a - b);
-        for (const y of sortedYs) {
-          const items = buckets.get(y)!.sort((a, b) => a.x - b.x);
-          allRows.push({ y, items, text: items.map(i => i.text).join(' ') });
+        // Cluster items by y-tolerance instead of rounding.
+        // Sort by y, then group items within Y_TOLERANCE of the cluster start.
+        items.sort((a, b) => a.y - b.y || a.x - b.x);
+        const clusters: TextItem[][] = [];
+        let currentCluster: TextItem[] = [];
+        let clusterY = -Infinity;
+
+        for (const item of items) {
+          if (item.y - clusterY > Y_TOLERANCE) {
+            if (currentCluster.length) clusters.push(currentCluster);
+            currentCluster = [item];
+            clusterY = item.y;
+          } else {
+            currentCluster.push(item);
+          }
+        }
+        if (currentCluster.length) clusters.push(currentCluster);
+
+        for (const cluster of clusters) {
+          const sorted = cluster.sort((a, b) => a.x - b.x);
+          const avgY = sorted.reduce((s, i) => s + i.y, 0) / sorted.length;
+          allRows.push({
+            y: avgY,
+            items: sorted,
+            text: sorted.map(i => i.text).join(' '),
+          });
         }
       }
 
@@ -77,7 +106,10 @@ function addDays(dateStr: string, days: number): string {
 // ── Metadata extraction ───────────────────────────────────
 
 function extractMeta(rows: PageRow[]) {
-  const flat = rows.map(r => r.text).join(' ').replace(/\s{2,}/g, ' ');
+  // Only use early rows for metadata (before the table starts)
+  // to avoid picking up noise from summary pages
+  const headerRows = rows.slice(0, Math.min(rows.length, 30));
+  const flat = headerRows.map(r => r.text).join(' ').replace(/\s{2,}/g, ' ');
 
   const invNo =
     flat.match(/(?:sap\s*ref(?:erence)?\s*no|tax\s*invoice\s*(?:no|number|#)|invoice\s*(?:no|number|#)|bill\s*(?:no|number|#)|gst\s*invoice\s*(?:no|number))[.\s:#]*([A-Z0-9/\-]{3,30})/i)?.[1]?.trim() ||
@@ -100,50 +132,170 @@ function extractMeta(rows: PageRow[]) {
   return { invoiceNumber: invNo, invoiceDate, dueDate, partyName };
 }
 
-// ── Column detection from PDF table ──────────────────────
+// ── Header detection (multi-line aware) ──────────────────
+
+const COL_KEYWORDS = /\b(sr\.?\s*no|pack\s*code|desc(?:ription)?|particulars|var|item|product|material|qty|quantity|rate|amount|total|hsn|uom|unit|tax|gst|sgst|cgst|igst|discount|discnt|disc|price|mrp|gross|net|taxable|value|sac|base|batch|pkt)\b/gi;
 
 /**
- * Find the table header row — a row containing 3+ column-label keywords
- * (desc, qty, rate, hsn, amount, etc.). Returns the row index or -1.
+ * Detect the header block — may span multiple y-rows.
+ * Returns the start index and end index (exclusive) of header rows,
+ * plus the merged header items.
  */
-function detectHeaderRow(rows: PageRow[]): number {
-  const colKeywords = /\b(desc(?:ription)?|particulars|item|product|material|qty|quantity|rate|amount|total|hsn|uom|unit|tax|gst|sgst|cgst|igst|discount|disc|price|mrp|gross|net|taxable|value|sac)\b/gi;
+function detectHeaderBlock(rows: PageRow[]): { startIdx: number; endIdx: number; mergedHeaders: TextItem[] } | null {
+  // Find the first row with 3+ column keywords
+  let startIdx = -1;
   for (let i = 0; i < rows.length; i++) {
-    const hits = (rows[i].text.match(colKeywords) ?? []).length;
-    if (hits >= 3) return i;
+    const hits = (rows[i].text.match(COL_KEYWORDS) ?? []).length;
+    if (hits >= 3) { startIdx = i; break; }
   }
-  return -1;
+  if (startIdx < 0) return null;
+
+  // Expand the header block downward: include subsequent rows that
+  // are also header-like (contain column keywords and NO numeric data values).
+  // Stop when we hit a row that starts with a number (first data row).
+  let endIdx = startIdx + 1;
+  for (let i = startIdx + 1; i < Math.min(rows.length, startIdx + 5); i++) {
+    const row = rows[i];
+    // If row starts with a serial number (digit), it's data
+    const firstItem = row.items[0];
+    if (firstItem && /^\d+$/.test(firstItem.text.trim())) break;
+    // If row has column keywords or is very short text (sub-headers like "%" or "Unit")
+    const hasKeywords = (row.text.match(COL_KEYWORDS) ?? []).length >= 1;
+    const isShortSubHeader = row.items.every(it => it.text.length <= 8);
+    if (hasKeywords || isShortSubHeader) {
+      endIdx = i + 1;
+    } else {
+      break;
+    }
+  }
+
+  // Merge all header rows' items into columns by x-proximity.
+  // Items at similar x-positions across header rows belong to the same column.
+  const allHeaderItems: TextItem[] = [];
+  for (let i = startIdx; i < endIdx; i++) {
+    allHeaderItems.push(...rows[i].items);
+  }
+
+  // Group by x-proximity: items within X_HEADER_MERGE_TOLERANCE are the same column
+  const X_HEADER_MERGE_TOLERANCE = 1.0;
+  allHeaderItems.sort((a, b) => a.x - b.x);
+
+  const mergedHeaders: TextItem[] = [];
+  let currentGroup: TextItem[] = [];
+  let groupX = -Infinity;
+
+  for (const item of allHeaderItems) {
+    if (item.x - groupX > X_HEADER_MERGE_TOLERANCE) {
+      if (currentGroup.length) {
+        // Merge group: combine text, use average x
+        const avgX = currentGroup.reduce((s, i) => s + i.x, 0) / currentGroup.length;
+        // Sort by y to get vertical order, then join
+        currentGroup.sort((a, b) => a.y - b.y);
+        const mergedText = currentGroup.map(i => i.text).join(' ').replace(/\s+/g, ' ').trim();
+        mergedHeaders.push({ x: avgX, y: currentGroup[0].y, text: mergedText });
+      }
+      currentGroup = [item];
+      groupX = item.x;
+    } else {
+      currentGroup.push(item);
+    }
+  }
+  if (currentGroup.length) {
+    const avgX = currentGroup.reduce((s, i) => s + i.x, 0) / currentGroup.length;
+    currentGroup.sort((a, b) => a.y - b.y);
+    const mergedText = currentGroup.map(i => i.text).join(' ').replace(/\s+/g, ' ').trim();
+    mergedHeaders.push({ x: avgX, y: currentGroup[0].y, text: mergedText });
+  }
+
+  if (mergedHeaders.length < 2) return null;
+  return { startIdx, endIdx, mergedHeaders };
+}
+
+// ── Column boundary computation ──────────────────────────
+
+/**
+ * Build columns with explicit left/right boundaries using midpoints.
+ * Each column's territory extends from the midpoint to its left neighbor
+ * to the midpoint to its right neighbor.
+ */
+function buildColumns(headers: TextItem[]): Column[] {
+  const sorted = [...headers].sort((a, b) => a.x - b.x);
+  const columns: Column[] = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    const left = i === 0
+      ? 0
+      : (sorted[i - 1].x + sorted[i].x) / 2;
+    const right = i === sorted.length - 1
+      ? Infinity
+      : (sorted[i].x + sorted[i + 1].x) / 2;
+
+    columns.push({
+      name: sorted[i].text,
+      x: sorted[i].x,
+      left,
+      right,
+    });
+  }
+
+  return columns;
 }
 
 /**
- * Determine whether a row looks like an item data row.
- * Filters out totals, summaries, footers, and blank lines.
+ * Map a data row's items to columns using boundary zones (not nearest-neighbor).
+ * Each item falls into exactly one column based on x-position ranges.
+ */
+function mapToColumnsBounded(dataRow: PageRow, columns: Column[]): Record<string, string> {
+  const cols: Record<string, string> = {};
+  for (const item of dataRow.items) {
+    const col = columns.find(c => item.x >= c.left && item.x < c.right);
+    if (!col) continue;
+    const key = col.name;
+    cols[key] = cols[key] ? `${cols[key]} ${item.text}` : item.text;
+  }
+  return cols;
+}
+
+// ── Row filtering ─────────────────────────────────────────
+
+/**
+ * Check if a row is a repeated header (appears on page 2+ of multi-page invoices).
+ * Compare against the header fingerprint — if 50%+ of keywords match, it's a repeat.
+ */
+function isRepeatedHeader(row: PageRow, headerFingerprint: Set<string>): boolean {
+  const rowWords = new Set(
+    row.text.toLowerCase().split(/\s+/)
+      .filter(w => w.length > 2)
+  );
+  let matches = 0;
+  for (const word of headerFingerprint) {
+    if (rowWords.has(word)) matches++;
+  }
+  return headerFingerprint.size > 0 && matches >= Math.ceil(headerFingerprint.size * 0.4);
+}
+
+/**
+ * Determine whether a row is a valid data row (not totals, summaries, footers).
  */
 function isDataRow(row: PageRow): boolean {
   if (!row.text.trim()) return false;
   if (!/\d/.test(row.text)) return false;
-  // Skip totals / summary lines
-  if (/^\s*(total|sub[\s-]?total|grand[\s-]?total|net\s*amount|round[\s-]?off|cgst\s*(amount|@|tax)|sgst\s*(amount|@|tax)|igst\s*(amount|@|tax)|tax\s*amount|balance\s*due|freight|less\s*disc|e\.?\s*&\s*o|declaration|terms|bank\s*detail|page\s*\d)/i.test(row.text)) return false;
+  // Skip totals, summary lines, footer noise, page numbers
+  if (/^\s*(total|sub[\s-]?total|grand[\s-]?total|net\s*(amount|invoice)|round[\s-]?off|taxable\s*invoice|cgst\s*(amount|@|tax)|sgst\s*(amount|@|tax)|igst\s*(amount|@|tax)|tax\s*amount|balance\s*due|freight|less\s*disc|e\.?\s*&\s*o|declaration|terms|bank\s*detail|page\s*\d|invoice\s*summary|product\s*category|surcharge|cheque\s*(amount|no)|dd\s*numbers?|adjusted|no\.?\s*of\s*(atc|l\/h|cbb)|total\s*units|transporter|eway|vehicle|g\.?c\.?\s*no|road\s*permit|gross\s*amount\s*in\s*words|date\s*and\s*time|authorised|we\s*hereby|certify|irn\s*no|annexure|doc\.?\s*no|remarks|dr\s*\/\s*cr|cr\s*\/\s*dr|tcs\s*collected)/i.test(row.text)) return false;
   return true;
 }
 
 /**
- * Map a data row's text items to column names by finding the nearest
- * header item for each data item using x-coordinate proximity.
+ * Check if a row is a continuation of the previous data row.
+ * Continuation rows don't start with a serial number.
  */
-function mapToColumns(dataRow: PageRow, headerItems: TextItem[]): Record<string, string> {
-  const cols: Record<string, string> = {};
-  for (const item of dataRow.items) {
-    let nearest = headerItems[0];
-    let minDist = Infinity;
-    for (const h of headerItems) {
-      const d = Math.abs(item.x - h.x);
-      if (d < minDist) { minDist = d; nearest = h; }
-    }
-    const key = nearest.text;
-    cols[key] = cols[key] ? `${cols[key]} ${item.text}` : item.text;
-  }
-  return cols;
+function isContinuationRow(row: PageRow, firstColX: number, firstColRight: number): boolean {
+  // Find items in the first column (Sr.No) zone
+  const srItems = row.items.filter(it => it.x >= firstColX - 0.5 && it.x < firstColRight);
+  if (srItems.length === 0) return true; // No Sr.No = continuation
+  // If the first-column value is not a plain integer, it's a continuation
+  const srText = srItems.map(i => i.text).join('').trim();
+  return !/^\d+$/.test(srText);
 }
 
 // ── Main parse function ───────────────────────────────────
@@ -153,42 +305,82 @@ function parsePdfInvoice(rows: PageRow[], invoiceType: 'SALES' | 'PURCHASE') {
 
   const meta = extractMeta(rows);
 
-  // Detect the table header row to get real column names from the PDF
-  const headerIdx = detectHeaderRow(rows);
-  if (headerIdx < 0) return null;
+  // Detect multi-line header block
+  const header = detectHeaderBlock(rows);
+  if (!header) return null;
 
-  const headerItems = rows[headerIdx].items;
-  if (headerItems.length < 2) return null;
+  const { startIdx, endIdx, mergedHeaders } = header;
 
-  // Deduplicate column names — PDFs can emit the same label twice (e.g. two "SGST" text nodes)
-  const seen = new Map<string, number>();
-  const rawColNames = headerItems.map(h => {
-    const base = h.text;
-    const count = seen.get(base) ?? 0;
-    seen.set(base, count + 1);
-    return count === 0 ? base : `${base} (${count + 1})`;
-  });
+  // Build column boundaries
+  const columns = buildColumns(mergedHeaders);
+  const colNames = columns.map(c => c.name);
 
-  // Extract data rows after the header using x-position column mapping
-  const dataRows: Record<string, unknown>[] = [];
-  for (let i = headerIdx + 1; i < rows.length; i++) {
+  // Build header fingerprint for detecting repeated headers on later pages
+  const headerFingerprint = new Set(
+    mergedHeaders
+      .flatMap(h => h.text.toLowerCase().split(/\s+/))
+      .filter(w => w.length > 2)
+  );
+
+  // First column info for continuation-row detection
+  const firstCol = columns[0];
+
+  // Extract and merge data rows
+  const dataRows: Record<string, string>[] = [];
+  let currentRow: Record<string, string> | null = null;
+
+  for (let i = endIdx; i < rows.length; i++) {
     const row = rows[i];
+
+    // Skip repeated headers (page 2+ header repetition)
+    if (isRepeatedHeader(row, headerFingerprint)) continue;
+
+    // Skip non-data rows (totals, summaries, footers)
     if (!isDataRow(row)) continue;
-    const cols = mapToColumns(row, headerItems);
-    if (!Object.values(cols).some(v => String(v).trim())) continue;
-    dataRows.push(cols);
+
+    // Check if this is a continuation of the previous item
+    if (currentRow && isContinuationRow(row, firstCol.x, firstCol.right)) {
+      // Merge continuation data into the current row
+      const contCols = mapToColumnsBounded(row, columns);
+      for (const [key, val] of Object.entries(contCols)) {
+        if (!val.trim()) continue;
+        if (currentRow[key]) {
+          currentRow[key] += ' ' + val;
+        } else {
+          currentRow[key] = val;
+        }
+      }
+      continue;
+    }
+
+    // New data row — push the previous one and start fresh
+    if (currentRow) {
+      dataRows.push(currentRow);
+    }
+    currentRow = mapToColumnsBounded(row, columns);
+  }
+  // Push the last row
+  if (currentRow) {
+    dataRows.push(currentRow);
   }
 
-  if (dataRows.length === 0) return null;
+  // Filter out rows that have no meaningful content
+  const validRows = dataRows.filter(cols =>
+    Object.values(cols).some(v => v.trim()) &&
+    // Must have at least one numeric value (qty, rate, amount, etc.)
+    Object.values(cols).some(v => /\d/.test(v))
+  );
+
+  if (validRows.length === 0) return null;
 
   const partyField = invoiceType === 'SALES' ? 'Customer Name' : 'Vendor Name';
   const dateField  = invoiceType === 'SALES' ? 'Invoice Date'  : 'Date';
 
-  // Prepend metadata columns (derived from the invoice header block)
+  // Prepend metadata columns
   const metaHeaders = ['Invoice Number', dateField, 'Due Date', partyField];
-  const allHeaders  = [...metaHeaders, ...rawColNames];
+  const allHeaders  = [...metaHeaders, ...colNames];
 
-  const outRows = dataRows.map(cols => ({
+  const outRows = validRows.map(cols => ({
     'Invoice Number': meta.invoiceNumber,
     [dateField]:      meta.invoiceDate,
     'Due Date':       meta.dueDate,

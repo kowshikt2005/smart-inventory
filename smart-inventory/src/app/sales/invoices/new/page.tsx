@@ -101,6 +101,8 @@ interface SubBrand {
 interface OrderItemData {
   id: string;
   itemId: string;
+  hsnCode?: string | null;
+  mrp?: number;
   quantity: number;
   unit?: string;
   uomFactor?: number;
@@ -296,10 +298,12 @@ function NewSalesInvoiceContent() {
         }
 
         if (invoice.items && invoice.items.length > 0) {
-          setInvoiceItems(invoice.items.map((item: { id?: string; itemId?: string; itemName?: string | null; item?: { id: string; name?: string; unit?: string }; quantity: number; rate: number; taxRate: number; taxAmount: number; amount: number; discountPercent?: number }) => ({
+          setInvoiceItems(invoice.items.map((item: { id?: string; itemId?: string; itemName?: string | null; hsnCode?: string | null; item?: { id: string; name?: string; unit?: string; mrp?: number }; quantity: number; rate: number; taxRate: number; taxAmount: number; amount: number; discountPercent?: number }) => ({
             id: item.id || generateId(),
             itemId: item.itemId || item.item?.id || "",
             itemName: item.itemName || item.item?.name || null,
+            hsnCode: item.hsnCode || null,
+            mrp: Number(item.item?.mrp || 0) || undefined,
             quantity: Number(item.quantity),
             unit: item.item?.unit,
             uomFactor: 1,
@@ -703,6 +707,7 @@ function NewSalesInvoiceContent() {
             notes: notes || null,
             items: validItems.map((i) => ({
               itemId: i.itemId,
+              hsnCode: i.hsnCode || null,
               quantity: roundTo(i.quantity * (i.uomFactor || 1), 3),
               rate: roundTo(i.rate / (i.uomFactor || 1), 2),
               taxRate: i.taxRate,
@@ -735,6 +740,7 @@ function NewSalesInvoiceContent() {
             roundOff,
             items: validItems.map((i) => ({
               itemId: i.itemId,
+              hsnCode: i.hsnCode || null,
               quantity: roundTo(i.quantity * (i.uomFactor || 1), 3),
               rate: roundTo(i.rate / (i.uomFactor || 1), 2),
               taxRate: i.taxRate,

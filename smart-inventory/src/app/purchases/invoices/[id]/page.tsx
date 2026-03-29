@@ -15,6 +15,8 @@ import { ArrowLeft, Loader2, Edit, Trash2, CreditCard, RotateCcw } from "lucide-
 import { useRouter, useParams } from "next/navigation";
 import useSWR from "swr";
 import { useState } from "react";
+import { AddItemModal } from "@/components/items/AddItemModal";
+import { AddVendorModal } from "@/components/vendors/AddVendorModal";
 
 interface PurchaseInvoice {
   id: string;
@@ -51,9 +53,11 @@ interface PurchaseInvoice {
     id: string;
     itemId: string | null;
     itemName: string | null;
+    hsnCode: string | null;
     ref: string | null;
     quantity: number;
     rate: number;
+    discountPercent: number;
     taxRate: number;
     taxAmount: number;
     amount: number;
@@ -87,9 +91,15 @@ export default function PurchaseInvoiceDetailPage() {
   const params = useParams();
   const invoiceId = params.id as string;
 
-  const { data: invoice, error, isLoading } = useSWR<PurchaseInvoice>(
+  const { data: invoice, error, isLoading, mutate } = useSWR<PurchaseInvoice>(
     `/api/purchase-invoices/${invoiceId}`
   );
+
+  // Inline modal state — avoids redirect to masters pages
+  const [addVendorOpen, setAddVendorOpen] = useState(false);
+  const [addItemOpen, setAddItemOpen] = useState(false);
+  const [activeInvoiceItem, setActiveInvoiceItem] = useState<{ id: string; prefill: Record<string, string> } | null>(null);
+  const [linking, setLinking] = useState(false);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -244,15 +254,7 @@ export default function PurchaseInvoiceDetailPage() {
                   <p className="text-xs text-amber-600 mb-1">Vendor not linked to masters</p>
                   <button
                     className="text-xs text-teal-600 hover:text-teal-700 underline underline-offset-2"
-                    onClick={() => {
-                      const params = new URLSearchParams({
-                        openCreate: "true",
-                        returnTo: `/purchases/invoices/${invoiceId}`,
-                        purchaseInvoiceId: invoiceId,
-                        prefillName: invoice.vendorName || "",
-                      });
-                      router.push(`/masters/vendors?${params.toString()}`);
-                    }}
+                    onClick={() => setAddVendorOpen(true)}
                   >
                     Create &amp; link vendor
                   </button>
@@ -336,30 +338,30 @@ export default function PurchaseInvoiceDetailPage() {
                             <button
                               className="text-xs text-amber-600 hover:text-amber-700 underline underline-offset-2 mt-0.5"
                               onClick={() => {
-                                const hsnFromRef = item.ref?.startsWith("HSN:") ? item.ref.slice(4) : "";
-                                // Snap tax rate to nearest valid GST slab
+                                const hsn = item.hsnCode || (item.ref?.startsWith("HSN:") ? item.ref.slice(4) : "");
                                 const rawRate = Number(item.taxRate);
                                 const gstSlabs = [0, 5, 12, 18, 28];
                                 const snappedGst = gstSlabs.reduce((prev, curr) => Math.abs(curr - rawRate) < Math.abs(prev - rawRate) ? curr : prev);
-                                const params = new URLSearchParams({
-                                  openCreate: "true",
-                                  returnTo: `/purchases/invoices/${invoiceId}`,
-                                  invoiceItemId: item.id,
-                                  invoiceType: "PURCHASE",
-                                  prefillName: item.itemName || "",
-                                  prefillRate: String(Number(item.rate)),
-                                  prefillGstRate: String(snappedGst),
-                                  prefillHsnCode: hsnFromRef,
-                                  prefillQuantity: String(Number(item.quantity)),
+                                setActiveInvoiceItem({
+                                  id: item.id,
+                                  prefill: {
+                                    name: item.itemName || "",
+                                    purchasePrice: String(Number(item.rate)),
+                                    gstRate: String(snappedGst),
+                                    hsnCode: hsn,
+                                    mrp: String(Number(item.rate)),
+                                    unit: item.item?.unit || "PCS",
+                                    quantity: String(Number(item.quantity)),
+                                  },
                                 });
-                                router.push(`/masters/items?${params.toString()}`);
+                                setAddItemOpen(true);
                               }}
                             >
                               Not in masters — Create item
                             </button>
                           )}
                         </TableCell>
-                        <TableCell className="text-sm text-gray-500">{item.item?.hsnCode || "—"}</TableCell>
+                        <TableCell className="text-sm text-gray-500">{item.hsnCode || item.item?.hsnCode || (item.ref?.startsWith("HSN:") ? item.ref.slice(4) : null) || "—"}</TableCell>
                         <TableCell className="text-right text-sm">{Number(item.quantity)} {item.item?.unit || ""}</TableCell>
                         <TableCell className="text-right text-sm">{formatCurrency(Number(item.rate))}</TableCell>
                         <TableCell className="text-right text-sm">{formatCurrency(taxableAmount)}</TableCell>
@@ -504,6 +506,62 @@ export default function PurchaseInvoiceDetailPage() {
           )}
         </div>
       </div>
+      {/* Inline modals — no redirect needed */}
+      <AddVendorModal
+        isOpen={addVendorOpen}
+        onClose={() => setAddVendorOpen(false)}
+        prefillName={invoice?.vendorName || ""}
+        onSuccess={async ({ id: vendorId }) => {
+          setAddVendorOpen(false);
+          setLinking(true);
+          try {
+            await fetch("/api/import/link-invoice-vendor", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ vendorId, purchaseInvoiceId: invoiceId }),
+            });
+            mutate();
+          } finally {
+            setLinking(false);
+          }
+        }}
+      />
+      <AddItemModal
+        isOpen={addItemOpen}
+        onClose={() => { setAddItemOpen(false); setActiveInvoiceItem(null); }}
+        prefillData={activeInvoiceItem ? {
+          name: activeInvoiceItem.prefill.name,
+          purchasePrice: activeInvoiceItem.prefill.purchasePrice,
+          gstRate: activeInvoiceItem.prefill.gstRate,
+          hsnCode: activeInvoiceItem.prefill.hsnCode,
+          mrp: activeInvoiceItem.prefill.mrp,
+          unit: activeInvoiceItem.prefill.unit,
+        } : undefined}
+        onSuccess={async ({ id: itemId }) => {
+          setAddItemOpen(false);
+          if (!activeInvoiceItem) return;
+          setLinking(true);
+          try {
+            await fetch("/api/import/link-invoice-item", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ itemId, invoiceItemId: activeInvoiceItem.id, invoiceType: "PURCHASE" }),
+            });
+            mutate();
+          } finally {
+            setLinking(false);
+            setActiveInvoiceItem(null);
+          }
+        }}
+      />
+      {linking && (
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg px-6 py-4 flex items-center gap-3 shadow-lg">
+            <Loader2 className="h-5 w-5 animate-spin text-teal-600" />
+            <span className="text-sm font-medium">Linking…</span>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

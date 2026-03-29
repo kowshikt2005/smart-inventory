@@ -219,7 +219,7 @@ export async function PUT(
         });
 
         // Calculate new items
-        const newItems = body.items.map((item: { itemId: string; quantity: number; rate: number; taxRate: number; discountPercent?: number }) => {
+        const newItems = body.items.map((item: { itemId: string; hsnCode?: string | null; quantity: number; rate: number; taxRate: number; discountPercent?: number }) => {
           const quantity = Number(item.quantity);
           const rate = Number(item.rate);
           const taxRate = Number(item.taxRate);
@@ -229,6 +229,7 @@ export async function PUT(
 
           return {
             itemId: item.itemId,
+            hsnCode: item.hsnCode || null,
             quantity,
             rate,
             discountPercent,

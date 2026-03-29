@@ -355,8 +355,10 @@ export async function POST(request: Request) {
 
         return {
           itemId: invoiceItem.itemId,
+          hsnCode: invoiceItem.hsnCode || null,
           quantity: Math.round(baseQuantity * 1000) / 1000,
           rate: Math.round(baseRate * 1000) / 1000,
+          discountPercent: Number(invoiceItem.discountPercent || 0),
           taxRate,
           taxAmount,
           amount,
