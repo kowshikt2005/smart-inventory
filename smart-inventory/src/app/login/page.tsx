@@ -18,6 +18,7 @@ function LoginPageContent() {
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("email");
   const [otpSent, setOtpSent] = useState(false);
   const [otpCountdown, setOtpCountdown] = useState(0);
+  const [showForgotMsg, setShowForgotMsg] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -174,7 +175,7 @@ function LoginPageContent() {
 
         {/* Right Side - Login Card */}
         <div className="w-full max-w-[540px]">
-          <div className="bg-gradient-to-b from-[#312E81] via-[#272462] to-[#1E1B4B] rounded-3xl shadow-2xl shadow-indigo-900/40 overflow-hidden ring-1 ring-white/[0.08]">
+          <div className="bg-gradient-to-b from-indigo-900 via-indigo-950 to-[#1E1B4B] rounded-3xl shadow-2xl shadow-indigo-900/40 overflow-hidden ring-1 ring-white/[0.08]">
 
             {/* Card Header */}
             <div className="px-10 pt-10 pb-6">
@@ -296,11 +297,17 @@ function LoginPageContent() {
                     <button
                       type="button"
                       className="text-sm text-white/50 hover:text-amber-300 underline-offset-4 hover:underline transition-colors"
-                      onClick={() => alert("Please contact your administrator to reset your password")}
+                      onClick={() => setShowForgotMsg(true)}
                     >
                       Forgot password?
                     </button>
                   </div>
+
+                  {showForgotMsg && (
+                    <p className="text-xs text-amber-300/80 text-center animate-fade-in-up">
+                      Please contact your administrator to reset your password.
+                    </p>
+                  )}
 
                   {/* Login Button */}
                   <button

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   Upload,
   X,
@@ -58,6 +58,10 @@ export function GSTFilingModal({
   // Result
   const [arn, setArn] = useState<string | null>(null);
 
+  // Refs for focus management
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
   const resetState = useCallback(() => {
     setStep("credentials");
     setLoading(false);
@@ -73,6 +77,7 @@ export function GSTFilingModal({
   }, []);
 
   const handleOpen = () => {
+    previousFocusRef.current = document.activeElement as HTMLElement;
     resetState();
     setShowModal(true);
   };
@@ -88,7 +93,40 @@ export function GSTFilingModal({
     }
     setShowModal(false);
     resetState();
+    // Restore focus to trigger button
+    previousFocusRef.current?.focus();
   };
+
+  // ── Focus trap + ESC key ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!showModal) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleClose();
+        return;
+      }
+      // Focus trap
+      if (e.key === "Tab" && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'button, input, [tabindex]:not([tabindex="-1"])'
+        );
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showModal, sessionId]);
 
   // ── Step 1: Submit credentials → get captcha ──────────────────────────
   const handleSubmitCredentials = async () => {
@@ -127,7 +165,6 @@ export function GSTFilingModal({
       const data = await res.json();
 
       if (data.code === "INVALID_CAPTCHA") {
-        // Wrong captcha — show new captcha image
         setError("Wrong captcha. Try again.");
         setCaptchaCode("");
         if (data.captchaImage) setCaptchaImage(data.captchaImage);
@@ -136,7 +173,6 @@ export function GSTFilingModal({
       if (!res.ok) throw new Error(data.error || "Captcha verification failed");
 
       if (data.step === "logged_in") {
-        // No OTP needed — go straight to upload
         setStep("uploading");
         handleUpload();
       } else {
@@ -163,7 +199,6 @@ export function GSTFilingModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "OTP verification failed");
 
-      // Logged in — proceed to upload
       setStep("uploading");
       setLoading(false);
       await handleUpload();
@@ -220,7 +255,7 @@ export function GSTFilingModal({
     }
   };
 
-  // ── Step titles ───────────────────────────────────────────────────────
+  // ── Step metadata ─────────────────────────────────────────────────────
   const stepTitles: Record<Step, string> = {
     credentials: "GST Portal Login",
     captcha: "Solve Captcha",
@@ -255,6 +290,9 @@ export function GSTFilingModal({
   const currentStepIndex = stepOrder.indexOf(
     step === "filing" ? "evc_otp" : step === "error" ? "evc_otp" : step
   );
+  const progressPercent = Math.round(
+    ((currentStepIndex + 1) / stepOrder.length) * 100
+  );
 
   return (
     <>
@@ -272,22 +310,36 @@ export function GSTFilingModal({
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="gst-filing-title"
+          aria-describedby="gst-filing-desc"
+          ref={modalRef}
+        >
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
             {/* Header */}
             <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100">
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">
+                <h3
+                  id="gst-filing-title"
+                  className="text-sm font-semibold text-gray-900"
+                >
                   {stepTitles[step]}
                 </h3>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p
+                  id="gst-filing-desc"
+                  className="text-xs text-gray-500 mt-0.5"
+                >
                   {stepDescriptions[step]}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleClose}
-                className="text-gray-400 hover:text-gray-600"
+                aria-label="Close filing dialog"
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -295,7 +347,14 @@ export function GSTFilingModal({
 
             {/* Progress bar */}
             <div className="px-5 pt-3">
-              <div className="flex gap-1">
+              <div
+                className="flex gap-1"
+                role="progressbar"
+                aria-valuenow={progressPercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`Filing progress: step ${currentStepIndex + 1} of ${stepOrder.length}`}
+              >
                 {stepOrder.map((s, i) => (
                   <div
                     key={s}
@@ -319,23 +378,32 @@ export function GSTFilingModal({
               {step === "credentials" && (
                 <>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label
+                      htmlFor="gst-username"
+                      className="block text-xs font-medium text-gray-600 mb-1"
+                    >
                       GST Portal Username
                     </label>
                     <input
+                      id="gst-username"
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       placeholder="Enter your GST username"
+                      autoComplete="username"
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                       autoFocus
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label
+                      htmlFor="gst-password"
+                      className="block text-xs font-medium text-gray-600 mb-1"
+                    >
                       Password
                     </label>
                     <input
+                      id="gst-password"
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -343,6 +411,7 @@ export function GSTFilingModal({
                         if (e.key === "Enter") handleSubmitCredentials();
                       }}
                       placeholder="Enter your GST password"
+                      autoComplete="current-password"
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     />
                   </div>
@@ -358,14 +427,18 @@ export function GSTFilingModal({
                 <>
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs font-medium text-gray-600">
+                      <label
+                        htmlFor="gst-captcha"
+                        className="text-xs font-medium text-gray-600"
+                      >
                         Enter the code shown below
                       </label>
                       <button
                         type="button"
                         onClick={handleSubmitCredentials}
                         disabled={loading}
-                        className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 disabled:opacity-40"
+                        aria-label="Refresh captcha image"
+                        className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 disabled:opacity-40 p-1 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       >
                         <RefreshCw
                           className={`h-3 w-3 ${loading ? "animate-spin" : ""}`}
@@ -378,7 +451,7 @@ export function GSTFilingModal({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={captchaImage}
-                          alt="Login captcha"
+                          alt="Login captcha — type the characters you see"
                           className="h-12 object-contain"
                           draggable={false}
                         />
@@ -388,6 +461,7 @@ export function GSTFilingModal({
                     </div>
                   </div>
                   <input
+                    id="gst-captcha"
                     type="text"
                     value={captchaCode}
                     onChange={(e) => setCaptchaCode(e.target.value)}
@@ -404,10 +478,14 @@ export function GSTFilingModal({
               {/* ── Login OTP step ───────────────────────────────────── */}
               {step === "login_otp" && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label
+                    htmlFor="gst-login-otp"
+                    className="block text-xs font-medium text-gray-600 mb-1"
+                  >
                     Enter the OTP sent to your registered mobile
                   </label>
                   <input
+                    id="gst-login-otp"
                     type="text"
                     inputMode="numeric"
                     maxLength={8}
@@ -419,6 +497,7 @@ export function GSTFilingModal({
                       if (e.key === "Enter") handleSubmitLoginOtp();
                     }}
                     placeholder="OTP"
+                    autoComplete="one-time-code"
                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-center tracking-[0.3em] font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     autoFocus
                   />
@@ -427,7 +506,11 @@ export function GSTFilingModal({
 
               {/* ── Uploading step (auto, no user input) ─────────────── */}
               {step === "uploading" && (
-                <div className="flex flex-col items-center py-6 gap-3">
+                <div
+                  className="flex flex-col items-center py-6 gap-3"
+                  role="status"
+                  aria-live="polite"
+                >
                   <Loader2 className="h-8 w-8 text-indigo-500 animate-spin" />
                   <p className="text-sm text-gray-600 text-center">
                     Navigating portal and uploading your GSTR-1 data...
@@ -442,10 +525,14 @@ export function GSTFilingModal({
               {/* ── EVC OTP step ─────────────────────────────────────── */}
               {step === "evc_otp" && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label
+                    htmlFor="gst-evc-otp"
+                    className="block text-xs font-medium text-gray-600 mb-1"
+                  >
                     Enter the EVC OTP sent to your registered mobile
                   </label>
                   <input
+                    id="gst-evc-otp"
                     type="text"
                     inputMode="numeric"
                     maxLength={8}
@@ -457,6 +544,7 @@ export function GSTFilingModal({
                       if (e.key === "Enter") handleSubmitEvcOtp();
                     }}
                     placeholder="EVC OTP"
+                    autoComplete="one-time-code"
                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-center tracking-[0.3em] font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     autoFocus
                   />
@@ -465,7 +553,11 @@ export function GSTFilingModal({
 
               {/* ── Filing step (auto) ───────────────────────────────── */}
               {step === "filing" && (
-                <div className="flex flex-col items-center py-6 gap-3">
+                <div
+                  className="flex flex-col items-center py-6 gap-3"
+                  role="status"
+                  aria-live="polite"
+                >
                   <Loader2 className="h-8 w-8 text-indigo-500 animate-spin" />
                   <p className="text-sm text-gray-600">
                     Filing your GSTR-1 on the portal...
@@ -475,7 +567,11 @@ export function GSTFilingModal({
 
               {/* ── Done step ────────────────────────────────────────── */}
               {step === "done" && (
-                <div className="flex flex-col items-center py-6 gap-3">
+                <div
+                  className="flex flex-col items-center py-6 gap-3"
+                  role="status"
+                  aria-live="polite"
+                >
                   <CheckCircle2 className="h-10 w-10 text-emerald-500" />
                   <p className="text-sm font-medium text-gray-900">
                     GSTR-1 filed successfully!
@@ -504,7 +600,10 @@ export function GSTFilingModal({
 
               {/* ── Inline error ─────────────────────────────────────── */}
               {error && step !== "error" && (
-                <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded px-3 py-2">
+                <p
+                  role="alert"
+                  className="text-xs text-red-600 bg-red-50 border border-red-100 rounded px-3 py-2"
+                >
                   {error}
                 </p>
               )}
@@ -515,7 +614,7 @@ export function GSTFilingModal({
               <button
                 type="button"
                 onClick={handleClose}
-                className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 {step === "done" ? "Close" : "Cancel"}
               </button>
@@ -525,7 +624,7 @@ export function GSTFilingModal({
                   type="button"
                   onClick={handleSubmitCredentials}
                   disabled={!username.trim() || !password.trim() || loading}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-500 rounded-md hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-500 rounded-md hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
                   {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   {loading ? "Connecting..." : "Login"}
@@ -538,7 +637,7 @@ export function GSTFilingModal({
                   type="button"
                   onClick={handleSubmitCaptcha}
                   disabled={!captchaCode.trim() || loading}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-500 rounded-md hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-500 rounded-md hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
                   {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   {loading ? "Verifying..." : "Submit"}
@@ -550,7 +649,7 @@ export function GSTFilingModal({
                   type="button"
                   onClick={handleSubmitLoginOtp}
                   disabled={!loginOtp.trim() || loading}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-500 rounded-md hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-500 rounded-md hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
                   {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   {loading ? "Verifying..." : "Verify OTP"}
@@ -562,7 +661,7 @@ export function GSTFilingModal({
                   type="button"
                   onClick={handleSubmitEvcOtp}
                   disabled={!evcOtp.trim() || loading}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-emerald-500 rounded-md hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-emerald-500 rounded-md hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
                 >
                   {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   {loading ? "Filing..." : "File GSTR-1"}
@@ -573,7 +672,7 @@ export function GSTFilingModal({
                 <button
                   type="button"
                   onClick={handleOpen}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-500 rounded-md hover:bg-indigo-600"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-500 rounded-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
                   Try Again
                 </button>

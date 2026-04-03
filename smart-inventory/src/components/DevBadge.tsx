@@ -8,7 +8,7 @@ export default function DevBadge() {
     return null;
   }
 
-  const branch = "dev";
+  const branch = process.env.NEXT_PUBLIC_GIT_BRANCH || "dev";
 
   return (
     <div

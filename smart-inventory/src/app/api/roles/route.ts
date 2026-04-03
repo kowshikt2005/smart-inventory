@@ -67,6 +67,15 @@ export async function POST(request: Request) {
       }
     }
 
+    // Require at least one view permission
+    const hasAtLeastOneView = Object.values(cleanPermissions).some((p) => p.view === true);
+    if (!hasAtLeastOneView) {
+      return NextResponse.json(
+        { error: 'At least one view permission must be enabled.' },
+        { status: 400 }
+      );
+    }
+
     // Check name uniqueness
     const existing = await db.role.findUnique({ where: { name: name.trim() } });
     if (existing) {

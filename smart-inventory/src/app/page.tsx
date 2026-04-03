@@ -82,15 +82,6 @@ function getPresetRange(preset: string) {
   }
 }
 
-function _formatDisplayDate(dateStr: string) {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-IN", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-  });
-}
-
 function formatCurrency(value: number) {
   const abs = Math.abs(value);
   const sign = value < 0 ? "-" : "";
@@ -504,7 +495,7 @@ export default function HomePage() {
         {/* Metrics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Total Sales */}
-          <div className="bg-white rounded-xl border border-border/60 overflow-hidden hover:shadow-lg transition-all duration-300 group">
+          <div className="bg-gradient-to-br from-indigo-50/80 to-white rounded-xl border border-indigo-100/60 overflow-hidden hover:shadow-lg transition-all duration-300 group">
             <div className="h-1 bg-gradient-to-r from-indigo-500 to-indigo-600" />
             <div className="p-6">
               <div className="flex items-start justify-between">
@@ -519,7 +510,7 @@ export default function HomePage() {
                     </p>
                   )}
                 </div>
-                <div className="p-3 bg-indigo-50 rounded-xl group-hover:bg-indigo-100 transition-colors">
+                <div className="p-3 bg-indigo-100/60 rounded-xl group-hover:bg-indigo-100 transition-colors">
                   <DollarSign className="h-6 w-6 text-indigo-600" />
                 </div>
               </div>
@@ -527,7 +518,7 @@ export default function HomePage() {
           </div>
 
           {/* Total Purchases */}
-          <div className="bg-white rounded-xl border border-border/60 overflow-hidden hover:shadow-lg transition-all duration-300 group">
+          <div className="bg-gradient-to-br from-violet-50/80 to-white rounded-xl border border-violet-100/60 overflow-hidden hover:shadow-lg transition-all duration-300 group">
             <div className="h-1 bg-gradient-to-r from-violet-500 to-violet-600" />
             <div className="p-6">
               <div className="flex items-start justify-between">
@@ -542,7 +533,7 @@ export default function HomePage() {
                     </p>
                   )}
                 </div>
-                <div className="p-3 bg-violet-50 rounded-xl group-hover:bg-violet-100 transition-colors">
+                <div className="p-3 bg-violet-100/60 rounded-xl group-hover:bg-violet-100 transition-colors">
                   <FileText className="h-6 w-6 text-violet-600" />
                 </div>
               </div>
@@ -550,7 +541,7 @@ export default function HomePage() {
           </div>
 
           {/* Total Receivables */}
-          <div className="bg-white rounded-xl border border-border/60 overflow-hidden hover:shadow-lg transition-all duration-300 group">
+          <div className="bg-gradient-to-br from-amber-50/80 to-white rounded-xl border border-amber-100/60 overflow-hidden hover:shadow-lg transition-all duration-300 group">
             <div className="h-1 bg-gradient-to-r from-amber-500 to-amber-600" />
             <div className="p-6">
               <div className="flex items-start justify-between">
@@ -563,7 +554,7 @@ export default function HomePage() {
                     Outstanding from customers
                   </p>
                 </div>
-                <div className="p-3 bg-amber-50 rounded-xl group-hover:bg-amber-100 transition-colors">
+                <div className="p-3 bg-amber-100/60 rounded-xl group-hover:bg-amber-100 transition-colors">
                   <CreditCard className="h-6 w-6 text-amber-600" />
                 </div>
               </div>
@@ -571,7 +562,7 @@ export default function HomePage() {
           </div>
 
           {/* Net Profit */}
-          <div className="bg-white rounded-xl border border-border/60 overflow-hidden hover:shadow-lg transition-all duration-300 group">
+          <div className="bg-gradient-to-br from-emerald-50/80 to-white rounded-xl border border-emerald-100/60 overflow-hidden hover:shadow-lg transition-all duration-300 group">
             <div className="h-1 bg-gradient-to-r from-emerald-500 to-emerald-600" />
             <div className="p-6">
               <div className="flex items-start justify-between">
@@ -584,7 +575,7 @@ export default function HomePage() {
                     Sales - Purchases
                   </p>
                 </div>
-                <div className="p-3 bg-emerald-50 rounded-xl group-hover:bg-emerald-100 transition-colors">
+                <div className="p-3 bg-emerald-100/60 rounded-xl group-hover:bg-emerald-100 transition-colors">
                   <TrendingUp className="h-6 w-6 text-emerald-600" />
                 </div>
               </div>

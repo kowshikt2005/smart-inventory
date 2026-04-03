@@ -30,7 +30,7 @@ import {
   Settings,
   Shield,
 } from "lucide-react";
-import { useState, memo, useMemo } from "react";
+import { useState, memo, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
 function CollapsibleSection({
@@ -77,16 +77,32 @@ type NavItem = {
   permKey: PermissionKey;
 };
 
+type SidebarSection = "sales" | "purchases" | "bank-cash" | "ledger" | "gst" | "masters" | null;
+
+function getSectionFromPath(pathname: string): SidebarSection {
+  if (pathname.startsWith("/sales")) return "sales";
+  if (pathname.startsWith("/purchases")) return "purchases";
+  if (pathname.startsWith("/bank-cash")) return "bank-cash";
+  if (pathname.startsWith("/ledger")) return "ledger";
+  if (pathname.startsWith("/gst")) return "gst";
+  if (pathname.startsWith("/masters")) return "masters";
+  return null;
+}
+
 export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const [salesOpen, setSalesOpen] = useState(false);
-  const [purchasesOpen, setPurchasesOpen] = useState(false);
-  const [bankCashOpen, setBankCashOpen] = useState(false);
-  const [mastersOpen, setMastersOpen] = useState(false);
-  const [ledgerOpen, setLedgerOpen] = useState(false);
-  const [gstOpen, setGstOpen] = useState(false);
+  const [openSection, setOpenSection] = useState<SidebarSection>(getSectionFromPath(pathname));
 
+  // Auto-expand sidebar section when navigating to a new page
+  useEffect(() => {
+    const section = getSectionFromPath(pathname);
+    if (section) setOpenSection(section);
+  }, [pathname]);
+
+  const toggleSection = (section: SidebarSection) => {
+    setOpenSection((prev) => (prev === section ? null : section));
+  };
 
   const permissions = session?.user?.permissions as RolePermissions | undefined;
 
@@ -197,7 +213,7 @@ export const Sidebar = memo(function Sidebar() {
       <div className="flex items-center justify-center px-3 py-4 border-b border-white/[0.12]">
         <div className="w-full rounded-lg bg-white p-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-sbe.jpg" alt="Sri Balaji Enterprises" className="w-full h-auto object-contain" />
+          <img src="/logo-sbe.jpg" alt="Sri Balaji Enterprises" width={200} height={48} className="w-full h-auto object-contain" />
         </div>
       </div>
 
@@ -212,22 +228,20 @@ export const Sidebar = memo(function Sidebar() {
         {/* TRANSACTIONS section */}
         {showTransactions && (
           <>
-
-
             {/* Sales */}
             {showSales && (
               <div className="mb-0.5">
                 <button
-                  onClick={() => setSalesOpen(!salesOpen)}
+                  onClick={() => toggleSection("sales")}
                   className={sectionButtonClass(pathname.startsWith("/sales"))}
                 >
                   <div className="flex items-center gap-3">
                     <ShoppingCart className="h-5 w-5" strokeWidth={1.5} />
                     <span>Sales</span>
                   </div>
-                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", salesOpen && "rotate-180")} />
+                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", openSection === "sales" && "rotate-180")} />
                 </button>
-                <CollapsibleSection isOpen={salesOpen}>
+                <CollapsibleSection isOpen={openSection === "sales"}>
                   {renderNavItems(salesItems)}
                 </CollapsibleSection>
               </div>
@@ -237,16 +251,16 @@ export const Sidebar = memo(function Sidebar() {
             {showPurchases && (
               <div className="mb-0.5">
                 <button
-                  onClick={() => setPurchasesOpen(!purchasesOpen)}
+                  onClick={() => toggleSection("purchases")}
                   className={sectionButtonClass(pathname.startsWith("/purchases"))}
                 >
                   <div className="flex items-center gap-3">
                     <Truck className="h-5 w-5" strokeWidth={1.5} />
                     <span>Purchases</span>
                   </div>
-                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", purchasesOpen && "rotate-180")} />
+                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", openSection === "purchases" && "rotate-180")} />
                 </button>
-                <CollapsibleSection isOpen={purchasesOpen}>
+                <CollapsibleSection isOpen={openSection === "purchases"}>
                   {renderNavItems(purchaseItems)}
                 </CollapsibleSection>
               </div>
@@ -257,22 +271,20 @@ export const Sidebar = memo(function Sidebar() {
         {/* FINANCE section */}
         {showFinance && (
           <>
-
-
             {/* Bank/Cash */}
             {showBankCash && (
               <div className="mb-0.5">
                 <button
-                  onClick={() => setBankCashOpen(!bankCashOpen)}
+                  onClick={() => toggleSection("bank-cash")}
                   className={sectionButtonClass(pathname.startsWith("/bank-cash"))}
                 >
                   <div className="flex items-center gap-3">
                     <Landmark className="h-5 w-5" strokeWidth={1.5} />
                     <span>Bank/Cash</span>
                   </div>
-                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", bankCashOpen && "rotate-180")} />
+                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", openSection === "bank-cash" && "rotate-180")} />
                 </button>
-                <CollapsibleSection isOpen={bankCashOpen}>
+                <CollapsibleSection isOpen={openSection === "bank-cash"}>
                   {renderNavItems(bankCashItems)}
                 </CollapsibleSection>
               </div>
@@ -282,16 +294,16 @@ export const Sidebar = memo(function Sidebar() {
             {showLedger && (
               <div className="mb-0.5">
                 <button
-                  onClick={() => setLedgerOpen(!ledgerOpen)}
+                  onClick={() => toggleSection("ledger")}
                   className={sectionButtonClass(pathname.startsWith("/ledger"))}
                 >
                   <div className="flex items-center gap-3">
                     <BookOpen className="h-5 w-5" strokeWidth={1.5} />
                     <span>Ledger</span>
                   </div>
-                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", ledgerOpen && "rotate-180")} />
+                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", openSection === "ledger" && "rotate-180")} />
                 </button>
-                <CollapsibleSection isOpen={ledgerOpen}>
+                <CollapsibleSection isOpen={openSection === "ledger"}>
                   {renderNavItems(ledgerItems)}
                 </CollapsibleSection>
               </div>
@@ -302,7 +314,6 @@ export const Sidebar = memo(function Sidebar() {
         {/* ANALYTICS section */}
         {(showReports || showGST) && (
           <>
-
             {showReports && (
               <div className="mb-0.5">
                 <Link href="/reports" className={navLinkClass(pathname.startsWith("/reports"))}>
@@ -314,16 +325,16 @@ export const Sidebar = memo(function Sidebar() {
             {showGST && (
               <div className="mb-0.5">
                 <button
-                  onClick={() => setGstOpen(!gstOpen)}
+                  onClick={() => toggleSection("gst")}
                   className={sectionButtonClass(pathname.startsWith("/gst"))}
                 >
                   <div className="flex items-center gap-3">
                     <FileSpreadsheet className="h-5 w-5" strokeWidth={1.5} />
                     <span>GST</span>
                   </div>
-                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", gstOpen && "rotate-180")} />
+                  <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", openSection === "gst" && "rotate-180")} />
                 </button>
-                <CollapsibleSection isOpen={gstOpen}>
+                <CollapsibleSection isOpen={openSection === "gst"}>
                   {renderNavItems(gstItems)}
                 </CollapsibleSection>
               </div>
@@ -333,26 +344,21 @@ export const Sidebar = memo(function Sidebar() {
 
         {/* CONFIGURATION section */}
         {showMasters && (
-          <>
-
-
-            {/* Masters */}
-            <div className="mb-0.5">
-              <button
-                onClick={() => setMastersOpen(!mastersOpen)}
-                className={sectionButtonClass(pathname.startsWith("/masters"))}
-              >
-                <div className="flex items-center gap-3">
-                  <Database className="h-5 w-5" strokeWidth={1.5} />
-                  <span>Masters</span>
-                </div>
-                <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", mastersOpen && "rotate-180")} />
-              </button>
-              <CollapsibleSection isOpen={mastersOpen}>
-                {renderNavItems(masterItems)}
-              </CollapsibleSection>
-            </div>
-          </>
+          <div className="mb-0.5">
+            <button
+              onClick={() => toggleSection("masters")}
+              className={sectionButtonClass(pathname.startsWith("/masters"))}
+            >
+              <div className="flex items-center gap-3">
+                <Database className="h-5 w-5" strokeWidth={1.5} />
+                <span>Masters</span>
+              </div>
+              <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", openSection === "masters" && "rotate-180")} />
+            </button>
+            <CollapsibleSection isOpen={openSection === "masters"}>
+              {renderNavItems(masterItems)}
+            </CollapsibleSection>
+          </div>
         )}
 
         {/* Settings */}
@@ -369,7 +375,7 @@ export const Sidebar = memo(function Sidebar() {
       {/* Footer - KSolutions branding */}
       <div className="border-t border-white/[0.12] bg-black/20 flex items-center justify-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-ksolutions.jpg" alt="KSolutions - Your Gateway to Digital Excellence" className="w-full h-auto object-cover" />
+        <img src="/logo-ksolutions.jpg" alt="KSolutions - Your Gateway to Digital Excellence" width={230} height={40} className="w-full h-auto object-cover" />
       </div>
     </aside>
   );

@@ -52,8 +52,21 @@ export async function middleware(request: NextRequest) {
     if (permissionKey) {
       const permissions = token.permissions as RolePermissions | undefined;
       if (permissions && !permissions[permissionKey as keyof RolePermissions]?.view) {
-        const homeUrl = new URL("/", request.url);
-        return NextResponse.redirect(homeUrl);
+        // Find the first page this user does have access to
+        const firstPermittedPath = Object.entries(PATH_TO_PERMISSION).find(
+          ([, key]) => permissions[key as keyof RolePermissions]?.view === true
+        )?.[0];
+
+        if (firstPermittedPath) {
+          // User has at least one permission — send them where they can go
+          return NextResponse.redirect(new URL(firstPermittedPath, request.url));
+        }
+
+        // User has zero permissions — sign them out
+        const loginUrl = new URL("/login", request.url);
+        const response = NextResponse.redirect(loginUrl);
+        response.cookies.delete(cookieName);
+        return response;
       }
     }
   }

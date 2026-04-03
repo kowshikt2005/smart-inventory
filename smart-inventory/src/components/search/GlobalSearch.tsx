@@ -187,6 +187,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
   const [query, setQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const debouncedQuery = useDebounce(query, 400);
+  const isMac = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);
 
   // Fetch unified search data with a single API call
   const { data: searchData, isLoading } = useSWR(
@@ -387,7 +388,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
         <Search className="mr-2 h-4 w-4" />
         {placeholder}
         <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
-          <span className="text-xs">⌘</span>K
+          <span className="text-xs">{isMac ? "⌘" : "Ctrl+"}</span>K
         </kbd>
       </Button>
 

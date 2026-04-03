@@ -59,6 +59,11 @@ export function EditRoleModal({ isOpen, role, onClose, onSuccess }: EditRoleModa
       setError("Role name is required");
       return;
     }
+    const hasAtLeastOneView = Object.values(permissions).some((p) => p.view === true);
+    if (!hasAtLeastOneView) {
+      setError("At least one view permission must be enabled.");
+      return;
+    }
     setLoading(true);
     setError("");
 

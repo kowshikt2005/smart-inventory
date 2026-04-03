@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { X, Loader2, User, Upload } from "lucide-react";
+import { X, Loader2, User, Upload, Eye, EyeOff } from "lucide-react";
 import useSWR from "swr";
 import { EmployeeDocuments } from "./EmployeeDocuments";
 import { useSession } from "next-auth/react";
@@ -57,6 +57,7 @@ export function EditEmployeeModal({
   const { data: session } = useSession();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const firstInputRef = useRef<HTMLInputElement>(null);
   const canEditDocs = session?.user?.permissions?.masters_employees?.edit === true;
 
@@ -90,8 +91,10 @@ export function EditEmployeeModal({
     if (employee && isOpen) {
       // Determine roleId: use employee.roleId if available, otherwise find by role name
       let roleId = employee.roleId || "";
-      if (!roleId && employee.role && roles?.length) {
-        const match = roles.find((r) => r.name === employee.role);
+      if (!roleId && roles?.length) {
+        const match = roles.find(
+          (r) => r.name === employee.role || r.name === employee.roleName
+        );
         roleId = match?.id || "";
       }
 
@@ -309,7 +312,12 @@ export function EditEmployeeModal({
               </div>
               <div>
                 <Label htmlFor="password">New Password</Label>
-                <Input id="password" type="password" name="password" value={formData.password} onChange={handleChange} placeholder="Leave blank to keep current" minLength={6} />
+                <div className="relative">
+                  <Input id="password" type={showPassword ? "text" : "password"} name="password" value={formData.password} onChange={handleChange} placeholder="Leave blank to keep current" minLength={6} className="pr-10" />
+                  <button type="button" onClick={() => setShowPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
                 <p className="text-xs text-gray-500 mt-1">Leave blank to keep current password</p>
               </div>
               <div>

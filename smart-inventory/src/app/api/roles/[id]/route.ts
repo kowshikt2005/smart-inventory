@@ -101,6 +101,17 @@ export async function PUT(
       }
     }
 
+    // Require at least one view permission
+    if (cleanPermissions) {
+      const hasAtLeastOneView = Object.values(cleanPermissions).some((p) => p.view === true);
+      if (!hasAtLeastOneView) {
+        return NextResponse.json(
+          { error: 'At least one view permission must be enabled.' },
+          { status: 400 }
+        );
+      }
+    }
+
     const updated = await db.role.update({
       where: { id },
       data: {
