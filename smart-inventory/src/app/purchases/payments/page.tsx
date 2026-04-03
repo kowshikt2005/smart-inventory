@@ -93,14 +93,14 @@ export default function VendorPaymentsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-4 md:p-6">
+      <div className="p-6">
         <div className="mb-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Vendor Payments</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Vendor Payments</h1>
           <p className="text-sm text-gray-600">Manage payments to vendors</p>
         </div>
 
         {/* Filters and Search */}
-        <div className="space-y-3 mb-4">
+        <div className="space-y-4 mb-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2">
               {([{ value: "all", label: "All Payments" }, { value: "invoice", label: "Invoice Payments" }, { value: "advance", label: "Advance Payments" }] as const).map((f) => (

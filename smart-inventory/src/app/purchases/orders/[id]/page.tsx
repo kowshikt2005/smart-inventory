@@ -258,7 +258,7 @@ export default function PurchaseOrderDetailPage() {
           <div className="lg:col-span-2 space-y-6">
             {/* Order Details */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold mb-4">Order Details</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Order Details</h2>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-gray-500">Order Date</p>
@@ -331,7 +331,7 @@ export default function PurchaseOrderDetailPage() {
 
             {/* Order Summary */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold mb-4">Order Summary</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Order Summary</h2>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal (Taxable Amount)</span>
@@ -360,7 +360,7 @@ export default function PurchaseOrderDetailPage() {
             {/* Notes */}
             {order.notes && (
               <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold mb-4">Notes</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Notes</h2>
                 <p className="text-gray-700 whitespace-pre-wrap">{order.notes}</p>
               </div>
             )}
@@ -370,7 +370,7 @@ export default function PurchaseOrderDetailPage() {
           <div className="space-y-6">
             {/* Vendor Info */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold mb-4">Vendor</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Vendor</h2>
               <div className="space-y-3">
                 <div>
                   <p className="font-medium">{order.vendor.name}</p>
@@ -411,7 +411,7 @@ export default function PurchaseOrderDetailPage() {
             {/* Linked Invoices */}
             {order.purchaseInvoices.length > 0 && (
               <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold mb-4">Linked Invoices</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Linked Invoices</h2>
                 <div className="space-y-2">
                   {order.purchaseInvoices.map((invoice) => (
                     <button

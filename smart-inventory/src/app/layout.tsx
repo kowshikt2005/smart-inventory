@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SWRProvider } from "@/lib/swr-provider";
 import { SessionProvider } from "@/components/providers/SessionProvider";
+import DevBadge from "@/components/DevBadge";
 
 const inter = Inter({
   variable: "--font-geist-sans",
@@ -34,6 +35,7 @@ export default function RootLayout({
         <SessionProvider>
           <SWRProvider>{children}</SWRProvider>
         </SessionProvider>
+        <DevBadge />
       </body>
     </html>
   );

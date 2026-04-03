@@ -191,10 +191,10 @@ export default function PaymentsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-4 md:p-6">
+      <div className="p-6">
         {/* Header */}
         <div className="mb-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
             Payment Receipts
           </h1>
           <p className="text-sm text-gray-600">
@@ -203,7 +203,7 @@ export default function PaymentsPage() {
         </div>
 
         {/* Filters and Search */}
-        <div className="space-y-3 mb-4">
+        <div className="space-y-4 mb-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2">
               {MODE_FILTERS.map((filter) => (

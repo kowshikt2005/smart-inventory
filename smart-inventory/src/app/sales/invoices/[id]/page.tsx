@@ -249,7 +249,7 @@ export default function InvoiceDetailPage() {
     <DashboardLayout>
       <div className="min-h-screen bg-gray-50">
         {/* Sticky action bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 sticky top-0 z-10">
+        <div className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="sm" onClick={() => router.back()} className="text-gray-500 -ml-2">
@@ -291,17 +291,17 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-6">
           {/* Row 1: Bill To + Invoice Meta */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             {/* Customer — 3/5 width */}
-            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Bill To</p>
+            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-6">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Bill To</p>
               <p className="text-base font-semibold text-gray-900">
                 {invoice.customer?.name || invoice.customerName || "—"}
               </p>
               {invoice.customer && (
-                <div className="mt-2 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
+                <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-8 gap-y-2 text-sm">
                   <span className="text-gray-400">Customer #</span>
                   <span className="text-gray-700">{invoice.customer.customerNumber}</span>
                   {invoice.customer.gstin && (
@@ -353,9 +353,9 @@ export default function InvoiceDetailPage() {
             </div>
 
             {/* Invoice meta — 2/5 width */}
-            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5 flex flex-col">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Invoice Details</p>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-6 flex flex-col">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Invoice Details</p>
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                 <dt className="text-gray-400">Invoice Date</dt>
                 <dd className="text-gray-900 font-medium text-right">{formatDate(invoice.invoiceDate)}</dd>
                 <dt className="text-gray-400">Due Date</dt>
@@ -449,11 +449,11 @@ export default function InvoiceDetailPage() {
 
           {/* Row 3: Payments/Notes (left) + Summary (right) */}
           {hasLeftContent ? (
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-              <div className="lg:col-span-3 space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              <div className="lg:col-span-3 space-y-6">
                 {invoice.allocations.length > 0 && (
-                  <div className="bg-white rounded-lg border border-gray-200 p-5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Payments Received</p>
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Payments Received</p>
                     <div className="space-y-0">
                       {invoice.allocations.map((alloc) => (
                         <div key={alloc.id} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
@@ -468,15 +468,15 @@ export default function InvoiceDetailPage() {
                   </div>
                 )}
                 {invoice.notes && (
-                  <div className="bg-white rounded-lg border border-gray-200 p-5">
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Notes</p>
                     <p className="text-sm text-gray-700 whitespace-pre-wrap">{invoice.notes}</p>
                   </div>
                 )}
               </div>
               <div className="lg:col-span-2">
-                <div className="bg-white rounded-lg border border-gray-200 p-5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Summary</p>
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Summary</p>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-500">Subtotal (Taxable)</span>
@@ -520,8 +520,8 @@ export default function InvoiceDetailPage() {
             </div>
           ) : (
             <div className="flex justify-end">
-              <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Summary</p>
+              <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-6">
+                <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Summary</p>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Subtotal (Taxable)</span>

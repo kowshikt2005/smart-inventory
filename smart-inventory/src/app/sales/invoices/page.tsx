@@ -410,7 +410,7 @@ export default function SalesInvoicesPage() {
         </div>
 
         {/* Filters and Search */}
-        <div className="space-y-3 mb-6">
+        <div className="space-y-4 mb-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2">
               {STATUS_FILTERS.map((filter) => (
@@ -794,7 +794,7 @@ export default function SalesInvoicesPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-between">
+          <div className="mt-6 flex items-center justify-between">
             <p className="text-sm text-gray-600">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} invoices

@@ -117,14 +117,14 @@ export default function PurchaseReturnsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-4 md:p-6">
+      <div className="p-6">
         <div className="mb-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Purchase Returns</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Purchase Returns</h1>
           <p className="text-sm text-gray-600">Manage returns to vendors</p>
         </div>
 
         {/* Filters and Search */}
-        <div className="space-y-3 mb-4">
+        <div className="space-y-4 mb-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2">
               {STATUS_FILTERS.map((filter) => (
@@ -236,7 +236,7 @@ export default function PurchaseReturnsPage() {
         </div>
 
         {totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-between">
+          <div className="mt-6 flex items-center justify-between">
             <p className="text-sm text-gray-600">Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} returns</p>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={currentPage === 1}>Previous</Button>

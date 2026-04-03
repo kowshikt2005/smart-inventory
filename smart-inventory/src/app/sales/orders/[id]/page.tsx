@@ -232,7 +232,7 @@ export default function SalesOrderDetailPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-5xl mx-auto">
+      <div className="p-6 max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-6">
           <Button
@@ -335,9 +335,9 @@ export default function SalesOrderDetailPage() {
         </div>
 
         {/* Customer & Order Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Customer Details</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Customer Details</h2>
             <div className="space-y-2 text-sm">
               <div>
                 <p className="text-gray-600">Name</p>
@@ -365,7 +365,7 @@ export default function SalesOrderDetailPage() {
           </div>
 
           <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Order Information</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Order Information</h2>
             <div className="space-y-2 text-sm">
               {order.referenceNumber && (
                 <div>
@@ -579,7 +579,7 @@ export default function SalesOrderDetailPage() {
         {/* Totals */}
         <div className="flex justify-end">
           <div className="bg-white rounded-lg border border-gray-200 p-6 w-full md:w-1/2">
-            <h2 className="text-lg font-semibold mb-4">Order Summary</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Order Summary</h2>
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Subtotal</span>

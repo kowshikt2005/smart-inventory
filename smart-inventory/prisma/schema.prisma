@@ -41,6 +41,8 @@ model Customer {
   city              String?
   state             String?
   pincode           String?
+  latitude          Float?
+  longitude         Float?
   creditLimit       Decimal                   @default(0.00) @db.Decimal(15, 3)
   creditDays        Int                       @default(0)
   openingBalance    Decimal                   @default(0.00) @db.Decimal(15, 3)
@@ -112,6 +114,8 @@ model Vendor {
   city             String?
   state            String?
   pincode          String?
+  latitude         Float?
+  longitude        Float?
   creditDays       Int               @default(0)
   openingBalance   Decimal           @default(0.00) @db.Decimal(15, 3)
   isActive         Boolean           @default(true)

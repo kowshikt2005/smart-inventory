@@ -11,6 +11,7 @@ import { FileSpreadsheet, Loader2, AlertCircle, Download } from "lucide-react";
 import { ExportButtons } from "@/components/ui/ExportButtons";
 import { exportToExcel, exportToPDF, generatePDFBase64, fmtNum, monthLabel, fetchCompanySettings } from "@/lib/export-utils";
 import { EmailReportDialog } from "@/components/reports/EmailReportDialog";
+import { GSTFilingModal } from "@/components/gst/GSTFilingModal";
 import type { GSTR1GovJSON, GovB2CS, GovHSNEntry, GovDocDetail } from "@/types/gst-gov-types";
 
 // ─── Types matching API response ──────────────────────────────────────────────
@@ -194,6 +195,12 @@ export default function GSTR1Page() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <GSTFilingModal
+              govJson={data?.govJson ?? null}
+              month={period.month}
+              year={period.year}
+              disabled={loading || !data}
+            />
             <button
               onClick={handleDownloadJSON}
               disabled={loading || !data}

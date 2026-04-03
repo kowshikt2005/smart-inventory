@@ -290,7 +290,7 @@ export default function PurchaseInvoicesPage() {
         </div>
 
         {/* Filters and Search */}
-        <div className="space-y-3 mb-6">
+        <div className="space-y-4 mb-6">
           {/* Row 1: Status + Search + New */}
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -617,7 +617,7 @@ export default function PurchaseInvoicesPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-between">
+          <div className="mt-6 flex items-center justify-between">
             <p className="text-sm text-gray-600">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} invoices

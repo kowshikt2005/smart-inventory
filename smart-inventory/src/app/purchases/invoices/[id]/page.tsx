@@ -170,7 +170,7 @@ export default function PurchaseInvoiceDetailPage() {
     <DashboardLayout>
       <div className="min-h-screen bg-gray-50">
         {/* Sticky action bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 sticky top-0 z-10">
+        <div className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="sm" onClick={() => router.push("/purchases/invoices")} className="text-gray-500 -ml-2">
@@ -218,15 +218,15 @@ export default function PurchaseInvoiceDetailPage() {
           </div>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-6">
           {/* Row 1: Vendor + Invoice Meta */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             {/* Vendor — 3/5 */}
-            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Vendor</p>
+            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-6">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Vendor</p>
               <p className="text-base font-semibold text-gray-900">{invoice.vendor?.name || invoice.vendorName}</p>
               {invoice.vendor && (
-                <div className="mt-2 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
+                <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-8 gap-y-2 text-sm">
                   <span className="text-gray-400">Vendor #</span>
                   <span className="text-gray-700">{invoice.vendor.vendorNumber}</span>
                   {invoice.vendor.gstin && (
@@ -263,9 +263,9 @@ export default function PurchaseInvoiceDetailPage() {
             </div>
 
             {/* Invoice meta — 2/5 */}
-            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5 flex flex-col">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Invoice Details</p>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm flex-1">
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-6 flex flex-col">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Invoice Details</p>
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm flex-1">
                 <dt className="text-gray-400">Invoice Date</dt>
                 <dd className="text-gray-900 font-medium text-right">{formatDate(invoice.date)}</dd>
                 <dt className="text-gray-400">Due Date</dt>
@@ -285,7 +285,7 @@ export default function PurchaseInvoiceDetailPage() {
                 )}
               </dl>
               {/* Quick totals */}
-              <div className="mt-4 pt-3 border-t border-gray-100 space-y-1.5">
+              <div className="mt-5 pt-4 border-t border-gray-100 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Total</span>
                   <span className="font-semibold text-gray-900">{formatCurrency(Number(invoice.totalAmount))}</span>
@@ -378,11 +378,11 @@ export default function PurchaseInvoiceDetailPage() {
 
           {/* Row 3: Payments/Returns/Notes (left) + Summary (right) */}
           {hasLeftContent ? (
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-              <div className="lg:col-span-3 space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              <div className="lg:col-span-3 space-y-6">
                 {invoice.vendorPayments.length > 0 && (
-                  <div className="bg-white rounded-lg border border-gray-200 p-5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Payments</p>
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Payments</p>
                     <div className="space-y-0">
                       {invoice.vendorPayments.map((payment) => (
                         <button
@@ -401,8 +401,8 @@ export default function PurchaseInvoiceDetailPage() {
                   </div>
                 )}
                 {invoice.purchaseReturns.length > 0 && (
-                  <div className="bg-white rounded-lg border border-gray-200 p-5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Returns</p>
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Returns</p>
                     <div className="space-y-0">
                       {invoice.purchaseReturns.map((ret) => (
                         <button
@@ -421,15 +421,15 @@ export default function PurchaseInvoiceDetailPage() {
                   </div>
                 )}
                 {invoice.notes && (
-                  <div className="bg-white rounded-lg border border-gray-200 p-5">
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Notes</p>
                     <p className="text-sm text-gray-700 whitespace-pre-wrap">{invoice.notes}</p>
                   </div>
                 )}
               </div>
               <div className="lg:col-span-2">
-                <div className="bg-white rounded-lg border border-gray-200 p-5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Summary</p>
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Summary</p>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-500">Taxable Value</span>
@@ -468,7 +468,7 @@ export default function PurchaseInvoiceDetailPage() {
           ) : (
             <div className="flex justify-end">
               <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Summary</p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Summary</p>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Taxable Value</span>

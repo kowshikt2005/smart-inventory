@@ -49,6 +49,12 @@ agents/
 
 /src/generated/prisma
 
+# Infra docs (gitignored — contains server paths)
+AWS_INFRASTRUCTURE.md
+
+# One-time setup scripts
+scripts/
+
 # EC2/Server deployment
 *.log
 logs/
