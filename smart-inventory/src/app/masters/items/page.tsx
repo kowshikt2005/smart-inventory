@@ -48,6 +48,7 @@ interface Item {
   subBrand?: { id: string; name: string } | null;
   inventory?: {
     physicalStock: string | number;
+    openingStock: string | number;
     reservedQuantity: string | number;
     minStockLevel: string | number;
   };
@@ -396,6 +397,7 @@ function ItemsContent() {
                 <TableHead scope="col" className="font-semibold">Cost</TableHead>
                 <TableHead scope="col" className="font-semibold">MRP</TableHead>
                 <TableHead scope="col" className="font-semibold">Selling</TableHead>
+                <TableHead scope="col" className="font-semibold">Opening Stock</TableHead>
                 <TableHead scope="col" className="font-semibold">Stock</TableHead>
                 <TableHead scope="col" className="font-semibold">Status</TableHead>
                 <TableHead scope="col" className="font-semibold">Actions</TableHead>
@@ -404,7 +406,7 @@ function ItemsContent() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center text-gray-500 py-12">
+                  <TableCell colSpan={14} className="text-center text-gray-500 py-12">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Loading items...</span>
@@ -413,7 +415,7 @@ function ItemsContent() {
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center text-red-600 py-8">
+                  <TableCell colSpan={14} className="text-center text-red-600 py-8">
                     <div className="space-y-2">
                       <p>Error: {error.message || "Failed to load items"}</p>
                       <Button onClick={() => mutate()} variant="outline" size="sm">
@@ -424,7 +426,7 @@ function ItemsContent() {
                 </TableRow>
               ) : paginatedItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center text-gray-500 py-8">
+                  <TableCell colSpan={14} className="text-center text-gray-500 py-8">
                     {searchQuery
                       ? "No items found matching your search"
                       : "No items yet. Click 'Add Item' to get started."}
@@ -447,6 +449,10 @@ function ItemsContent() {
                     <TableCell>₹{Number(item.purchasePrice).toFixed(2)}</TableCell>
                     <TableCell>₹{Number(item.mrp).toFixed(2)}</TableCell>
                     <TableCell>₹{Number(item.sellingPrice).toFixed(2)}</TableCell>
+                    <TableCell className="text-sm text-gray-700">
+                      {Number(item.inventory?.openingStock || 0).toFixed(3).replace(/\.?0+$/, '') || "0"}
+                      <span className="text-xs text-muted-foreground ml-1">{item.unit}</span>
+                    </TableCell>
                     <TableCell>
                       {(() => {
                         const physical = Number(item.inventory?.physicalStock || 0);

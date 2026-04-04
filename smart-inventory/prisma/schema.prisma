@@ -219,6 +219,7 @@ model Inventory {
   id               String          @id @default(uuid())
   itemId           String          @unique
   physicalStock    Decimal         @default(0.000) @db.Decimal(15, 3)
+  openingStock     Decimal         @default(0.000) @db.Decimal(15, 3)
   reservedQuantity Decimal         @default(0.000) @db.Decimal(15, 3)
   minStockLevel    Decimal         @default(0.000) @db.Decimal(15, 3)
   lastUpdated      DateTime        @updatedAt

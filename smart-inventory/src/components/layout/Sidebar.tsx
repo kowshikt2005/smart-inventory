@@ -373,7 +373,7 @@ export const Sidebar = memo(function Sidebar() {
       </nav>
 
       {/* Footer - KSolutions branding */}
-      <div className="border-t border-white/[0.12] bg-black/20 flex items-center justify-center">
+      <div className="border-t border-white/[0.12] bg-black/20">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-ksolutions.jpg" alt="KSolutions - Your Gateway to Digital Excellence" width={230} height={40} className="w-full h-auto object-cover" />
       </div>

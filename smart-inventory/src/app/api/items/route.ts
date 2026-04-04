@@ -131,15 +131,32 @@ export async function POST(request: Request) {
         },
       });
 
-      // Create inventory record
-      await tx.inventory.create({
+      const openingStock = parseFloat(body.openingStock) || 0;
+
+      // Create inventory record, seeded with opening stock if provided
+      const inventory = await tx.inventory.create({
         data: {
           itemId: item.id,
-          physicalStock: 0,
+          physicalStock: openingStock,
+          openingStock: openingStock,
           reservedQuantity: 0,
           minStockLevel: body.minStock || 0,
         },
       });
+
+      // Record opening stock as an ADJUSTMENT_IN movement for full ledger traceability
+      if (openingStock > 0) {
+        await (tx.stockMovement.create as any)({
+          data: {
+            inventoryId: inventory.id,
+            itemId: item.id,
+            quantity: openingStock,
+            type: 'ADJUSTMENT_IN',
+            referenceType: 'STOCK_JOURNAL',
+            notes: 'Opening Stock',
+          },
+        });
+      }
 
       return item;
     });

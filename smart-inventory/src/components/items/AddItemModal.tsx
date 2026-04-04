@@ -105,6 +105,7 @@ export function AddItemModal({
     marginType: "PERCENTAGE",
     minStock: "0",
     unit: "PCS",
+    openingStock: "0",
   });
   const [uomConversions, setUomConversions] = useState<UOMConversion[]>([]);
 
@@ -142,6 +143,7 @@ export function AddItemModal({
         marginType: "PERCENTAGE",
         minStock: "0",
         unit: prefillData?.unit || (hasInvoicePrefill ? "CTN" : "PCS"),
+        openingStock: "0",
       });
       setUomConversions([]);
       setImageUrl(null);
@@ -167,6 +169,7 @@ export function AddItemModal({
         marginType: editItem.marginType || "PERCENTAGE",
         minStock: String(editItem.inventory?.minStockLevel ?? 0),
         unit: editItem.unit || "PCS",
+        openingStock: "0",
       });
       setUomConversions(
         (editItem.uomConversions || []).map((c) => ({
@@ -298,6 +301,7 @@ export function AddItemModal({
           marginType: formData.marginType,
           minStock: parseFloat(formData.minStock) || 0,
           unit: formData.unit,
+          openingStock: parseFloat(formData.openingStock) || 0,
           uomConversions: uomConversions.length > 0
             ? uomConversions
                 .filter((c) => c.name.trim() && parseFloat(c.factor) > 0)
@@ -334,6 +338,7 @@ export function AddItemModal({
         marginType: "PERCENTAGE",
         minStock: "0",
         unit: "PCS",
+        openingStock: "0",
       });
       setUomConversions([]);
       setImageUrl(null);
@@ -849,6 +854,27 @@ export function AddItemModal({
                   placeholder="0"
                 />
               </div>
+              {!isEditing && (
+                <div>
+                  <label
+                    htmlFor="item-opening-stock"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Opening Stock
+                  </label>
+                  <Input
+                    id="item-opening-stock"
+                    type="number"
+                    name="openingStock"
+                    value={formData.openingStock}
+                    onChange={handleChange}
+                    step="0.001"
+                    min="0"
+                    placeholder="0"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Stock quantity on hand when adding this item</p>
+                </div>
+              )}
             </div>
           </div>
 
