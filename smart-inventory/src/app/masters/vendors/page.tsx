@@ -2,6 +2,7 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -14,13 +15,26 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { AddVendorModal } from "@/components/vendors/AddVendorModal";
-import { Plus, MoreHorizontal, Eye, FileText, Loader2, X } from "lucide-react";
-import { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import {
+  Plus,
+  MoreHorizontal,
+  Eye,
+  FileText,
+  Loader2,
+  X,
+  PowerOff,
+  Power,
+  Edit,
+  Trash2,
+} from "lucide-react";
+import { ImportButton } from "@/components/import/ImportButton";
+import { useState, useMemo, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { useDebounce } from "@/hooks/useDebounce";
 
@@ -42,33 +56,69 @@ interface Vendor {
   updatedAt: Date;
 }
 
-export default function VendorsPage() {
+type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
+
+function VendorsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo");
+  const purchaseInvoiceId = searchParams.get("purchaseInvoiceId");
+  const prefillName = searchParams.get("prefillName") || undefined;
+
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const itemsPerPage = 10;
+
+  // Auto-open modal when redirected from an invoice page
+  useEffect(() => {
+    if (searchParams.get("openCreate") === "true") {
+      setShowAddModal(true);
+    }
+  }, [searchParams]);
 
   // Debounce search
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   // Use SWR for caching
-  const { data, error, isLoading, mutate } = useSWR("/api/vendors");
+  const { data, error, isLoading, mutate } = useSWR("/api/vendors?limit=1000");
 
-  // Filter vendors based on search query
+  // Counts for filter tabs
+  const counts = useMemo(() => {
+    const vendors: Vendor[] = data?.vendors || [];
+    return {
+      all: vendors.length,
+      active: vendors.filter((v) => v.isActive).length,
+      inactive: vendors.filter((v) => !v.isActive).length,
+    };
+  }, [data]);
+
+  // Filter vendors based on search query and status filter
   const filteredVendors = useMemo(() => {
-    const vendors = data?.vendors || [];
-    if (!debouncedSearch.trim()) return vendors;
+    const vendors: Vendor[] = data?.vendors || [];
+
+    let result = vendors;
+
+    if (statusFilter !== "ALL") {
+      result = result.filter(
+        (vendor) => vendor.isActive === (statusFilter === "ACTIVE")
+      );
+    }
+
+    if (!debouncedSearch.trim()) return result;
 
     const query = debouncedSearch.toLowerCase();
-    return vendors.filter(
-      (vendor: Vendor) =>
+    return result.filter(
+      (vendor) =>
         vendor.name.toLowerCase().includes(query) ||
         (vendor.gstin && vendor.gstin.toLowerCase().includes(query)) ||
         (vendor.city && vendor.city.toLowerCase().includes(query)) ||
         (vendor.state && vendor.state.toLowerCase().includes(query))
     );
-  }, [debouncedSearch, data]);
+  }, [debouncedSearch, data, statusFilter]);
 
   // Paginate vendors
   const paginatedVendors = useMemo(() => {
@@ -93,15 +143,49 @@ export default function VendorsPage() {
     router.push(`/ledger/vendors?vendorId=${vendorId}`);
   };
 
+  const handleDeleteVendor = async (vendor: Vendor) => {
+    if (!confirm(`Delete "${vendor.name}"? This cannot be undone.`)) return;
+    setDeletingId(vendor.id);
+    try {
+      const res = await fetch(`/api/vendors/${vendor.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Failed to delete");
+      }
+      mutate();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete vendor");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleToggleStatus = async (vendor: Vendor) => {
+    setTogglingId(vendor.id);
+    try {
+      const res = await fetch(`/api/vendors/${vendor.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !vendor.isActive }),
+      });
+      if (!res.ok) throw new Error();
+      mutate();
+    } catch {
+      alert("Failed to update vendor status.");
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">All Vendors</h1>
+          <h1 className="text-2xl font-bold text-foreground mb-6">All Vendors</h1>
 
           {/* Search and Add Button */}
-          <div className="flex items-start justify-between gap-4 mb-6">
+          <div className="flex items-start justify-between gap-4 mb-4">
             <div className="flex-1 max-w-md">
               <div className="relative">
                 <Input
@@ -114,7 +198,7 @@ export default function VendorsPage() {
                 {searchQuery && (
                   <button
                     onClick={() => handleSearchChange("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground"
                     aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
@@ -122,57 +206,68 @@ export default function VendorsPage() {
                 )}
               </div>
               {searchQuery && (
-                <p className="text-sm text-gray-600 mt-2">
-                  Found {filteredVendors.length} vendor
-                  {filteredVendors.length !== 1 ? "s" : ""}
+                <p className="text-sm text-muted-foreground mt-2">
+                  Found {filteredVendors.length} vendor{filteredVendors.length !== 1 ? "s" : ""}
                 </p>
               )}
             </div>
-            <Button
-              onClick={() => setShowAddModal(true)}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Vendor
-            </Button>
+            <div className="flex items-center gap-2">
+              <ImportButton entityType="VENDOR" entityLabel="Vendors" onSuccess={() => mutate()} />
+              <Button
+                onClick={() => setShowAddModal(true)}
+                className="bg-primary hover:bg-primary/90 text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Vendor
+              </Button>
+            </div>
+          </div>
+
+          {/* Status Filter Tabs */}
+          <div className="flex gap-1 border-b border-border mb-0">
+            {(["ALL", "ACTIVE", "INACTIVE"] as StatusFilter[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => {
+                  setStatusFilter(f);
+                  setCurrentPage(1);
+                }}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  statusFilter === f
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {f === "ALL" ? "All" : f === "ACTIVE" ? "Active" : "Inactive"}
+                <span className="ml-1.5 text-xs bg-muted rounded-full px-1.5 py-0.5">
+                  {f === "ALL" ? counts.all : f === "ACTIVE" ? counts.active : counts.inactive}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Vendors Table */}
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
           <Table aria-label="Vendor list">
             <TableHeader>
-              <TableRow className="bg-gray-50">
-                <TableHead scope="col" className="font-semibold">
-                  Name
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  GST No.
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  City
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  State
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  Credit Days
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  Credit Limit
-                </TableHead>
-                <TableHead scope="col" className="font-semibold">
-                  Actions
-                </TableHead>
+              <TableRow className="bg-muted/30">
+                <TableHead className="font-semibold">Name</TableHead>
+                <TableHead className="font-semibold">GST No.</TableHead>
+                <TableHead className="font-semibold">State Code</TableHead>
+                <TableHead className="font-semibold">PAN</TableHead>
+                <TableHead className="font-semibold">City</TableHead>
+                <TableHead className="font-semibold">State</TableHead>
+                <TableHead className="font-semibold">Credit Days</TableHead>
+                <TableHead className="font-semibold">Opening Balance</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="text-center text-gray-500 py-12"
-                  >
+                  <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Loading vendors...</span>
@@ -181,43 +276,45 @@ export default function VendorsPage() {
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="text-center text-red-600 py-8"
-                  >
+                  <TableCell colSpan={10} className="text-center text-red-600 py-8">
                     <div className="space-y-2">
                       <p>Error: {error.message || "Failed to load vendors"}</p>
-                      <Button
-                        onClick={() => mutate()}
-                        variant="outline"
-                        size="sm"
-                      >
-                        Try Again
-                      </Button>
+                      <Button onClick={() => mutate()} variant="outline" size="sm">Try Again</Button>
                     </div>
                   </TableCell>
                 </TableRow>
               ) : paginatedVendors.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="text-center text-gray-500 py-8"
-                  >
-                    {searchQuery
-                      ? "No vendors found matching your search"
-                      : "No vendors yet. Click 'Add Vendor' to get started."}
+                  <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                    {searchQuery ? "No vendors found matching your search" : "No vendors yet. Click 'Add Vendor' to get started."}
                   </TableCell>
                 </TableRow>
               ) : (
                 paginatedVendors.map((vendor: Vendor) => (
-                  <TableRow key={vendor.id}>
+                  <TableRow
+                    key={vendor.id}
+                    className={!vendor.isActive ? "opacity-50 bg-muted/20" : undefined}
+                  >
                     <TableCell className="font-medium">{vendor.name}</TableCell>
-                    <TableCell>{vendor.gstin || "N/A"}</TableCell>
-                    <TableCell>{vendor.city || "N/A"}</TableCell>
-                    <TableCell>{vendor.state || "N/A"}</TableCell>
+                    <TableCell className="font-mono text-sm">{vendor.gstin || "-"}</TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {vendor.gstin && vendor.gstin.length >= 2 ? vendor.gstin.substring(0, 2) : "-"}
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {vendor.gstin && vendor.gstin.length >= 12 ? vendor.gstin.substring(2, 12) : "-"}
+                    </TableCell>
+                    <TableCell>{vendor.city || "-"}</TableCell>
+                    <TableCell>{vendor.state || "-"}</TableCell>
                     <TableCell>{vendor.creditDays}</TableCell>
+                    <TableCell>{Number(vendor.openingBalance).toLocaleString("en-IN")}</TableCell>
                     <TableCell>
-                      {vendor.openingBalance.toLocaleString("en-US")}
+                      {vendor.isActive ? (
+                        <Badge className="bg-green-100 text-green-700 border-green-200">
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">Inactive</Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -227,8 +324,13 @@ export default function VendorsPage() {
                             size="sm"
                             className="h-8 w-8 p-0"
                             aria-label={`Actions for ${vendor.name}`}
+                            disabled={togglingId === vendor.id || deletingId === vendor.id}
                           >
-                            <MoreHorizontal className="h-4 w-4" />
+                            {togglingId === vendor.id || deletingId === vendor.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <MoreHorizontal className="h-4 w-4" />
+                            )}
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -244,6 +346,37 @@ export default function VendorsPage() {
                             <FileText className="h-4 w-4 mr-2" />
                             View Transactions
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => router.push(`/masters/vendors/${vendor.id}`)}
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit Vendor
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleToggleStatus(vendor)}
+                            className={!vendor.isActive ? "text-green-600" : "text-orange-600"}
+                          >
+                            {!vendor.isActive ? (
+                              <>
+                                <Power className="h-4 w-4 mr-2" />
+                                Activate
+                              </>
+                            ) : (
+                              <>
+                                <PowerOff className="h-4 w-4 mr-2" />
+                                Deactivate
+                              </>
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleDeleteVendor(vendor)}
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Vendor
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -257,7 +390,7 @@ export default function VendorsPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, filteredVendors.length)} of{" "}
               {filteredVendors.length} vendors
@@ -292,12 +425,34 @@ export default function VendorsPage() {
         <AddVendorModal
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
-          onSuccess={() => {
+          prefillName={prefillName}
+          onSuccess={async (vendor) => {
             mutate();
             setCurrentPage(1);
+            // If opened from an invoice, link the new vendor and redirect back
+            if (returnTo && purchaseInvoiceId) {
+              try {
+                await fetch("/api/import/link-invoice-vendor", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ vendorId: vendor.id, purchaseInvoiceId }),
+                });
+              } catch {
+                // Linking failed silently — user is still redirected
+              }
+              router.push(returnTo);
+            }
           }}
         />
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function VendorsPage() {
+  return (
+    <Suspense>
+      <VendorsContent />
+    </Suspense>
   );
 }

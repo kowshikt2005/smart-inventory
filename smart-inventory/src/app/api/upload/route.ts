@@ -1,0 +1,77 @@
+import { NextResponse } from 'next/server';
+import { writeFile, mkdir } from 'fs/promises';
+import { randomUUID } from 'crypto';
+import path from 'path';
+import { checkAuth } from '@/lib/api-auth';
+
+const ALLOWED_TYPES: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'application/pdf': '.pdf',
+};
+
+const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+
+export async function POST(request: Request) {
+  try {
+    const { error } = await checkAuth();
+    if (error) return error;
+    const formData = await request.formData();
+    const file = formData.get('file') as File | null;
+
+    if (!file) {
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    }
+
+    // Validate file type
+    const ext = ALLOWED_TYPES[file.type];
+    if (!ext) {
+      return NextResponse.json(
+        { error: 'Invalid file type. Only JPEG, PNG, WebP, and PDF are allowed.' },
+        { status: 400 }
+      );
+    }
+
+    // Validate file size
+    if (file.size > MAX_SIZE) {
+      return NextResponse.json(
+        { error: 'File too large. Maximum size is 10MB.' },
+        { status: 400 }
+      );
+    }
+
+    // Determine upload folder
+    const folder = (formData.get('folder') as string) || 'items';
+    const VALID_FOLDERS = ['items', 'brands', 'employees'];
+    if (!VALID_FOLDERS.includes(folder)) {
+      return NextResponse.json(
+        { error: `Invalid folder. Allowed: ${VALID_FOLDERS.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    // Ensure upload directory exists
+    const uploadDir = path.join(process.cwd(), 'uploads', folder);
+    await mkdir(uploadDir, { recursive: true });
+
+    // Generate unique filename
+    const filename = `${randomUUID()}${ext}`;
+    const filepath = path.join(uploadDir, filename);
+
+    // Write file to disk
+    const buffer = Buffer.from(await file.arrayBuffer());
+    await writeFile(filepath, buffer);
+
+    // Return the URL path for serving the file
+    const url = `/api/uploads/${folder}/${filename}`;
+
+    return NextResponse.json({ url });
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    return NextResponse.json(
+      { error: 'Failed to upload file' },
+      { status: 500 }
+    );
+  }
+}

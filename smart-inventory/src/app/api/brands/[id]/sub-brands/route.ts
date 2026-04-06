@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/brands/[id]/sub-brands - Get sub-brands for a specific brand
 export async function GET(
@@ -7,6 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_items', 'view');
+    if (error) return error;
     const { id } = await params;
     const subBrands = await db.subBrand.findMany({
       where: { brandId: id },
@@ -29,6 +32,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_items', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
@@ -72,6 +77,10 @@ export async function POST(
       data: {
         name: body.name,
         brandId: id,
+        discountPercent: body.discountPercent !== undefined
+          ? parseFloat(body.discountPercent)
+          : null,
+        logoUrl: body.logoUrl || null,
       },
     });
 

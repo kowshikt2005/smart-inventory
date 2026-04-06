@@ -18,10 +18,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
 import {
   Plus,
-  MoreHorizontal,
+  MoreVertical,
   Edit,
   Trash2,
   Loader2,
@@ -32,8 +39,10 @@ import {
   CheckCircle,
   FileText,
   Package,
+  Filter,
+  Copy,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -92,8 +101,48 @@ export default function PurchaseOrdersPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [brandFilter, setBrandFilter] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+
+  // Clipboard copy/paste
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
+
+  const handleCopyOrder = (id: string) => {
+    setCopiedOrderId(id);
+    setContextMenu(null);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (!copiedOrderId) return;
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [contextMenu]);
+
+  // Fetch brands and vendors for filters
+  const { data: brandsData } = useSWR("/api/brands");
+  const { data: vendorsData } = useSWR("/api/vendors?limit=500");
+  const brands = brandsData?.brands || [];
+  const vendors = vendorsData?.vendors || [];
+
+  const activeFilterCount = [brandFilter, vendorFilter, dateFrom, dateTo].filter(Boolean).length;
 
   const debouncedSearch = useDebounce(searchQuery, 300);
 
@@ -102,11 +151,23 @@ export default function PurchaseOrdersPage() {
     if (statusFilter !== "ALL") {
       url += `&status=${statusFilter}`;
     }
+    if (brandFilter) {
+      url += `&brandId=${brandFilter}`;
+    }
+    if (vendorFilter) {
+      url += `&vendorId=${vendorFilter}`;
+    }
+    if (dateFrom) {
+      url += `&dateFrom=${dateFrom}`;
+    }
+    if (dateTo) {
+      url += `&dateTo=${dateTo}`;
+    }
     if (debouncedSearch) {
       url += `&search=${encodeURIComponent(debouncedSearch)}`;
     }
     return url;
-  }, [currentPage, statusFilter, debouncedSearch]);
+  }, [currentPage, statusFilter, brandFilter, vendorFilter, dateFrom, dateTo, debouncedSearch]);
 
   const { data, error, isLoading, mutate } = useSWR(apiUrl);
 
@@ -256,55 +317,161 @@ export default function PurchaseOrdersPage() {
         </div>
 
         {/* Filters and Search */}
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-          <div className="flex flex-wrap items-center gap-2">
-            {STATUS_FILTERS.map((filter) => (
-              <Button
-                key={filter.value}
-                variant={statusFilter === filter.value ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleStatusFilter(filter.value)}
-                className={
-                  statusFilter === filter.value
-                    ? "bg-teal-500 hover:bg-teal-600"
-                    : ""
-                }
-              >
-                {filter.label}
-              </Button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="relative w-64">
-              <Input
-                type="text"
-                placeholder="Search orders..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pr-8"
-              />
-              {searchQuery && (
-                <button
-                  onClick={handleClearSearch}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  aria-label="Clear search"
+        <div className="space-y-4 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {STATUS_FILTERS.map((filter) => (
+                <Button
+                  key={filter.value}
+                  variant={statusFilter === filter.value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleStatusFilter(filter.value)}
+                  className={
+                    statusFilter === filter.value
+                      ? "bg-teal-500 hover:bg-teal-600"
+                      : ""
+                  }
                 >
-                  <X className="h-4 w-4" />
-                </button>
+                  {filter.label}
+                </Button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative w-64">
+                <Input
+                  type="text"
+                  placeholder="Search orders..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-8"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={handleClearSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+                className={activeFilterCount > 0 ? "border-teal-500 text-teal-600" : ""}
+              >
+                <Filter className="h-4 w-4 mr-1" />
+                Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
+              </Button>
+              <Button
+                onClick={() => router.push("/purchases/orders/new")}
+                className="bg-teal-500 hover:bg-teal-600 text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New Order
+              </Button>
+            </div>
+          </div>
+
+          {showFilters && (
+            <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="min-w-[160px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Brand</label>
+                <Select value={brandFilter} onValueChange={(v) => { setBrandFilter(v === "ALL" ? "" : v); setCurrentPage(1); }}>
+                  <SelectTrigger className="h-9 bg-white">
+                    <SelectValue placeholder="All Brands" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Brands</SelectItem>
+                    {brands.map((brand: { id: string; name: string }) => (
+                      <SelectItem key={brand.id} value={brand.id}>{brand.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-[200px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Vendor</label>
+                <Select value={vendorFilter} onValueChange={(v) => { setVendorFilter(v === "ALL" ? "" : v); setCurrentPage(1); }}>
+                  <SelectTrigger className="h-9 bg-white">
+                    <SelectValue placeholder="All Vendors" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Vendors</SelectItem>
+                    {vendors.map((v: { id: string; name: string }) => (
+                      <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-[150px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }}
+                  className="h-9 bg-white"
+                />
+              </div>
+              <div className="min-w-[150px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }}
+                  className="h-9 bg-white"
+                />
+              </div>
+              {activeFilterCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setBrandFilter("");
+                    setVendorFilter("");
+                    setDateFrom("");
+                    setDateTo("");
+                    setCurrentPage(1);
+                  }}
+                  className="text-gray-500 hover:text-gray-700 h-9"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
               )}
             </div>
-            <Button
-              onClick={() => router.push("/purchases/orders/new")}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              New Order
-            </Button>
-          </div>
+          )}
         </div>
 
+        {/* Clipboard copy banner */}
+        {copiedOrderId && (
+          <div className="mb-3 flex items-center gap-3 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-800">
+            <Copy className="h-4 w-4 shrink-0" />
+            <span>Order copied — right-click anywhere in the table to paste.</span>
+            <button onClick={() => setCopiedOrderId(null)} className="ml-auto text-indigo-400 hover:text-indigo-600">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Context menu */}
+        {contextMenu && (
+          <div
+            className="fixed z-50 min-w-[140px] rounded-lg border border-gray-200 bg-white shadow-lg py-1 text-sm"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+          >
+            <button
+              onClick={() => { router.push(`/purchases/orders/new?copy=${copiedOrderId}`); setCopiedOrderId(null); setContextMenu(null); }}
+              className="flex w-full items-center gap-2 px-3 py-2 hover:bg-indigo-50 text-gray-700 hover:text-indigo-700"
+            >
+              <Copy className="h-4 w-4" />
+              Paste Order
+            </button>
+          </div>
+        )}
+
         {/* Orders Table */}
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div ref={tableRef} onContextMenu={handleContextMenu} className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <Table aria-label="Purchase orders list">
               <TableHeader>
@@ -377,13 +544,13 @@ export default function PurchaseOrdersPage() {
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" aria-label="Actions">
-                              <MoreHorizontal className="h-4 w-4" />
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600" aria-label="Actions">
+                              <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem onClick={() => router.push(`/purchases/orders/${order.id}`)}>
-                              <Eye className="h-4 w-4 mr-2" />
+                              <Eye className="h-4 w-4 mr-2 text-teal-600" />
                               View Details
                             </DropdownMenuItem>
 
@@ -395,6 +562,12 @@ export default function PurchaseOrdersPage() {
                                 Edit Order
                               </DropdownMenuItem>
                             )}
+
+                            {/* Copy */}
+                            <DropdownMenuItem onClick={() => handleCopyOrder(order.id)}>
+                              <Copy className="h-4 w-4 mr-2" />
+                              {copiedOrderId === order.id ? "Copied!" : "Copy Order"}
+                            </DropdownMenuItem>
 
                             {order.status !== "CANCELLED" && order.status !== "RECEIVED" && (
                               <>
@@ -444,7 +617,7 @@ export default function PurchaseOrdersPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-between">
+          <div className="mt-6 flex items-center justify-between">
             <p className="text-sm text-gray-600">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} orders

@@ -1,25 +1,30 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/items - Get all items with optional search and pagination
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('masters_items', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1);
+    const limit = Math.min(1000, Math.max(1, parseInt(searchParams.get('limit') || '10') || 10));
     const brandId = searchParams.get('brandId') || '';
     const subBrandId = searchParams.get('subBrandId') || '';
-    const isActive = searchParams.get('isActive');
+    const isActiveParam = searchParams.get('isActive') ?? searchParams.get('activeOnly');
     const skip = (page - 1) * limit;
 
     // Build where clause for search and filters
-    const where: any = {};
+    const where: Record<string, unknown> = {};
 
     if (search) {
       where.OR = [
         { name: { contains: search } },
         { itemCode: { contains: search } },
+        { userCode: { contains: search } },
+        { barcode: { contains: search } },
         { description: { contains: search } },
         { hsnCode: { contains: search } },
       ];
@@ -33,11 +38,10 @@ export async function GET(request: Request) {
       where.subBrandId = subBrandId;
     }
 
-    if (isActive !== null && isActive !== undefined) {
-      where.isActive = isActive === 'true';
+    if (isActiveParam !== null && isActiveParam !== undefined) {
+      where.isActive = isActiveParam === 'true';
     }
 
-    // Get items with pagination and include related data
     const [items, total] = await Promise.all([
       db.item.findMany({
         where,
@@ -74,52 +78,85 @@ export async function GET(request: Request) {
 // POST /api/items - Create a new item
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('masters_items', 'edit');
+    if (error) return error;
     const body = await request.json();
 
     // Validate required fields
-    const requiredFields = ['name'];
+    const missing: string[] = [];
+    if (!body.name) missing.push('Item Name');
+    if (!body.brandId) missing.push('Brand');
 
-    for (const field of requiredFields) {
-      if (!body[field]) {
-        return NextResponse.json(
-          { error: `Missing required field: ${field}` },
-          { status: 400 }
-        );
-      }
+    if (missing.length > 0) {
+      return NextResponse.json(
+        { error: `Required fields missing: ${missing.join(', ')}` },
+        { status: 400 }
+      );
     }
 
-    // Generate unique item code
-    const itemCode = `item-${Date.now()}`;
+    // Generate sequential item code (item-1, item-2, ...)
+    const lastItem = await db.item.findFirst({
+      where: { itemCode: { startsWith: 'item-' } },
+      orderBy: { createdAt: 'desc' },
+      select: { itemCode: true },
+    });
+    const lastNum = lastItem ? parseInt(lastItem.itemCode.replace('item-', ''), 10) || 0 : 0;
+    const itemCode = `item-${lastNum + 1}`;
 
     // Create item with inventory record in transaction (without includes for speed)
-    const newItem = await db.$transaction(async (tx) => {
+    const newItem = await transaction(async (tx) => {
       // Create the item (without includes to keep transaction fast)
-      const item = await tx.item.create({
+      const item = await (tx.item.create as any)({
         data: {
           itemCode: itemCode,
+          userCode: body.userCode || null,
+          barcode: body.barcode || null,
           name: body.name,
           description: body.description || null,
-          brandId: body.brandId || null,
+          brandId: body.brandId,
           subBrandId: body.subBrandId || null,
           hsnCode: body.hsnCode || null,
           gstRate: body.gstRate || 0,
-          standardPrice: body.standardPrice || 0,
           purchasePrice: body.purchasePrice || 0,
+          mrp: body.mrp || 0,
+          sellingPrice: body.sellingPrice || body.mrp || 0,
+          margin: body.margin !== undefined && body.margin !== null ? body.margin : null,
+          marginType: body.marginType || "PERCENTAGE",
+          discountPercent: body.discountPercent || null,
           minStock: body.minStock || 0,
           unit: body.unit || 'PCS',
+          uomConversions: body.uomConversions || null,
+          imageUrl: body.imageUrl || null,
           isActive: body.isActive !== undefined ? body.isActive : true,
         },
       });
 
-      // Create inventory record
-      await tx.inventory.create({
+      const openingStock = parseFloat(body.openingStock) || 0;
+
+      // Create inventory record, seeded with opening stock if provided
+      const inventory = await tx.inventory.create({
         data: {
           itemId: item.id,
-          physicalStock: 0,
+          physicalStock: openingStock,
+          openingStock: openingStock,
           reservedQuantity: 0,
           minStockLevel: body.minStock || 0,
         },
       });
+
+      // Record opening stock as an ADJUSTMENT_IN movement for full ledger traceability
+      if (openingStock > 0) {
+        await (tx.stockMovement.create as any)({
+          data: {
+            inventoryId: inventory.id,
+            itemId: item.id,
+            quantity: openingStock,
+            type: 'ADJUSTMENT_IN',
+            referenceType: 'STOCK_JOURNAL',
+            notes: 'Opening Stock',
+          },
+        });
+      }
 
       return item;
     });
@@ -135,11 +172,11 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(item, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating item:', error);
 
     // Handle unique constraint violation
-    if (error.code === 'P2002') {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
       return NextResponse.json(
         { error: 'Item code already exists' },
         { status: 409 }

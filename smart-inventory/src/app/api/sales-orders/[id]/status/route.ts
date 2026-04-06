@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { isValidStatusTransition, SYSTEM_USER_ID } from '@/lib/order-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // PATCH /api/sales-orders/[id]/status - Change order status
 export async function PATCH(
@@ -8,6 +9,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_orders', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
@@ -67,7 +70,7 @@ export async function PATCH(
     }
 
     // Perform status-specific validations and side effects
-    const updatedOrder = await db.$transaction(async (tx) => {
+    const updatedOrder = await transaction(async (tx) => {
       // Handle REJECTED status - release reservations
       if (newStatus === 'REJECTED') {
         // Get all inventory records in one query

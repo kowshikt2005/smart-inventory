@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
+import type { RolePermissions, PermissionKey } from '@/types/permissions';
 
 /**
  * Hash a password using bcrypt
@@ -18,9 +19,13 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 
 /**
  * Generate the next employee number in sequence (EMP-0001, EMP-0002, etc.)
+ * Pass the Prisma transaction client so this runs on the same connection as
+ * the surrounding employee INSERT — the @unique constraint prevents duplicates.
  */
-export async function generateEmployeeNumber(): Promise<string> {
-  const lastEmployee = await db.employee.findFirst({
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export async function generateEmployeeNumber(client?: { employee: { findFirst: (...args: any[]) => Promise<any> } }): Promise<string> {
+  const c = client || db;
+  const lastEmployee = await c.employee.findFirst({
     orderBy: { employeeNumber: 'desc' },
     select: { employeeNumber: true },
   });
@@ -35,12 +40,51 @@ export async function generateEmployeeNumber(): Promise<string> {
 
   return `EMP-${String(nextNum).padStart(4, '0')}`;
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
- * Check if user has required role or higher
+ * Check if a role's permissions grant view access to a page
+ */
+export function hasViewPermission(permissions: RolePermissions | undefined, page: PermissionKey): boolean {
+  return permissions?.[page]?.view === true;
+}
+
+/**
+ * Check if a role's permissions grant edit access to a page
+ */
+export function hasEditPermission(permissions: RolePermissions | undefined, page: PermissionKey): boolean {
+  return permissions?.[page]?.edit === true;
+}
+
+/**
+ * Fetch a role with its permissions from the database
+ */
+export async function getRoleById(roleId: string) {
+  return db.role.findUnique({
+    where: { id: roleId },
+    select: { id: true, name: true, permissions: true, isSystem: true },
+  });
+}
+
+/**
+ * Check if a roleId belongs to the system ADMIN role
+ */
+export async function isSystemAdmin(roleId: string): Promise<boolean> {
+  const role = await db.role.findUnique({
+    where: { id: roleId },
+    select: { name: true, isSystem: true },
+  });
+  return role?.name === 'ADMIN' && role?.isSystem === true;
+}
+
+// ---- Backward compatibility (used during migration transition) ----
+
+/**
+ * @deprecated Use hasViewPermission / hasEditPermission instead.
+ * Kept temporarily for code that hasn't been migrated yet.
  */
 export function hasRole(userRole: string, requiredRole: string): boolean {
-  const roleHierarchy = {
+  const roleHierarchy: Record<string, number> = {
     'SALESMAN': 1,
     'BILLING_OPERATOR': 2,
     'ACCOUNTANT': 3,
@@ -48,14 +92,14 @@ export function hasRole(userRole: string, requiredRole: string): boolean {
     'ADMIN': 5,
   };
 
-  const userLevel = roleHierarchy[userRole as keyof typeof roleHierarchy] || 0;
-  const requiredLevel = roleHierarchy[requiredRole as keyof typeof roleHierarchy] || 0;
+  const userLevel = roleHierarchy[userRole] || 0;
+  const requiredLevel = roleHierarchy[requiredRole] || 0;
 
   return userLevel >= requiredLevel;
 }
 
 /**
- * Get permissions for a role
+ * @deprecated Use role.permissions from DB instead.
  */
 export function getRolePermissions(role: string) {
   const permissions = {

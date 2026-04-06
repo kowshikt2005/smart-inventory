@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/purchases/stats - Get purchase module statistics
 export async function GET() {
   try {
+    const { error } = await checkPermission('dashboard', 'view');
+    if (error) return error;
     // Get purchase order stats
     const [ordersTotal, ordersOpen, ordersPartial, ordersReceived] = await Promise.all([
       db.purchaseOrder.count(),

@@ -24,8 +24,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Plus, MoreHorizontal, Edit, Loader2, X } from "lucide-react";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { Plus, MoreHorizontal, Edit, Loader2, X, Camera, Upload, Power, PowerOff } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface Brand {
   id: string;
@@ -36,12 +37,19 @@ interface SubBrand {
   id: string;
   name: string;
   brandId: string;
+  discountPercent: number | null;
+  logoUrl: string | null;
+  isActive: boolean;
   brand?: { name: string };
   createdAt: string;
   updatedAt: string;
 }
 
-export default function SubBrandsPage() {
+function SubBrandsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo");
+
   const [subBrands, setSubBrands] = useState<SubBrand[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -49,49 +57,39 @@ export default function SubBrandsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newSubBrand, setNewSubBrand] = useState({ name: "", brandId: "" });
+  const [editingSubBrand, setEditingSubBrand] = useState<SubBrand | null>(null);
+  const [newSubBrand, setNewSubBrand] = useState({ name: "", brandId: "", discountPercent: "", logoUrl: "" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const itemsPerPage = 10;
-
-  const fetchBrands = useCallback(async () => {
-    const response = await fetch("/api/brands");
-    if (!response.ok) {
-      throw new Error("Failed to fetch brands");
-    }
-    const data = await response.json();
-    setBrands(data.brands || []);
-    return data.brands || [];
-  }, []);
-
-  const fetchSubBrands = useCallback(async (brandsData?: Brand[]) => {
-    // Get all brands first, then fetch sub-brands for each
-    const brandsToUse = brandsData || await fetchBrands();
-    const allSubBrands: SubBrand[] = [];
-
-    for (const brand of brandsToUse) {
-      try {
-        const response = await fetch(`/api/brands/${brand.id}/sub-brands`);
-        if (response.ok) {
-          const data = await response.json();
-          const subBrandsWithBrand = data.subBrands.map((sb: SubBrand) => ({
-            ...sb,
-            brand: { name: brand.name },
-          }));
-          allSubBrands.push(...subBrandsWithBrand);
-        }
-      } catch (error) {
-        console.error(`Error fetching sub-brands for brand ${brand.id}:`, error);
-      }
-    }
-
-    setSubBrands(allSubBrands);
-  }, [fetchBrands]);
 
   const fetchAllData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const brandsData = await fetchBrands();
-      await fetchSubBrands(brandsData);
+      // Fetch brands and all sub-brands in parallel — single request each
+      const [brandsRes, subBrandsRes] = await Promise.all([
+        fetch("/api/brands"),
+        fetch("/api/sub-brands"),
+      ]);
+      if (!brandsRes.ok) throw new Error("Failed to fetch brands");
+      if (!subBrandsRes.ok) throw new Error("Failed to fetch sub-brands");
+
+      const brandsData = await brandsRes.json();
+      const subBrandsData = await subBrandsRes.json();
+
+      const brandsArr: Brand[] = brandsData.brands || [];
+      const brandMap = new Map(brandsArr.map((b: Brand) => [b.id, b.name]));
+
+      const subBrandsWithBrand = (subBrandsData.subBrands || []).map((sb: SubBrand) => ({
+        ...sb,
+        brand: { name: brandMap.get(sb.brandId) || "" },
+      }));
+
+      setBrands(brandsArr);
+      setSubBrands(subBrandsWithBrand);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       setError(errorMessage);
@@ -99,32 +97,125 @@ export default function SubBrandsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [fetchBrands, fetchSubBrands]);
+  }, []);
 
   // Fetch data from API
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
 
-  const handleAddSubBrand = async () => {
+  // Auto-open add modal when redirected from item creation with ?create=1
+  // Pre-select the brand if ?brandId= is provided
+  useEffect(() => {
+    if (searchParams.get("create") === "1") {
+      const brandId = searchParams.get("brandId") || "";
+      setNewSubBrand((prev) => ({ ...prev, brandId }));
+      setShowAddModal(true);
+    }
+  }, [searchParams]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
     try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", "brands");
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setNewSubBrand((prev) => ({ ...prev, logoUrl: data.url }));
+      } else {
+        const data = await response.json();
+        setModalError(data.error || "Failed to upload logo");
+      }
+    } catch (err) {
+      console.error("Error uploading logo:", err);
+      setModalError("Failed to upload logo");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleAddSubBrand = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setModalError(null);
+    try {
+      const payload = {
+        name: newSubBrand.name,
+        discountPercent: newSubBrand.discountPercent ? parseFloat(newSubBrand.discountPercent) : null,
+        logoUrl: newSubBrand.logoUrl || null,
+      };
+
       const response = await fetch(`/api/brands/${newSubBrand.brandId}/sub-brands`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newSubBrand.name }),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
         setShowAddModal(false);
-        setNewSubBrand({ name: "", brandId: "" });
-        fetchSubBrands();
+        setNewSubBrand({ name: "", brandId: "", discountPercent: "", logoUrl: "" });
+        setModalError(null);
+        if (returnTo) {
+          router.push(returnTo);
+        } else {
+          fetchAllData();
+        }
       } else {
         const data = await response.json();
-        alert(data.error || "Failed to create sub-brand");
+        setModalError(data.error || "Failed to create sub-brand");
       }
     } catch (error) {
       console.error("Error creating sub-brand:", error);
-      alert("Failed to create sub-brand");
+      setModalError("Failed to create sub-brand");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateSubBrand = async () => {
+    if (!editingSubBrand || isSubmitting) return;
+    setIsSubmitting(true);
+    setModalError(null);
+
+    try {
+      const payload = {
+        name: newSubBrand.name,
+        discountPercent: newSubBrand.discountPercent ? parseFloat(newSubBrand.discountPercent) : null,
+        logoUrl: newSubBrand.logoUrl || null,
+      };
+
+      const response = await fetch(`/api/sub-brands/${editingSubBrand.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        setShowAddModal(false);
+        setEditingSubBrand(null);
+        setNewSubBrand({ name: "", brandId: "", discountPercent: "", logoUrl: "" });
+        setModalError(null);
+        fetchAllData();
+      } else {
+        const data = await response.json();
+        setModalError(data.error || "Failed to update sub-brand");
+      }
+    } catch (error) {
+      console.error("Error updating sub-brand:", error);
+      setModalError("Failed to update sub-brand");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -155,9 +246,35 @@ export default function SubBrandsPage() {
     setCurrentPage(1);
   };
 
-  const handleEditSubBrand = (subBrandId: string) => {
-    console.log("Edit sub-brand:", subBrandId);
-    // TODO: Open edit modal
+  const handleEditSubBrand = (subBrand: SubBrand) => {
+    setEditingSubBrand(subBrand);
+    setNewSubBrand({
+      name: subBrand.name,
+      brandId: subBrand.brandId,
+      discountPercent: subBrand.discountPercent ? String(subBrand.discountPercent) : "",
+      logoUrl: subBrand.logoUrl || "",
+    });
+    setShowAddModal(true);
+  };
+
+  const closeModal = () => {
+    setShowAddModal(false);
+    setEditingSubBrand(null);
+    setNewSubBrand({ name: "", brandId: "", discountPercent: "", logoUrl: "" });
+    setModalError(null);
+  };
+
+  const handleToggleActive = async (subBrand: SubBrand) => {
+    try {
+      const response = await fetch(`/api/sub-brands/${subBrand.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !subBrand.isActive }),
+      });
+      if (response.ok) fetchAllData();
+    } catch {
+      // non-critical
+    }
   };
 
   return (
@@ -196,7 +313,7 @@ export default function SubBrandsPage() {
               )}
             </div>
             <Button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => { setShowAddModal(true); setModalError(null); }}
               className="bg-teal-500 hover:bg-teal-600 text-white"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -210,11 +327,20 @@ export default function SubBrandsPage() {
           <Table aria-label="Sub-brands list">
             <TableHeader>
               <TableRow className="bg-gray-50">
+                <TableHead scope="col" className="font-semibold w-16">
+                  Logo
+                </TableHead>
                 <TableHead scope="col" className="font-semibold">
                   Name
                 </TableHead>
                 <TableHead scope="col" className="font-semibold">
                   Parent Brand
+                </TableHead>
+                <TableHead scope="col" className="font-semibold text-center">
+                  Status
+                </TableHead>
+                <TableHead scope="col" className="font-semibold text-center">
+                  Discount %
                 </TableHead>
                 <TableHead scope="col" className="font-semibold">
                   Created Date
@@ -227,10 +353,7 @@ export default function SubBrandsPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="text-center text-gray-500 py-12"
-                  >
+                  <TableCell colSpan={7} className="text-center text-gray-500 py-12">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Loading sub-brands...</span>
@@ -239,10 +362,7 @@ export default function SubBrandsPage() {
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="text-center text-red-600 py-8"
-                  >
+                  <TableCell colSpan={7} className="text-center text-red-600 py-8">
                     <div className="space-y-2">
                       <p>Error: {error}</p>
                       <Button onClick={fetchAllData} variant="outline" size="sm">
@@ -253,10 +373,7 @@ export default function SubBrandsPage() {
                 </TableRow>
               ) : paginatedSubBrands.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="text-center text-gray-500 py-8"
-                  >
+                  <TableCell colSpan={7} className="text-center text-gray-500 py-8">
                     {searchQuery
                       ? "No sub-brands found matching your search"
                       : "No sub-brands yet. Click 'Add Sub-brand' to get started."}
@@ -264,9 +381,37 @@ export default function SubBrandsPage() {
                 </TableRow>
               ) : (
                 paginatedSubBrands.map((subBrand) => (
-                  <TableRow key={subBrand.id}>
+                  <TableRow key={subBrand.id} className={!subBrand.isActive ? "opacity-60" : ""}>
+                    <TableCell>
+                      {subBrand.logoUrl ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={subBrand.logoUrl}
+                          alt={`${subBrand.name} logo`}
+                          className="w-8 h-8 rounded object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
+                          <Camera className="h-4 w-4 text-gray-400" />
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="font-medium">{subBrand.name}</TableCell>
                     <TableCell>{subBrand.brand?.name}</TableCell>
+                    <TableCell className="text-center">
+                      {subBrand.isActive ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Active</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">Inactive</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {subBrand.discountPercent !== null ? (
+                        <span className="text-green-600 font-medium">{Number(subBrand.discountPercent)}%</span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {new Date(subBrand.createdAt).toLocaleDateString()}
                     </TableCell>
@@ -283,11 +428,16 @@ export default function SubBrandsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => handleEditSubBrand(subBrand.id)}
-                          >
+                          <DropdownMenuItem onClick={() => handleEditSubBrand(subBrand)}>
                             <Edit className="h-4 w-4 mr-2" />
                             Edit Sub-brand
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleToggleActive(subBrand)}>
+                            {subBrand.isActive ? (
+                              <><PowerOff className="h-4 w-4 mr-2 text-red-500" />Deactivate</>
+                            ) : (
+                              <><Power className="h-4 w-4 mr-2 text-green-600" />Activate</>
+                            )}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -333,27 +483,87 @@ export default function SubBrandsPage() {
           </div>
         )}
 
-        {/* Add Sub-brand Modal */}
+        {/* Add/Edit Sub-brand Modal */}
         {showAddModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">Add New Sub-brand</h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowAddModal(false)}
-                >
+                <h2 className="text-xl font-bold">{editingSubBrand ? "Edit Sub-brand" : "Add New Sub-brand"}</h2>
+                <Button variant="ghost" size="sm" onClick={closeModal}>
                   <X className="h-4 w-4" />
                 </Button>
               </div>
               <p className="text-gray-600 mb-4">
-                Enter the details of the new sub-brand below.
+                {editingSubBrand ? "Update the sub-brand details below." : "Enter the details of the new sub-brand below."}
               </p>
 
+              {modalError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm mb-4">
+                  {modalError}
+                </div>
+              )}
+
               <div className="space-y-4">
+                {/* Logo Upload */}
                 <div>
-                  <label className="block text-sm font-medium mb-1">Name</label>
+                  <label className="block text-sm font-medium mb-1">Logo</label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                  />
+                  {newSubBrand.logoUrl ? (
+                    <div className="flex items-center gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={newSubBrand.logoUrl}
+                        alt="Sub-brand logo preview"
+                        className="w-16 h-16 rounded object-cover border"
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isUploading}
+                        >
+                          Change
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setNewSubBrand((prev) => ({ ...prev, logoUrl: "" }))}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center gap-2 hover:border-teal-400 hover:bg-teal-50/50 transition-colors cursor-pointer"
+                    >
+                      {isUploading ? (
+                        <Loader2 className="h-6 w-6 text-gray-400 animate-spin" />
+                      ) : (
+                        <Upload className="h-6 w-6 text-gray-400" />
+                      )}
+                      <span className="text-sm text-gray-500">
+                        {isUploading ? "Uploading..." : "Click to upload logo"}
+                      </span>
+                    </button>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Name <span className="text-red-500">*</span></label>
                   <Input
                     value={newSubBrand.name}
                     onChange={(e) =>
@@ -365,35 +575,64 @@ export default function SubBrandsPage() {
 
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    Parent Brand
+                    Parent Brand <span className="text-red-500">*</span>
                   </label>
-                  <Select
-                    value={newSubBrand.brandId || undefined}
-                    onValueChange={(value) =>
-                      setNewSubBrand({ ...newSubBrand, brandId: value || "" })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a parent brand" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {brands.map((brand) => (
-                        <SelectItem key={brand.id} value={brand.id}>
-                          {brand.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {editingSubBrand ? (
+                    <div className="p-2 bg-gray-100 rounded border text-gray-700">
+                      {editingSubBrand.brand?.name || "Unknown Brand"}
+                    </div>
+                  ) : (
+                    <Select
+                      value={newSubBrand.brandId || ""}
+                      onValueChange={(value) =>
+                        setNewSubBrand({ ...newSubBrand, brandId: value || "" })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a parent brand" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {brands.map((brand) => (
+                          <SelectItem key={brand.id} value={brand.id}>
+                            {brand.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
+
+                {editingSubBrand && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Discount Percentage (%)</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={newSubBrand.discountPercent}
+                      onChange={(e) => setNewSubBrand({ ...newSubBrand, discountPercent: e.target.value })}
+                      placeholder="e.g., 10"
+                      disabled
+                      className="bg-gray-50"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Current discount (read-only for reference)
+                    </p>
+                  </div>
+                )}
               </div>
 
-              <div className="flex justify-end mt-6">
+              <div className="flex justify-end gap-2 mt-6">
+                <Button variant="outline" onClick={closeModal}>
+                  Cancel
+                </Button>
                 <Button
-                  onClick={handleAddSubBrand}
+                  onClick={editingSubBrand ? handleUpdateSubBrand : handleAddSubBrand}
                   className="bg-teal-500 hover:bg-teal-600"
-                  disabled={!newSubBrand.name.trim() || !newSubBrand.brandId}
+                  disabled={!newSubBrand.name.trim() || (!editingSubBrand && !newSubBrand.brandId) || isSubmitting || isUploading}
                 >
-                  Save Sub-brand
+                  {isSubmitting ? (editingSubBrand ? "Updating..." : "Saving...") : (editingSubBrand ? "Update Sub-brand" : "Save Sub-brand")}
                 </Button>
               </div>
             </div>
@@ -401,5 +640,13 @@ export default function SubBrandsPage() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function SubBrandsPage() {
+  return (
+    <Suspense>
+      <SubBrandsContent />
+    </Suspense>
   );
 }

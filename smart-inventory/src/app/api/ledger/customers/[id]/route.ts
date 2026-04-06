@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/ledger/customers/[id] - Get customer ledger entries
 export async function GET(
@@ -7,6 +8,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('ledger_customers', 'view');
+    if (error) return error;
+
     const { id } = await params;
     const { searchParams } = new URL(request.url);
 
@@ -49,16 +53,65 @@ export async function GET(
       }
     }
 
-    // Get ledger entries
+    // Get ledger entries - sort by createdAt for pure chronological order (date + time)
     const [entries, total] = await Promise.all([
       db.customerLedger.findMany({
         where,
-        orderBy: { date: 'asc' },
+        orderBy: { createdAt: 'asc' },
         skip,
         take: limit,
       }),
       db.customerLedger.count({ where }),
     ]);
+
+    // Enrich entries with reference details
+    const invoiceIds: string[] = [];
+    const paymentIds: string[] = [];
+    const returnIds: string[] = [];
+
+    for (const entry of entries) {
+      if (entry.referenceType === 'SALES_INVOICE' && entry.referenceId) {
+        invoiceIds.push(entry.referenceId);
+      } else if (entry.referenceType === 'SALES_RECEIPT' && entry.referenceId) {
+        paymentIds.push(entry.referenceId);
+      } else if (entry.referenceType === 'SALES_RETURN' && entry.referenceId) {
+        returnIds.push(entry.referenceId);
+      }
+    }
+
+    // Batch fetch referenced documents
+    const [invoices, payments, returns] = await Promise.all([
+      invoiceIds.length > 0
+        ? db.invoice.findMany({
+            where: { id: { in: invoiceIds } },
+            select: { id: true, invoiceNumber: true },
+          })
+        : [],
+      paymentIds.length > 0
+        ? db.payment.findMany({
+            where: { id: { in: paymentIds } },
+            select: {
+              id: true,
+              paymentNumber: true,
+              mode: true,
+              bankAccount: {
+                select: { id: true, accountName: true },
+              },
+            },
+          })
+        : [],
+      returnIds.length > 0
+        ? db.salesReturn.findMany({
+            where: { id: { in: returnIds } },
+            select: { id: true, returnNumber: true },
+          })
+        : [],
+    ]);
+
+    // Build lookup maps
+    const invoiceMap = new Map(invoices.map((inv) => [inv.id, inv]));
+    const paymentMap = new Map(payments.map((p) => [p.id, p]));
+    const returnMap = new Map(returns.map((r) => [r.id, r]));
 
     // Calculate opening balance for date range
     let openingBalance = Number(customer.openingBalance);
@@ -81,13 +134,42 @@ export async function GET(
       openingBalance += priorDebit - priorCredit;
     }
 
-    // Calculate running balances
+    // Calculate running balances and enrich with reference details
     let runningBalance = openingBalance;
     const entriesWithBalance = entries.map((entry) => {
       runningBalance += Number(entry.debit) - Number(entry.credit);
+
+      let referenceNumber: string | null = null;
+      let referenceLink: string | null = null;
+      let bankDetails: string | null = null;
+
+      if (entry.referenceType === 'SALES_INVOICE' && entry.referenceId) {
+        const inv = invoiceMap.get(entry.referenceId);
+        if (inv) {
+          referenceNumber = inv.invoiceNumber;
+          referenceLink = `/sales/invoices/${entry.referenceId}`;
+        }
+      } else if (entry.referenceType === 'SALES_RECEIPT' && entry.referenceId) {
+        const pmt = paymentMap.get(entry.referenceId);
+        if (pmt) {
+          referenceNumber = pmt.paymentNumber;
+          referenceLink = `/sales/payments`;
+          bankDetails = pmt.mode + (pmt.bankAccount ? ` - ${pmt.bankAccount.accountName}` : '');
+        }
+      } else if (entry.referenceType === 'SALES_RETURN' && entry.referenceId) {
+        const ret = returnMap.get(entry.referenceId);
+        if (ret) {
+          referenceNumber = ret.returnNumber;
+          referenceLink = `/sales/returns`;
+        }
+      }
+
       return {
         ...entry,
         runningBalance,
+        referenceNumber,
+        referenceLink,
+        bankDetails,
       };
     });
 

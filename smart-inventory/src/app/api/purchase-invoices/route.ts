@@ -1,15 +1,23 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generatePurchaseInvoiceNumber, calculatePurchaseLineItem, calculatePurchaseTotals } from '@/lib/purchase-utils';
+import { normalizeRoundOffMode, resolveRoundOff } from '@/lib/rounding-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/purchase-invoices - Get all purchase invoices with filtering
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('purchases_invoices', 'view');
+    if (error) return error;
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const vendorId = searchParams.get('vendorId') || '';
     const purchaseOrderId = searchParams.get('purchaseOrderId') || '';
+    const brandId = searchParams.get('brandId') || '';
+    const dateFrom = searchParams.get('dateFrom') || '';
+    const dateTo = searchParams.get('dateTo') || '';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
@@ -27,6 +35,20 @@ export async function GET(request: Request) {
 
     if (purchaseOrderId) {
       where.purchaseOrderId = purchaseOrderId;
+    }
+
+    if (brandId) {
+      where.items = { some: { item: { brandId } } };
+    }
+
+    if (dateFrom || dateTo) {
+      where.date = {};
+      if (dateFrom) where.date.gte = new Date(dateFrom);
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23, 59, 59, 999);
+        where.date.lte = to;
+      }
     }
 
     if (search) {
@@ -90,13 +112,71 @@ export async function GET(request: Request) {
       db.purchaseInvoice.count({ where }),
     ]);
 
+    // Check for overdue invoices and compute effectiveStatus
+    const now = new Date();
+    const invoicesWithStatus = purchaseInvoices.map((invoice) => {
+      let effectiveStatus = invoice.status;
+
+      // If pending and past due date with outstanding balance, mark as overdue
+      if (
+        invoice.status === 'PENDING' &&
+        invoice.dueDate &&
+        new Date(invoice.dueDate) < now &&
+        Number(invoice.balanceAmount) > 0
+      ) {
+        effectiveStatus = 'OVERDUE';
+      }
+
+      return {
+        ...invoice,
+        effectiveStatus,
+      };
+    });
+
+    // Calculate server-side stats using database aggregation
+    const [paidCount, overdueStats, pendingStats, totalInvoiceCount] = await Promise.all([
+      db.purchaseInvoice.count({ where: { status: 'PAID' } }),
+      db.purchaseInvoice.aggregate({
+        where: {
+          status: 'PENDING',
+          dueDate: { lt: now },
+          balanceAmount: { gt: 0 },
+        },
+        _count: true,
+        _sum: { balanceAmount: true },
+      }),
+      db.purchaseInvoice.aggregate({
+        where: {
+          status: 'PENDING',
+          OR: [
+            { dueDate: { gte: now } },
+            { balanceAmount: 0 },
+          ],
+        },
+        _count: true,
+        _sum: { balanceAmount: true },
+      }),
+      db.purchaseInvoice.count(),
+    ]);
+
+    const totalPayable =
+      Number(overdueStats._sum.balanceAmount || 0) +
+      Number(pendingStats._sum.balanceAmount || 0);
+
     return NextResponse.json({
-      purchaseInvoices,
+      purchaseInvoices: invoicesWithStatus,
       pagination: {
         page,
         limit,
         total,
         totalPages: Math.ceil(total / limit),
+      },
+      stats: {
+        total: totalInvoiceCount,
+        pending: pendingStats._count,
+        overdue: overdueStats._count,
+        paid: paidCount,
+        totalPayable,
       },
     });
   } catch (error) {
@@ -111,6 +191,9 @@ export async function GET(request: Request) {
 // POST /api/purchase-invoices - Create a new purchase invoice
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('purchases_invoices', 'edit');
+    if (error) return error;
+
     const body = await request.json();
 
     // Validate required fields
@@ -210,8 +293,23 @@ export async function POST(request: Request) {
       }
     }
 
-    // Validate all items exist
+    const roundOffSetting = await db.appSetting.findUnique({
+      where: { key: 'invoice_roundoff_mode' },
+      select: { value: true },
+    });
+    const effectiveRoundOffMode = normalizeRoundOffMode(body.roundOffMode || roundOffSetting?.value);
+
+    // Reject duplicate itemIds — same item must not appear in multiple rows
     const itemIds = body.items.map((item: any) => item.itemId);
+    const uniqueItemIds = new Set(itemIds);
+    if (uniqueItemIds.size !== itemIds.length) {
+      return NextResponse.json(
+        { error: 'Duplicate items found. Each item must appear only once per invoice.' },
+        { status: 400 }
+      );
+    }
+
+    // Validate all items exist
     const items = await db.item.findMany({
       where: { id: { in: itemIds } },
       include: { inventory: true },
@@ -238,27 +336,38 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+      if (invoiceItem.uomFactor !== undefined && Number(invoiceItem.uomFactor) <= 0) {
+        return NextResponse.json(
+          { error: 'UOM factor must be greater than 0' },
+          { status: 400 }
+        );
+      }
     }
 
     // Create invoice in a transaction
-    const purchaseInvoice = await db.$transaction(async (tx) => {
+    const purchaseInvoice = await transaction(async (tx) => {
       // Generate invoice number
       const invoiceNumber = await generatePurchaseInvoiceNumber(tx as any);
 
       // Calculate item totals
       const invoiceItems = body.items.map((invoiceItem: any) => {
         const item = items.find((i) => i.id === invoiceItem.itemId)!;
+        const factor = Number(invoiceItem.uomFactor || 1);
+        const baseQuantity = Number(invoiceItem.quantity) * factor;
+        const baseRate = Number(invoiceItem.rate) / factor;
         const taxRate = invoiceItem.taxRate ?? Number(item.gstRate);
         const { amount, taxAmount } = calculatePurchaseLineItem(
-          invoiceItem.quantity,
-          invoiceItem.rate,
+          baseQuantity,
+          baseRate,
           taxRate
         );
 
         return {
           itemId: invoiceItem.itemId,
-          quantity: invoiceItem.quantity,
-          rate: invoiceItem.rate,
+          hsnCode: invoiceItem.hsnCode || null,
+          quantity: Math.round(baseQuantity * 1000) / 1000,
+          rate: Math.round(baseRate * 1000) / 1000,
+          discountPercent: Number(invoiceItem.discountPercent || 0),
           taxRate,
           taxAmount,
           amount,
@@ -266,7 +375,16 @@ export async function POST(request: Request) {
       });
 
       // Calculate invoice totals
-      const { subtotal, totalTax, totalAmount } = calculatePurchaseTotals(invoiceItems);
+      const baseTotals = calculatePurchaseTotals(invoiceItems, 0);
+      const roundOffDecision = resolveRoundOff(
+        baseTotals.subtotal + baseTotals.totalTax,
+        effectiveRoundOffMode,
+        Number(body.roundOff || 0)
+      );
+      const { subtotal, totalTax, totalAmount } = calculatePurchaseTotals(
+        invoiceItems,
+        roundOffDecision.roundOff
+      );
 
       // Create the purchase invoice
       const invoice = await tx.purchaseInvoice.create({
@@ -279,6 +397,7 @@ export async function POST(request: Request) {
           dueDate: new Date(body.dueDate),
           amount: subtotal,
           taxAmount: totalTax,
+          roundOff: roundOffDecision.roundOff,
           totalAmount,
           paidAmount: 0,
           balanceAmount: totalAmount,
@@ -313,48 +432,32 @@ export async function POST(request: Request) {
 
       // Update inventory - increase physical stock for each item
       for (const invoiceItem of invoiceItems) {
-        const item = items.find((i) => i.id === invoiceItem.itemId)!;
-
-        if (item.inventory) {
-          // Update existing inventory
-          await tx.inventory.update({
-            where: { itemId: invoiceItem.itemId },
-            data: {
-              physicalStock: {
-                increment: invoiceItem.quantity,
-              },
-            },
-          });
-        } else {
-          // Create inventory record if it doesn't exist
-          await tx.inventory.create({
-            data: {
-              itemId: invoiceItem.itemId,
-              physicalStock: invoiceItem.quantity,
-              reservedQuantity: 0,
-              minStockLevel: 0,
-            },
-          });
-        }
-
-        // Create stock movement record
-        const inventory = await tx.inventory.findUnique({
+        // Use upsert to safely increment stock regardless of pre-fetch state
+        const inventory = await tx.inventory.upsert({
           where: { itemId: invoiceItem.itemId },
+          create: {
+            itemId: invoiceItem.itemId,
+            physicalStock: invoiceItem.quantity,
+            reservedQuantity: 0,
+            minStockLevel: 0,
+          },
+          update: {
+            physicalStock: { increment: invoiceItem.quantity },
+          },
         });
 
-        if (inventory) {
-          await tx.stockMovement.create({
-            data: {
-              inventoryId: inventory.id,
-              itemId: invoiceItem.itemId,
-              quantity: invoiceItem.quantity,
-              type: 'PURCHASE',
-              referenceType: 'PURCHASE_INVOICE',
-              referenceId: invoice.id,
-              notes: `Purchase invoice ${invoiceNumber}`,
-            },
-          });
-        }
+        // Create stock movement record
+        await tx.stockMovement.create({
+          data: {
+            inventoryId: inventory.id,
+            itemId: invoiceItem.itemId,
+            quantity: invoiceItem.quantity,
+            type: 'PURCHASE',
+            referenceType: 'PURCHASE_INVOICE',
+            referenceId: invoice.id,
+            notes: `Purchase invoice ${invoiceNumber}`,
+          },
+        });
       }
 
       // Get the last ledger entry for this vendor to calculate running balance

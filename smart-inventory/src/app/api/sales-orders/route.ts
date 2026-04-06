@@ -1,15 +1,22 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { generateOrderNumber, calculateLineItem, calculateOrderTotals, SYSTEM_USER_ID } from '@/lib/order-utils';
+import { db, transaction } from '@/lib/db';
+import { generateOrderNumber, calculateLineItemV2, calculateOrderTotals, SYSTEM_USER_ID } from '@/lib/order-utils';
 import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/sales-orders - Get all sales orders with filtering
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('sales_orders', 'view');
+    if (error) return error;
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const customerId = searchParams.get('customerId') || '';
+    const brandId = searchParams.get('brandId') || '';
+    const dateFrom = searchParams.get('dateFrom') || '';
+    const dateTo = searchParams.get('dateTo') || '';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
@@ -23,6 +30,20 @@ export async function GET(request: Request) {
 
     if (customerId) {
       where.customerId = customerId;
+    }
+
+    if (brandId) {
+      where.items = { some: { item: { brandId } } };
+    }
+
+    if (dateFrom || dateTo) {
+      where.orderDate = {};
+      if (dateFrom) where.orderDate.gte = new Date(dateFrom);
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23, 59, 59, 999);
+        where.orderDate.lte = to;
+      }
     }
 
     if (search) {
@@ -59,7 +80,9 @@ export async function GET(request: Request) {
                   unit: true,
                   hsnCode: true,
                   gstRate: true,
-                  standardPrice: true,
+                  sellingPrice: true,
+                  mrp: true,
+                  discountPercent: true,
                   inventory: {
                     select: {
                       physicalStock: true,
@@ -171,6 +194,9 @@ export async function GET(request: Request) {
 // POST /api/sales-orders - Create a new sales order
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('sales_orders', 'edit');
+    if (error) return error;
+
     const body = await request.json();
 
     // Validate required fields
@@ -209,9 +235,6 @@ export async function POST(request: Request) {
     // Validate customer exists and is active
     const customer = await db.customer.findUnique({
       where: { id: body.customerId },
-      include: {
-        rateSheet: true,
-      },
     });
 
     if (!customer) {
@@ -324,16 +347,16 @@ export async function POST(request: Request) {
     }
 
     // Create order in a transaction with extended timeout
-    const salesOrder = await db.$transaction(async (tx) => {
+    const salesOrder = await transaction(async (tx) => {
       // Generate order number
       const orderNumber = await generateOrderNumber(tx as any);
 
-      // Calculate item totals
+      // Calculate item totals using V2 which handles both inclusive and exclusive GST
       const orderItems = body.items.map((orderItem: any) => {
         const item = items.find((i) => i.id === orderItem.itemId)!;
         const taxRate = Number(item.gstRate);
         const discountPercent = orderItem.discountPercent || 0;
-        const { amount, taxAmount } = calculateLineItem(
+        const { amount, taxAmount } = calculateLineItemV2(
           orderItem.quantity,
           orderItem.rate,
           taxRate,
@@ -395,6 +418,8 @@ export async function POST(request: Request) {
                   itemCode: true,
                   name: true,
                   unit: true,
+                  mrp: true,
+                  discountPercent: true,
                 },
               },
             },

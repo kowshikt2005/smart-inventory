@@ -1,27 +1,31 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/vendors - Get all vendors with optional search and pagination
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('masters_vendors', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1);
+    const limit = Math.min(1000, Math.max(1, parseInt(searchParams.get('limit') || '10') || 10));
+    const activeOnly = searchParams.get('activeOnly') === 'true';
     const skip = (page - 1) * limit;
 
-    // Build where clause for search
-    const where = search
-      ? {
-          OR: [
-            { name: { contains: search } },
-            { gstin: { contains: search } },
-            { city: { contains: search } },
-            { state: { contains: search } },
-            { email: { contains: search } },
-          ],
-        }
-      : {};
+    // Build where clause for search and active filter
+    const where: Record<string, unknown> = {};
+    if (activeOnly) where.isActive = true;
+    if (search) {
+      where.OR = [
+        { name: { contains: search } },
+        { gstin: { contains: search } },
+        { city: { contains: search } },
+        { state: { contains: search } },
+        { email: { contains: search } },
+      ];
+    }
 
     // Get vendors with pagination
     const [vendors, total] = await Promise.all([
@@ -55,6 +59,8 @@ export async function GET(request: Request) {
 // POST /api/vendors - Create a new vendor
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('masters_vendors', 'edit');
+    if (error) return error;
     const body = await request.json();
 
     // Validate required fields
@@ -113,11 +119,11 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(vendor, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating vendor:', error);
 
     // Handle unique constraint violation
-    if (error.code === 'P2002') {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
       return NextResponse.json(
         { error: 'A vendor with this information already exists' },
         { status: 409 }

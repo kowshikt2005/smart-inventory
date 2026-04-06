@@ -260,8 +260,8 @@ export function AddStockJournalModal({
               name="quantity"
               value={formData.quantity}
               onChange={handleChange}
-              step="0.001"
-              min="0.001"
+              step="1"
+              min="1"
               required
               placeholder="Enter quantity"
             />

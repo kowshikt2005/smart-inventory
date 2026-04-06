@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { calculatePurchaseLineItem, calculatePurchaseTotals } from '@/lib/purchase-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/purchase-returns/[id] - Get a single purchase return
 export async function GET(
@@ -8,6 +9,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('purchases_returns', 'view');
+    if (error) return error;
     const { id } = await params;
 
     const purchaseReturn = await db.purchaseReturn.findUnique({
@@ -77,6 +80,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error: putError } = await checkPermission('purchases_returns', 'edit');
+    if (putError) return putError;
+
     const { id } = await params;
     const body = await request.json();
 
@@ -160,7 +166,7 @@ export async function PUT(
     }
 
     // Update return in a transaction
-    const purchaseReturn = await db.$transaction(async (tx) => {
+    const purchaseReturn = await transaction(async (tx) => {
       // Delete existing items if new items provided
       if (returnItems.length > 0) {
         await tx.purchaseReturnItem.deleteMany({
@@ -249,6 +255,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error: delError } = await checkPermission('purchases_returns', 'edit');
+    if (delError) return delError;
+
     const { id } = await params;
 
     // Find existing return

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { calculatePurchaseLineItem, calculatePurchaseTotals } from '@/lib/purchase-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/purchase-orders/[id] - Get a single purchase order
 export async function GET(
@@ -8,6 +9,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('purchases_orders', 'view');
+    if (error) return error;
     const { id } = await params;
 
     const purchaseOrder = await db.purchaseOrder.findUnique({
@@ -78,6 +81,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('purchases_orders', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
@@ -202,7 +207,7 @@ export async function PUT(
     }
 
     // Update order in a transaction
-    const purchaseOrder = await db.$transaction(async (tx) => {
+    const purchaseOrder = await transaction(async (tx) => {
       // Delete existing items if new items provided
       if (orderItems.length > 0) {
         await tx.purchaseOrderItem.deleteMany({
@@ -293,6 +298,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('purchases_orders', 'edit');
+    if (error) return error;
     const { id } = await params;
 
     // Find existing order

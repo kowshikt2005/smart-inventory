@@ -4,10 +4,32 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Loader2, Plus, Save, Search, X, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { PurchaseOrderItemRow } from "@/components/purchase-orders/PurchaseOrderItemRow";
+import { VendorSelectionModal } from "@/components/purchase-orders/VendorSelectionModal";
+import {
+  ArrowLeft,
+  Loader2,
+  Plus,
+  Save,
+  Search,
+  X,
+  Calculator,
+  Copy,
+  Lock,
+} from "lucide-react";
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { mutate } from "swr";
+import { resolveRoundOff } from "@/lib/rounding-utils";
 
 interface Vendor {
   id: string;
@@ -15,6 +37,10 @@ interface Vendor {
   name: string;
   gstin: string | null;
   creditDays: number;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
 }
 
 interface Item {
@@ -25,47 +51,84 @@ interface Item {
   hsnCode: string | null;
   gstRate: number;
   purchasePrice: number;
+  brandId?: string | null;
+  subBrandId?: string | null;
+  brand?: { id: string; name: string } | null;
+  subBrand?: { id: string; name: string } | null;
+  uomConversions?: Array<{ name: string; factor: number }> | null;
 }
 
 interface InvoiceItemData {
   id: string;
   itemId: string;
+  itemName?: string | null;
+  hsnCode?: string | null;
+  discountPercent?: number;
   quantity: number;
+  unit?: string;
+  uomFactor?: number;
   rate: number;
   taxRate: number;
   taxAmount: number;
   amount: number;
 }
 
-const generateId = () => `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+type RoundOffMode = "NONE" | "NEAREST" | "UP" | "DOWN" | "MANUAL";
+
+const generateId = () =>
+  `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 function NewPurchaseInvoicePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const purchaseOrderId = searchParams.get("purchaseOrderId");
+  const editId = searchParams.get("edit");
+  const copyId = searchParams.get("copy");
 
-  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
+  // Form state
+  const [invoiceDate, setInvoiceDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [terms, setTerms] = useState("");
+  const [roundOff, setRoundOff] = useState(0);
+  const [roundOffMode, setRoundOffMode] = useState<RoundOffMode>("MANUAL");
 
+  // Vendor state
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [vendorSearch, setVendorSearch] = useState("");
+  const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
   const [isLoadingVendors, setIsLoadingVendors] = useState(false);
 
+  // Items state
   const [items, setItems] = useState<Item[]>([]);
+  // Extra items loaded from an existing invoice (may be inactive, not returned by activeOnly fetch)
+  const [invoiceLoadedItems, setInvoiceLoadedItems] = useState<Item[]>([]);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItemData[]>([
-    { id: generateId(), itemId: "", quantity: 1, rate: 0, taxRate: 0, taxAmount: 0, amount: 0 },
+    {
+      id: generateId(),
+      itemId: "",
+      quantity: 1,
+      rate: 0,
+      taxRate: 0,
+      taxAmount: 0,
+      amount: 0,
+    },
   ]);
-  const [_isLoadingItems, setIsLoadingItems] = useState(false);
+  const [isLoadingItems, setIsLoadingItems] = useState(true);
 
+  // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [invoiceNumber, setInvoiceNumber] = useState("Loading...");
+  const [isEditBlocked, setIsEditBlocked] = useState(false);
 
   const fetchVendors = useCallback(async () => {
     try {
       setIsLoadingVendors(true);
-      const response = await fetch("/api/vendors?limit=500");
+      const response = await fetch("/api/vendors?limit=500&activeOnly=true");
       if (response.ok) {
         const data = await response.json();
         setVendors(data.vendors || []);
@@ -80,7 +143,9 @@ function NewPurchaseInvoicePageContent() {
   const fetchItems = useCallback(async () => {
     try {
       setIsLoadingItems(true);
-      const response = await fetch("/api/items?limit=1000&activeOnly=true");
+      // When editing, fetch all items (including inactive) so invoice items are always visible
+      const url = editId ? "/api/items?limit=9999" : "/api/items?limit=9999&activeOnly=true";
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         setItems(data.items || []);
@@ -90,7 +155,7 @@ function NewPurchaseInvoicePageContent() {
     } finally {
       setIsLoadingItems(false);
     }
-  }, []);
+  }, [editId]);
 
   const loadPurchaseOrder = useCallback(async (orderId: string) => {
     try {
@@ -99,14 +164,12 @@ function NewPurchaseInvoicePageContent() {
         const order = await response.json();
         setSelectedVendor(order.vendor);
 
-        // Set due date based on vendor credit days
         if (order.vendor.creditDays) {
           const due = new Date();
           due.setDate(due.getDate() + order.vendor.creditDays);
           setDueDate(due.toISOString().split("T")[0]);
         }
 
-        // Load items from order
         if (order.items && order.items.length > 0) {
           interface OrderItem {
             id: string;
@@ -135,13 +198,182 @@ function NewPurchaseInvoicePageContent() {
     }
   }, []);
 
+  const loadInvoiceForEdit = useCallback(async (invoiceId: string) => {
+    try {
+      const response = await fetch(`/api/purchase-invoices/${invoiceId}`);
+      if (response.ok) {
+        const invoice = await response.json();
+        // Block editing if invoice is fully paid or cancelled
+        if (invoice.status === 'PAID' || invoice.status === 'CANCELLED') {
+          setIsEditBlocked(true);
+          setInvoiceNumber(invoice.invoiceNumber || "");
+          return;
+        }
+        setInvoiceNumber(invoice.invoiceNumber || "");
+        setInvoiceDate(
+          invoice.date
+            ? new Date(invoice.date).toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0]
+        );
+        setDueDate(
+          invoice.dueDate
+            ? new Date(invoice.dueDate).toISOString().split("T")[0]
+            : ""
+        );
+        setNotes(invoice.notes || "");
+        setSelectedVendor(invoice.vendor);
+
+        if (invoice.items && invoice.items.length > 0) {
+          // Extract item details from invoice response (includes inactive items)
+          // so PurchaseOrderItemRow can display names even if item is now inactive
+          const loadedItems: Item[] = invoice.items
+            .filter((inv: { item?: Item }) => inv.item)
+            .map((inv: { item: Item }) => inv.item);
+          setInvoiceLoadedItems(loadedItems);
+
+          setInvoiceItems(
+            invoice.items.map(
+              (item: {
+                itemId: string | null;
+                itemName: string | null;
+                hsnCode?: string | null;
+                discountPercent?: number;
+                quantity: number;
+                unit?: string | null;
+                uomFactor?: number | null;
+                rate: number;
+                taxRate: number;
+                taxAmount: number;
+                amount: number;
+              }) => ({
+                id: generateId(),
+                itemId: item.itemId || "",
+                itemName: item.itemName || null,
+                hsnCode: item.hsnCode || null,
+                discountPercent: Number(item.discountPercent || 0),
+                quantity: Number(item.quantity),
+                unit: item.unit || undefined,
+                uomFactor: Number(item.uomFactor || 1),
+                rate: Number(item.rate),
+                taxRate: Number(item.taxRate),
+                taxAmount: Number(item.taxAmount),
+                amount: Number(item.amount),
+              })
+            )
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Error loading invoice for edit:", err);
+    }
+  }, []);
+
+  // Load invoice data for copy (pre-fills vendor + items, creates a new invoice)
+  const loadInvoiceForCopy = useCallback(async (invoiceId: string) => {
+    try {
+      const response = await fetch(`/api/purchase-invoices/${invoiceId}`);
+      if (response.ok) {
+        const invoice = await response.json();
+        setNotes(invoice.notes || "");
+        setTerms(invoice.terms || "");
+        setSelectedVendor(invoice.vendor);
+
+        if (invoice.vendor?.creditDays) {
+          const due = new Date();
+          due.setDate(due.getDate() + invoice.vendor.creditDays);
+          setDueDate(due.toISOString().split("T")[0]);
+        }
+
+        if (invoice.items && invoice.items.length > 0) {
+          const loadedItems: Item[] = invoice.items
+            .filter((inv: { item?: Item }) => inv.item)
+            .map((inv: { item: Item }) => inv.item);
+          setInvoiceLoadedItems(loadedItems);
+
+          setInvoiceItems(
+            invoice.items.map((item: {
+              itemId: string;
+              quantity: number;
+              unit?: string | null;
+              uomFactor?: number | null;
+              rate: number;
+              taxRate: number;
+              taxAmount: number;
+              amount: number;
+            }) => ({
+              id: generateId(),
+              itemId: item.itemId,
+              quantity: Number(item.quantity),
+              unit: item.unit || undefined,
+              uomFactor: Number(item.uomFactor || 1),
+              rate: Number(item.rate),
+              taxRate: Number(item.taxRate),
+              taxAmount: Number(item.taxAmount),
+              amount: Number(item.amount),
+            }))
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Error loading invoice for copy:", err);
+    }
+  }, []);
+
+  // Fetch next invoice number for new invoices
+  const fetchNextInvoiceNumber = useCallback(async () => {
+    try {
+      const response = await fetch("/api/purchase-invoices/next-number");
+      if (response.ok) {
+        const data = await response.json();
+        setInvoiceNumber(data.invoiceNumber);
+      }
+    } catch (err) {
+      console.error("Error fetching next invoice number:", err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchVendors();
     fetchItems();
-    if (purchaseOrderId) {
-      loadPurchaseOrder(purchaseOrderId);
+  }, [fetchVendors, fetchItems]);
+
+  useEffect(() => {
+    const loadRoundOffMode = async () => {
+      try {
+        const response = await fetch("/api/settings?key=invoice_roundoff_mode");
+        if (!response.ok) return;
+        const setting = await response.json();
+        const mode = String(setting.value || "MANUAL").toUpperCase() as RoundOffMode;
+        if (["NONE", "NEAREST", "UP", "DOWN", "MANUAL"].includes(mode)) {
+          setRoundOffMode(mode);
+        }
+      } catch {
+        // fall back to MANUAL mode
+      }
+    };
+    loadRoundOffMode();
+  }, []);
+
+  useEffect(() => {
+    if (editId) {
+      loadInvoiceForEdit(editId);
+    } else {
+      fetchNextInvoiceNumber();
+      if (purchaseOrderId) {
+        loadPurchaseOrder(purchaseOrderId);
+      } else if (copyId) {
+        loadInvoiceForCopy(copyId);
+      }
     }
-  }, [fetchVendors, fetchItems, purchaseOrderId, loadPurchaseOrder]);
+  }, [
+    editId,
+    copyId,
+    loadInvoiceForEdit,
+    loadInvoiceForCopy,
+    fetchNextInvoiceNumber,
+    purchaseOrderId,
+    loadPurchaseOrder,
+  ]);
 
   // Set due date when vendor is selected
   useEffect(() => {
@@ -152,81 +384,113 @@ function NewPurchaseInvoicePageContent() {
     }
   }, [selectedVendor, dueDate]);
 
+  // Filter vendors based on search
   const filteredVendors = useMemo(() => {
-    if (!vendorSearch) return vendors;
-    const search = vendorSearch.toLowerCase();
-    return vendors.filter(
-      (v) =>
-        v.name.toLowerCase().includes(search) ||
-        v.vendorNumber.toLowerCase().includes(search)
-    );
+    if (!vendorSearch.trim()) return [];
+    const query = vendorSearch.toLowerCase();
+    return vendors
+      .filter(
+        (v) =>
+          v.name.toLowerCase().includes(query) ||
+          v.vendorNumber.toLowerCase().includes(query) ||
+          (v.gstin && v.gstin.toLowerCase().includes(query))
+      )
+      .slice(0, 10);
   }, [vendors, vendorSearch]);
 
-  const calculateLineItem = useCallback((quantity: number, rate: number, taxRate: number) => {
-    const amount = quantity * rate;
-    const taxAmount = amount * (taxRate / 100);
-    return {
-      amount: Math.round(amount * 100) / 100,
-      taxAmount: Math.round(taxAmount * 100) / 100,
-    };
-  }, []);
+  // Merge fetched items with items loaded from existing invoice (for edit/copy)
+  // so items that are now inactive still display correctly
+  const allItems = useMemo(() => {
+    const ids = new Set(items.map((i) => i.id));
+    const extras = invoiceLoadedItems.filter((i) => !ids.has(i.id));
+    return [...items, ...extras];
+  }, [items, invoiceLoadedItems]);
 
-  const handleItemChange = useCallback(
-    (index: number, field: string, value: string | number) => {
-      setInvoiceItems((prev) => {
-        const updated = [...prev];
-        const item = { ...updated[index] };
-
-        if (field === "itemId") {
-          item.itemId = value as string;
-          const selectedItem = items.find((i) => i.id === value);
-          if (selectedItem) {
-            item.rate = Number(selectedItem.purchasePrice) || 0;
-            item.taxRate = Number(selectedItem.gstRate) || 0;
-          }
-        } else if (field === "quantity") {
-          item.quantity = Number(value) || 0;
-        } else if (field === "rate") {
-          item.rate = Number(value) || 0;
-        } else if (field === "taxRate") {
-          item.taxRate = Number(value) || 0;
-        }
-
-        const calculated = calculateLineItem(item.quantity, item.rate, item.taxRate);
-        item.amount = calculated.amount;
-        item.taxAmount = calculated.taxAmount;
-
-        updated[index] = item;
-        return updated;
-      });
-    },
-    [items, calculateLineItem]
+  // Get selected item IDs
+  const selectedItemIds = useMemo(
+    () => invoiceItems.map((item) => item.itemId).filter(Boolean),
+    [invoiceItems]
   );
 
+  // Handle adding new item row
   const handleAddItem = () => {
     setInvoiceItems((prev) => [
       ...prev,
-      { id: generateId(), itemId: "", quantity: 1, rate: 0, taxRate: 0, taxAmount: 0, amount: 0 },
+      {
+        id: generateId(),
+        itemId: "",
+        quantity: 1,
+        rate: 0,
+        taxRate: 0,
+        taxAmount: 0,
+        amount: 0,
+      },
     ]);
   };
 
+  // Handle updating item row
+  const handleUpdateItem = (index: number, updatedItem: InvoiceItemData) => {
+    setInvoiceItems((prev) => {
+      const newItems = [...prev];
+      newItems[index] = updatedItem;
+      return newItems;
+    });
+  };
+
+  // Handle removing item row
   const handleRemoveItem = (index: number) => {
-    if (invoiceItems.length > 1) {
+    if (invoiceItems.length === 1) {
+      setInvoiceItems([
+        {
+          id: generateId(),
+          itemId: "",
+          quantity: 1,
+          rate: 0,
+          taxRate: 0,
+          taxAmount: 0,
+          amount: 0,
+        },
+      ]);
+    } else {
       setInvoiceItems((prev) => prev.filter((_, i) => i !== index));
     }
   };
 
+  // Calculate totals
   const totals = useMemo(() => {
-    const subtotal = invoiceItems.reduce((sum, item) => sum + item.amount, 0);
-    const totalTax = invoiceItems.reduce((sum, item) => sum + item.taxAmount, 0);
-    const totalAmount = subtotal + totalTax;
+    const validItems = invoiceItems.filter(
+      (item) => item.itemId && item.amount > 0
+    );
+    const subtotal = validItems.reduce((sum, item) => sum + item.amount, 0);
+    const totalTax = validItems.reduce(
+      (sum, item) => sum + item.taxAmount,
+      0
+    );
+    const roundOffDecision = resolveRoundOff(subtotal + totalTax, roundOffMode, roundOff);
+    const cgst = totalTax / 2;
+    const sgst = totalTax / 2;
+    const totalAmount = subtotal + totalTax + roundOffDecision.roundOff;
+
     return {
       subtotal: Math.round(subtotal * 100) / 100,
       totalTax: Math.round(totalTax * 100) / 100,
+      cgst: Math.round(cgst * 100) / 100,
+      sgst: Math.round(sgst * 100) / 100,
+      roundOff: roundOffDecision.roundOff,
       totalAmount: Math.round(totalAmount * 100) / 100,
     };
-  }, [invoiceItems]);
+  }, [invoiceItems, roundOff, roundOffMode]);
 
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      minimumFractionDigits: 2,
+    }).format(amount);
+  };
+
+  // Handle form submission
   const handleSubmit = async () => {
     setError(null);
 
@@ -245,31 +509,61 @@ function NewPurchaseInvoicePageContent() {
       return;
     }
 
-    const validItems = invoiceItems.filter((item) => item.itemId && item.quantity > 0);
+    const validItems = invoiceItems.filter(
+      (item) => item.itemId && item.quantity > 0 && item.rate > 0
+    );
+
     if (validItems.length === 0) {
-      setError("Please add at least one item with quantity");
+      setError("Please add at least one item with valid quantity and rate");
       return;
     }
 
-    try {
-      setIsSubmitting(true);
+    // Check for duplicate items
+    const itemIdCounts = validItems.reduce((acc, item) => {
+      acc[item.itemId] = (acc[item.itemId] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    const duplicateIds = Object.keys(itemIdCounts).filter((id) => itemIdCounts[id] > 1);
+    if (duplicateIds.length > 0) {
+      const dupNames = duplicateIds.map((id) => {
+        const found = allItems.find((i) => i.id === id);
+        return found ? found.name : id;
+      });
+      setError(`Duplicate items found: ${dupNames.join(", ")}. Please merge them into one row.`);
+      return;
+    }
 
+    setIsSubmitting(true);
+
+    try {
       const payload = {
         vendorId: selectedVendor.id,
         purchaseOrderId: purchaseOrderId || null,
         date: invoiceDate,
         dueDate,
         notes: notes || null,
+        terms: terms || null,
+        roundOff,
+        roundOffMode,
         items: validItems.map((item) => ({
           itemId: item.itemId,
+          hsnCode: item.hsnCode || null,
           quantity: item.quantity,
+          unit: item.unit,
+          uomFactor: item.uomFactor || 1,
           rate: item.rate,
+          discountPercent: item.discountPercent || 0,
           taxRate: item.taxRate,
         })),
       };
 
-      const response = await fetch("/api/purchase-invoices", {
-        method: "POST",
+      const url = editId
+        ? `/api/purchase-invoices/${editId}`
+        : "/api/purchase-invoices";
+      const method = editId ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -277,265 +571,324 @@ function NewPurchaseInvoicePageContent() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to create invoice");
+        throw new Error(data.error || "Failed to save invoice");
       }
 
-      mutate((key: string) => key.startsWith("/api/purchase-invoices"));
+      mutate(
+        (key) =>
+          typeof key === "string" && key.includes("/api/purchase-invoices"),
+        undefined,
+        { revalidate: true }
+      );
       router.push("/purchases/invoices");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create invoice");
+      setError(err instanceof Error ? err.message : "Failed to save invoice");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const usedItemIds = useMemo(() => new Set(invoiceItems.map((item) => item.itemId).filter(Boolean)), [invoiceItems]);
-
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-6xl mx-auto">
-        <div className="mb-6">
-          <Button variant="ghost" size="sm" onClick={() => router.push("/purchases/invoices")} className="mb-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Invoices
-          </Button>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">New Purchase Invoice</h1>
-          <p className="text-gray-600">Create a new purchase invoice from vendor</p>
+      {/* Blocked edit popup */}
+      <AlertDialog open={isEditBlocked} onOpenChange={() => {}}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5 text-red-500" />
+              Cannot Edit Invoice
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Invoice <strong>#{invoiceNumber}</strong> has been fully paid and cannot be edited.
+              Paid invoices are locked to preserve accurate financial records.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => router.push("/purchases/invoices")} className="bg-teal-500 hover:bg-teal-600">
+              Go Back to Invoices
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <div className="min-h-screen bg-gray-50">
+        {/* Sticky action bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-3 sticky top-0 z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => router.push("/purchases/invoices")} className="text-gray-500 -ml-2">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+              <div className="h-4 w-px bg-gray-200" />
+              <div>
+                <span className="text-base font-bold text-gray-900">
+                  {editId ? "Edit Purchase Invoice" : copyId ? "Duplicate Purchase Invoice" : "New Purchase Invoice"}
+                </span>
+                <span className="ml-2 text-sm text-gray-400">#{invoiceNumber}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => router.push("/purchases/invoices")}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleSubmit} disabled={isSubmitting || isEditBlocked} className="bg-teal-500 hover:bg-teal-600 text-white">
+                {isSubmitting ? (
+                  <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Saving...</>
+                ) : (
+                  <><Save className="h-4 w-4 mr-1.5" />{editId ? "Update Invoice" : "Create Invoice"}</>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">{error}</div>
-        )}
+        <div className="p-6 space-y-4">
+          {copyId && (
+            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-700 text-sm flex items-center gap-2">
+              <Copy className="h-4 w-4 shrink-0" />
+              Duplicating from an existing invoice — review and save to create a new invoice.
+            </div>
+          )}
 
-        <div className="space-y-6">
-          {/* Invoice Details */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Invoice Details</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date *</label>
-                <Input
-                  type="date"
-                  value={invoiceDate}
-                  onChange={(e) => setInvoiceDate(e.target.value)}
-                  max={new Date().toISOString().split("T")[0]}
-                />
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
+          )}
+
+          {/* Row 1: Dates (left) + Vendor (right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Invoice Details</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Invoice Date <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={invoiceDate}
+                    onChange={(e) => setInvoiceDate(e.target.value)}
+                    max={new Date().toISOString().split("T")[0]}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Due Date <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Due Date *</label>
-                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} min={invoiceDate} />
-              </div>
+            </div>
+
+            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
+                Vendor <span className="text-red-400">*</span>
+              </p>
+              {isLoadingVendors ? (
+                <div className="flex items-center gap-2 text-gray-500 py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Loading vendors...</span>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {!selectedVendor && (
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          type="text"
+                          placeholder="Search by name, vendor number, or GSTIN..."
+                          value={vendorSearch}
+                          onChange={(e) => setVendorSearch(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsVendorModalOpen(true)}
+                        className="shrink-0"
+                      >
+                        Browse
+                      </Button>
+                    </div>
+                  )}
+                  {vendorSearch && !selectedVendor && (
+                    <div className="border rounded-lg max-h-44 overflow-y-auto bg-white shadow-sm">
+                      {filteredVendors.length === 0 ? (
+                        <p className="p-3 text-gray-500 text-sm">No vendors found</p>
+                      ) : (
+                        filteredVendors.map((vendor) => (
+                          <button
+                            key={vendor.id}
+                            type="button"
+                            onClick={() => { setSelectedVendor(vendor); setVendorSearch(""); }}
+                            className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b last:border-b-0"
+                          >
+                            <p className="text-sm font-medium">{vendor.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {vendor.vendorNumber}
+                              {vendor.gstin && ` · GSTIN: ${vendor.gstin}`}
+                              {vendor.city && ` · ${vendor.city}`}
+                            </p>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                  {selectedVendor && (
+                    <div className="flex items-center justify-between px-4 py-3 bg-teal-50 border border-teal-200 rounded-lg">
+                      <div>
+                        <p className="font-medium text-teal-900">{selectedVendor.name}</p>
+                        <p className="text-sm text-teal-600">
+                          {selectedVendor.vendorNumber}
+                          {selectedVendor.gstin && ` · GSTIN: ${selectedVendor.gstin}`}
+                        </p>
+                      </div>
+                      {!purchaseOrderId && (
+                        <button type="button" onClick={() => setSelectedVendor(null)} className="text-teal-500 hover:text-teal-700 ml-3">
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <VendorSelectionModal
+                    isOpen={isVendorModalOpen}
+                    onClose={() => setIsVendorModalOpen(false)}
+                    vendors={vendors}
+                    onSelect={(vendor) => {
+                      setSelectedVendor(vendor);
+                      setVendorSearch("");
+                      setIsVendorModalOpen(false);
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Vendor Selection */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Vendor *</h2>
-            {selectedVendor ? (
-              <div className="flex items-center justify-between p-4 bg-teal-50 border border-teal-200 rounded-lg">
-                <div>
-                  <p className="font-medium">{selectedVendor.name}</p>
-                  <p className="text-sm text-gray-600">{selectedVendor.vendorNumber}</p>
-                </div>
-                {!purchaseOrderId && (
-                  <Button variant="outline" size="sm" onClick={() => setSelectedVendor(null)}>
-                    <X className="h-4 w-4 mr-2" />
-                    Change
-                  </Button>
-                )}
+          {/* Row 2: Items table */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">Line Items</p>
+              <Button type="button" variant="outline" size="sm" onClick={handleAddItem} className="h-8">
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add Item
+              </Button>
+            </div>
+            {isLoadingItems ? (
+              <div className="flex items-center justify-center py-10 gap-2 text-gray-400">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Loading items...</span>
               </div>
             ) : (
-              <div>
-                <div className="relative mb-3">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    type="text"
-                    placeholder="Search vendors..."
-                    value={vendorSearch}
-                    onChange={(e) => setVendorSearch(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-                <div className="border rounded-lg max-h-60 overflow-y-auto">
-                  {isLoadingVendors ? (
-                    <div className="flex items-center justify-center py-8 text-gray-500">
-                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                      Loading vendors...
-                    </div>
-                  ) : filteredVendors.length === 0 ? (
-                    <div className="py-8 text-center text-gray-500">No vendors found</div>
-                  ) : (
-                    filteredVendors.map((vendor) => (
-                      <button
-                        key={vendor.id}
-                        onClick={() => setSelectedVendor(vendor)}
-                        className="w-full p-3 text-left hover:bg-gray-50 border-b last:border-b-0"
-                      >
-                        <p className="font-medium">{vendor.name}</p>
-                        <p className="text-sm text-gray-500">{vendor.vendorNumber}</p>
-                      </button>
-                    ))
-                  )}
-                </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Item</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">HSN</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-20">Qty</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-12">Unit</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Rate</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">GST %</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Tax</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Total</th>
+                      <th className="px-3 py-2.5 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoiceItems.map((item, index) => (
+                      <PurchaseOrderItemRow
+                        key={item.id}
+                        item={item}
+                        items={allItems}
+                        selectedItemIds={selectedItemIds}
+                        onUpdate={(updatedItem) => handleUpdateItem(index, updatedItem)}
+                        onRemove={() => handleRemoveItem(index)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
 
-          {/* Invoice Items */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Invoice Items *</h2>
-              <Button variant="outline" size="sm" onClick={handleAddItem}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Item
-              </Button>
+          {/* Row 3: Notes/Terms (left) + Summary (right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-3 space-y-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Notes</p>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Internal notes about this invoice..."
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
+              <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Terms & Conditions</p>
+                <Textarea
+                  value={terms}
+                  onChange={(e) => setTerms(e.target.value)}
+                  placeholder="Terms and conditions..."
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2 px-2 text-sm font-medium text-gray-600 w-12">#</th>
-                    <th className="text-left py-2 px-2 text-sm font-medium text-gray-600">Item</th>
-                    <th className="text-left py-2 px-2 text-sm font-medium text-gray-600 w-20">HSN</th>
-                    <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 w-24">Qty</th>
-                    <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 w-28">Rate</th>
-                    <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 w-20">Tax %</th>
-                    <th className="text-right py-2 px-2 text-sm font-medium text-gray-600 w-28">Amount</th>
-                    <th className="text-center py-2 px-2 text-sm font-medium text-gray-600 w-12"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoiceItems.map((invoiceItem, index) => {
-                    const selectedItem = items.find((i) => i.id === invoiceItem.itemId);
-                    const availableItems = items.filter(
-                      (i) => !usedItemIds.has(i.id) || i.id === invoiceItem.itemId
-                    );
-
-                    return (
-                      <tr key={invoiceItem.id} className="border-b last:border-b-0">
-                        <td className="py-2 px-2 text-sm text-gray-500">{index + 1}</td>
-                        <td className="py-2 px-2">
-                          <select
-                            value={invoiceItem.itemId}
-                            onChange={(e) => handleItemChange(index, "itemId", e.target.value)}
-                            className="w-full border rounded px-2 py-1.5 text-sm"
-                          >
-                            <option value="">Select item...</option>
-                            {availableItems.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.itemCode} - {item.name}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="py-2 px-2 text-sm text-gray-500">{selectedItem?.hsnCode || "-"}</td>
-                        <td className="py-2 px-2">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={invoiceItem.quantity || ""}
-                            onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
-                            className="w-full text-right"
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={invoiceItem.rate || ""}
-                            onChange={(e) => handleItemChange(index, "rate", e.target.value)}
-                            className="w-full text-right"
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <Input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            value={invoiceItem.taxRate || ""}
-                            onChange={(e) => handleItemChange(index, "taxRate", e.target.value)}
-                            className="w-full text-right"
-                          />
-                        </td>
-                        <td className="py-2 px-2 text-right text-sm font-medium">
-                          {(invoiceItem.amount + invoiceItem.taxAmount).toFixed(2)}
-                        </td>
-                        <td className="py-2 px-2 text-center">
-                          {invoiceItems.length > 1 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveItem(index)}
-                              className="text-red-500 hover:text-red-700 h-8 w-8 p-0"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Totals */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex justify-end">
-              <div className="w-72 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">{totals.subtotal.toFixed(2)}</span>
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Calculator className="h-4 w-4 text-gray-400" />
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Summary</p>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Taxable Value</span>
+                  <span className="font-medium">{formatCurrency(totals.subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Tax:</span>
-                  <span className="font-medium">{totals.totalTax.toFixed(2)}</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">CGST</span>
+                  <span>{formatCurrency(totals.cgst)}</span>
                 </div>
-                <div className="flex justify-between text-lg font-bold border-t pt-2">
-                  <span>Total:</span>
-                  <span>{totals.totalAmount.toFixed(2)}</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">SGST</span>
+                  <span>{formatCurrency(totals.sgst)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Round Off</span>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={roundOffMode}
+                      onChange={(e) => setRoundOffMode(e.target.value as RoundOffMode)}
+                      className="h-8 rounded-md border border-gray-200 px-2 text-xs bg-white"
+                    >
+                      <option value="MANUAL">Manual</option>
+                      <option value="NEAREST">Nearest</option>
+                      <option value="UP">Round Up</option>
+                      <option value="DOWN">Round Down</option>
+                      <option value="NONE">None</option>
+                    </select>
+                    <Input
+                      type="number" step="0.001" min="-10" max="10"
+                      value={roundOffMode === "MANUAL" ? roundOff : totals.roundOff}
+                      onChange={(e) => setRoundOff(parseFloat(e.target.value) || 0)}
+                      className="w-24 text-right h-8"
+                      disabled={roundOffMode !== "MANUAL"}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
+                  <span>Total</span>
+                  <span className="text-teal-600">{formatCurrency(totals.totalAmount)}</span>
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Notes */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Notes</h2>
-            <Textarea
-              placeholder="Add any notes..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-            />
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-4">
-            <Button variant="outline" onClick={() => router.push("/purchases/invoices")}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Create Invoice
-                </>
-              )}
-            </Button>
           </div>
         </div>
       </div>

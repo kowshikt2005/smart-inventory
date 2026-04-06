@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/items/[id] - Get a specific item
 export async function GET(
@@ -7,6 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_items', 'view');
+    if (error) return error;
     const { id } = await params;
     const item = await db.item.findUnique({
       where: { id },
@@ -40,19 +43,32 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_items', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
     // Check if item exists
-    const existingItem = await db.item.findUnique({
+    const existingItem = await (db.item.findUnique as any)({
       where: { id },
-    });
+    }) as any;
 
     if (!existingItem) {
       return NextResponse.json(
         { error: 'Item not found' },
         { status: 404 }
       );
+    }
+
+    // Validate financial fields
+    if (body.mrp !== undefined && Number(body.mrp) < 0) {
+      return NextResponse.json({ error: 'MRP cannot be negative' }, { status: 400 });
+    }
+    if (body.sellingPrice !== undefined && Number(body.sellingPrice) < 0) {
+      return NextResponse.json({ error: 'Selling price cannot be negative' }, { status: 400 });
+    }
+    if (body.purchasePrice !== undefined && Number(body.purchasePrice) < 0) {
+      return NextResponse.json({ error: 'Purchase price cannot be negative' }, { status: 400 });
     }
 
     // Check if item code is being changed and if it already exists
@@ -69,43 +85,49 @@ export async function PUT(
       }
     }
 
-    // Update item and inventory
-    const updatedItem = await db.$transaction(async (tx) => {
-      // Update the item
-      const item = await tx.item.update({
-        where: { id },
-        data: {
-          itemCode: body.itemCode || existingItem.itemCode,
-          name: body.name || existingItem.name,
-          description: body.description !== undefined ? body.description : existingItem.description,
-          brandId: body.brandId !== undefined ? body.brandId : existingItem.brandId,
-          subBrandId: body.subBrandId !== undefined ? body.subBrandId : existingItem.subBrandId,
-          hsnCode: body.hsnCode !== undefined ? body.hsnCode : existingItem.hsnCode,
-          gstRate: body.gstRate !== undefined ? body.gstRate : existingItem.gstRate,
-          standardPrice: body.standardPrice !== undefined ? body.standardPrice : existingItem.standardPrice,
-          purchasePrice: body.purchasePrice !== undefined ? body.purchasePrice : existingItem.purchasePrice,
-          minStock: body.minStock !== undefined ? body.minStock : existingItem.minStock,
-          unit: body.unit || existingItem.unit,
-          isActive: body.isActive !== undefined ? body.isActive : existingItem.isActive,
-        },
-        include: {
-          brand: true,
-          subBrand: true,
-        },
-      });
+    // Update item
+    const updatedItem = await (db.item.update as any)({
+      where: { id },
+      data: {
+        itemCode: body.itemCode || existingItem.itemCode,
+        userCode: body.userCode !== undefined ? (body.userCode || null) : existingItem.userCode,
+        barcode: body.barcode !== undefined ? (body.barcode || null) : existingItem.barcode,
+        name: body.name || existingItem.name,
+        description: body.description !== undefined ? body.description : existingItem.description,
+        brandId: body.brandId !== undefined ? body.brandId : existingItem.brandId,
+        subBrandId: body.subBrandId !== undefined ? body.subBrandId : existingItem.subBrandId,
+        hsnCode: body.hsnCode !== undefined ? body.hsnCode : existingItem.hsnCode,
+        gstRate: body.gstRate !== undefined ? body.gstRate : existingItem.gstRate,
+        purchasePrice: body.purchasePrice !== undefined ? body.purchasePrice : existingItem.purchasePrice,
+        mrp: body.mrp !== undefined ? body.mrp : existingItem.mrp,
+        sellingPrice: body.sellingPrice !== undefined ? body.sellingPrice : existingItem.sellingPrice,
+        margin: body.margin !== undefined ? body.margin : existingItem.margin,
+        marginType: body.marginType !== undefined ? body.marginType : existingItem.marginType,
+        minStock: body.minStock !== undefined ? body.minStock : existingItem.minStock,
+        unit: body.unit || existingItem.unit,
+        uomConversions: body.uomConversions !== undefined ? body.uomConversions : existingItem.uomConversions,
+        imageUrl: body.imageUrl !== undefined ? body.imageUrl : existingItem.imageUrl,
+        isActive: body.isActive !== undefined ? (typeof body.isActive === 'boolean' ? body.isActive : existingItem.isActive) : existingItem.isActive,
+      },
+      include: {
+        brand: true,
+        subBrand: true,
+      },
+    });
 
-      // Update inventory min stock level if changed
-      if (body.minStock !== undefined) {
-        await tx.inventory.update({
+    // Update inventory min stock level if changed (separate query to avoid transaction issues)
+    if (body.minStock !== undefined) {
+      try {
+        await db.inventory.update({
           where: { itemId: id },
           data: {
             minStockLevel: body.minStock,
           },
         });
+      } catch (invError) {
+        console.warn('Failed to update inventory minStockLevel, but item was updated:', invError);
       }
-
-      return item;
-    });
+    }
 
     return NextResponse.json(updatedItem);
   } catch (error: any) {
@@ -131,6 +153,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_items', 'edit');
+    if (error) return error;
     const { id } = await params;
     // Check if item exists
     const existingItem = await db.item.findUnique({

@@ -1,16 +1,24 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generateInvoiceNumber, calculateDueDate } from '@/lib/invoice-utils';
 import { calculateOrderTotals } from '@/lib/order-utils';
 import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
+import { normalizeRoundOffMode, resolveRoundOff } from '@/lib/rounding-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/sales-invoices - Get all invoices with filtering
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('sales_invoices', 'view');
+    if (error) return error;
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const customerId = searchParams.get('customerId') || '';
+    const brandId = searchParams.get('brandId') || '';
+    const dateFrom = searchParams.get('dateFrom') || '';
+    const dateTo = searchParams.get('dateTo') || '';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
@@ -24,6 +32,20 @@ export async function GET(request: Request) {
 
     if (customerId) {
       where.customerId = customerId;
+    }
+
+    if (brandId) {
+      where.items = { some: { item: { brandId } } };
+    }
+
+    if (dateFrom || dateTo) {
+      where.invoiceDate = {};
+      if (dateFrom) where.invoiceDate.gte = new Date(dateFrom);
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23, 59, 59, 999);
+        where.invoiceDate.lte = to;
+      }
     }
 
     if (search) {
@@ -51,6 +73,12 @@ export async function GET(request: Request) {
               creditDays: true,
             },
           },
+          salesReturns: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
         },
         skip,
         take: limit,
@@ -59,9 +87,20 @@ export async function GET(request: Request) {
       db.invoice.count({ where }),
     ]);
 
+    // Filter out invoices with completed returns when fetching by customer
+    // (typically used for creating new returns)
+    const filteredInvoices = customerId
+      ? invoices.filter((invoice: any) => {
+          const hasCompletedReturn = invoice.salesReturns?.some(
+            (ret: any) => ret.status === 'COMPLETED'
+          );
+          return !hasCompletedReturn;
+        })
+      : invoices;
+
     // Check for overdue invoices and update status
     const now = new Date();
-    const invoicesWithStatus = invoices.map((invoice) => {
+    const invoicesWithStatus = filteredInvoices.map((invoice) => {
       let effectiveStatus = invoice.paymentStatus;
 
       // If pending and past due date, mark as overdue
@@ -122,13 +161,16 @@ export async function GET(request: Request) {
       Number(overdueStats._sum.balanceAmount || 0) +
       Number(pendingStats._sum.balanceAmount || 0);
 
+    // Adjust total count if we filtered invoices
+    const adjustedTotal = customerId ? invoicesWithStatus.length : total;
+
     return NextResponse.json({
       invoices: invoicesWithStatus,
       pagination: {
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+        total: adjustedTotal,
+        totalPages: Math.ceil(adjustedTotal / limit),
       },
       stats: {
         total: totalCount,
@@ -150,6 +192,9 @@ export async function GET(request: Request) {
 // POST /api/sales-invoices - Create invoice from delivered sales order
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('sales_invoices', 'edit');
+    if (error) return error;
+
     const body = await request.json();
 
     // Validate required fields
@@ -170,7 +215,7 @@ export async function POST(request: Request) {
             item: true,
           },
         },
-        invoice: true,
+        invoices: true,
       },
     });
 
@@ -190,96 +235,118 @@ export async function POST(request: Request) {
     }
 
     // Check if invoice already exists
-    if (salesOrder.invoice) {
+    if (salesOrder.invoices && salesOrder.invoices.length > 0) {
       return NextResponse.json(
-        { error: 'Invoice already exists for this order', invoiceId: salesOrder.invoice.id },
+        { error: 'Invoice already exists for this order', invoiceId: salesOrder.invoices[0].id },
         { status: 409 }
       );
     }
 
-    // Validate stock availability using priority-based allocation
-    const allocationResult = await calculateStockAllocation(db);
-    const allocations = getOrderAllocation(salesOrder.id, allocationResult);
-    const stockStatus = calculateOrderStockStatus(allocations);
+    // Check if negative billing is enabled
+    const negativeBillingSetting = await db.appSetting.findUnique({
+      where: { key: 'negative_billing' },
+    });
+    const negativeBillingEnabled = negativeBillingSetting?.value === 'true';
 
-    // Only allow invoice creation for fully allocated orders (In Stock)
-    if (stockStatus !== 'Available') {
-      const allocationMap = new Map(allocations.map((a) => [a.itemId, a]));
+    const roundOffSetting = await db.appSetting.findUnique({
+      where: { key: 'invoice_roundoff_mode' },
+      select: { value: true },
+    });
+    const effectiveRoundOffMode = normalizeRoundOffMode(body.roundOffMode || roundOffSetting?.value);
 
-      const insufficientStockItems = salesOrder.items
-        .map((orderItem) => {
-          const allocation = allocationMap.get(orderItem.itemId);
-          const allocatedQty = allocation?.allocatedQty || 0;
-          const orderedQty = Number(orderItem.quantity);
-          const shortfall = allocation?.shortfallQty || orderedQty;
+    // Validate stock availability using priority-based allocation (skip if negative billing is ON)
+    if (!negativeBillingEnabled) {
+      const allocationResult = await calculateStockAllocation(db);
+      const allocations = getOrderAllocation(salesOrder.id, allocationResult);
+      const stockStatus = calculateOrderStockStatus(allocations);
 
-          if (shortfall > 0) {
-            return {
-              itemCode: orderItem.item.itemCode,
-              itemName: orderItem.item.name,
-              required: orderedQty,
-              available: allocatedQty,
-              shortfall,
-            };
-          }
-          return null;
-        })
-        .filter((item) => item !== null);
+      // Only allow invoice creation for fully allocated orders (In Stock)
+      if (stockStatus !== 'Available') {
+        const allocationMap = new Map(allocations.map((a) => [a.itemId, a]));
 
-      return NextResponse.json(
-        {
-          error: stockStatus === 'Partial'
-            ? 'Cannot create invoice: Order is partially allocated. Some items have insufficient stock based on priority allocation.'
-            : 'Cannot create invoice: No stock allocated for this order. All items are out of stock or allocated to higher priority orders.',
-          stockStatus,
-          insufficientStock: insufficientStockItems,
-        },
-        { status: 400 }
-      );
+        const insufficientStockItems = salesOrder.items
+          .map((orderItem) => {
+            const allocation = allocationMap.get(orderItem.itemId);
+            const allocatedQty = allocation?.allocatedQty || 0;
+            const orderedQty = Number(orderItem.quantity);
+            const shortfall = allocation?.shortfallQty || orderedQty;
+
+            if (shortfall > 0) {
+              return {
+                itemCode: orderItem.item.itemCode,
+                itemName: orderItem.item.name,
+                required: orderedQty,
+                available: allocatedQty,
+                shortfall,
+              };
+            }
+            return null;
+          })
+          .filter((item) => item !== null);
+
+        return NextResponse.json(
+          {
+            error: stockStatus === 'Partial'
+              ? 'Cannot create invoice: Order is partially allocated. Some items have insufficient stock based on priority allocation.'
+              : 'Cannot create invoice: No stock allocated for this order. All items are out of stock or allocated to higher priority orders.',
+            stockStatus,
+            insufficientStock: insufficientStockItems,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // Create invoice in transaction
-    const invoice = await db.$transaction(async (tx) => {
+    const invoice = await transaction(async (tx) => {
       // Generate invoice number
       const invoiceNumber = await generateInvoiceNumber(tx as any);
 
-      // Calculate GST breakdown
-      const items = salesOrder.items.map((item) => ({
+      // Use order items as-is (discounts are already baked into the order)
+      const invoiceItems = salesOrder.items.map((orderItem) => ({
+        itemId: orderItem.itemId,
+        quantity: orderItem.quantity,
+        rate: orderItem.rate,
+        discountPercent: orderItem.discountPercent,
+        taxRate: orderItem.taxRate,
+        taxAmount: orderItem.taxAmount,
+        amount: orderItem.amount,
+      }));
+
+      // Calculate GST breakdown from (possibly overridden) invoice items
+      const itemTotals = invoiceItems.map((item) => ({
         amount: Number(item.amount),
         taxAmount: Number(item.taxAmount),
       }));
+      const baseTotals = calculateOrderTotals(itemTotals, 0);
+      const roundOffDecision = resolveRoundOff(
+        baseTotals.subtotal + baseTotals.totalTax,
+        effectiveRoundOffMode,
+        Number(body.roundOff || 0)
+      );
       const { subtotal, totalTax, cgst, sgst, totalAmount } = calculateOrderTotals(
-        items,
-        body.roundOff || 0
+        itemTotals,
+        roundOffDecision.roundOff
       );
 
       // Calculate due date
       const invoiceDate = body.invoiceDate ? new Date(body.invoiceDate) : new Date();
       const dueDate = calculateDueDate(invoiceDate, salesOrder.customer.creditDays);
 
-      // Prepare invoice items from sales order items
-      const invoiceItems = salesOrder.items.map((item) => ({
-        itemId: item.itemId,
-        quantity: item.quantity,
-        rate: item.rate,
-        discountPercent: item.discountPercent,
-        taxRate: item.taxRate,
-        taxAmount: item.taxAmount,
-        amount: item.amount,
-      }));
-
       // Create the invoice with items
-      const newInvoice = await tx.invoice.create({
+      const newInvoice = await (tx.invoice.create as any)({
         data: {
           invoiceNumber,
           invoiceDate,
+          salesOrderId: salesOrder.id, // Link to sales order for duplicate detection
           orderNumber: salesOrder.orderNumber, // Store for reference
           customerId: salesOrder.customerId,
+          shippingAddressId: body.shippingAddressId || null,
           subtotal,
           cgst,
           sgst,
           taxAmount: totalTax,
-          roundOff: body.roundOff || 0,
+          roundOff: roundOffDecision.roundOff,
           totalAmount,
           paidAmount: 0,
           balanceAmount: totalAmount,
@@ -387,9 +454,33 @@ export async function POST(request: Request) {
         },
       });
 
-      // Delete the sales order (cascade will delete items and status history)
-      await tx.salesOrder.delete({
+      // Keep order history intact: mark invoiced quantities and status instead of deleting order.
+      for (const orderItem of salesOrder.items) {
+        await tx.salesOrderItem.update({
+          where: { id: orderItem.id },
+          data: {
+            invoicedQuantity: {
+              increment: Number(orderItem.quantity),
+            },
+          },
+        });
+      }
+
+      await tx.salesOrder.update({
         where: { id: salesOrder.id },
+        data: {
+          status: 'FULLY_INVOICED',
+        },
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          salesOrderId: salesOrder.id,
+          fromStatus: salesOrder.status,
+          toStatus: 'FULLY_INVOICED',
+          reason: `Invoiced via ${invoiceNumber}`,
+          changedBy: salesOrder.createdBy,
+        },
       });
 
       return newInvoice;
@@ -411,9 +502,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create invoice';
     return NextResponse.json(
-      { error: errorMessage },
+      { error: 'Failed to create invoice' },
       { status: 500 }
     );
   }

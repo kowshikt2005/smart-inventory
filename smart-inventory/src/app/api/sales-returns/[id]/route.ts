@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/sales-returns/[id] - Get single sales return
 export async function GET(
@@ -7,6 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_returns', 'view');
+    if (error) return error;
     const { id } = await params;
 
     const salesReturn = await db.salesReturn.findUnique({
@@ -72,6 +75,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_returns', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
@@ -131,12 +136,14 @@ export async function PUT(
   }
 }
 
-// DELETE /api/sales-returns/[id] - Cancel sales return (only if OPEN)
+// DELETE /api/sales-returns/[id] - Hard delete (only if OPEN or CANCELLED)
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_returns', 'edit');
+    if (error) return error;
     const { id } = await params;
 
     const salesReturn = await db.salesReturn.findUnique({
@@ -150,25 +157,20 @@ export async function DELETE(
       );
     }
 
-    if (salesReturn.status !== 'OPEN') {
+    if (salesReturn.status === 'COMPLETED') {
       return NextResponse.json(
-        { error: 'Can only cancel OPEN sales returns' },
+        { error: 'Cannot delete a completed sales return. Completed returns have already affected inventory and ledger.' },
         { status: 400 }
       );
     }
 
-    await db.salesReturn.update({
-      where: { id },
-      data: {
-        status: 'CANCELLED',
-      },
-    });
+    await db.salesReturn.delete({ where: { id } });
 
-    return NextResponse.json({ message: 'Sales return cancelled successfully' });
+    return NextResponse.json({ message: 'Sales return deleted successfully' });
   } catch (error) {
-    console.error('Error cancelling sales return:', error);
+    console.error('Error deleting sales return:', error);
     return NextResponse.json(
-      { error: 'Failed to cancel sales return' },
+      { error: 'Failed to delete sales return' },
       { status: 500 }
     );
   }

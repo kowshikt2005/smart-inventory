@@ -1,18 +1,22 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
-// POST /api/sales-returns/[id]/complete - Complete sales return (restore inventory, create ledger entry)
+// POST /api/sales-returns/[id]/complete - Complete sales return (restore inventory, update invoice, create ledger entry)
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_returns', 'edit');
+    if (error) return error;
     const { id } = await params;
 
     const salesReturn = await db.salesReturn.findUnique({
       where: { id },
       include: {
         customer: true,
+        invoice: true,
         items: {
           include: {
             item: {
@@ -40,7 +44,7 @@ export async function POST(
     }
 
     // Complete return in transaction - OPTIMIZED VERSION
-    await db.$transaction(async (tx) => {
+    await transaction(async (tx) => {
       // Prepare batch operations
       const inventoryUpdates: Promise<any>[] = [];
       const stockMovements: any[] = [];
@@ -97,7 +101,34 @@ export async function POST(
       const currentBalance = Number(customerBalance._sum.debit || 0) - Number(customerBalance._sum.credit || 0);
       const newBalance = currentBalance - Number(salesReturn.totalAmount);
 
-      // Create customer ledger entry and update return status in parallel
+      // Update the original invoice if linked
+      let invoiceUpdatePromise: Promise<any> = Promise.resolve();
+      if (salesReturn.invoice) {
+        const invoice = salesReturn.invoice;
+        const returnAmount = Number(salesReturn.totalAmount);
+
+        // Calculate new balance amount (return acts as a credit)
+        // Keep totalAmount unchanged for record keeping
+        const newBalanceAmount = Math.max(0, Number(invoice.balanceAmount) - returnAmount);
+
+        // Determine new payment status
+        let newPaymentStatus = invoice.paymentStatus;
+        if (newBalanceAmount <= 0) {
+          newPaymentStatus = 'PAID';
+        } else if (Number(invoice.paidAmount) > 0 || returnAmount > 0) {
+          newPaymentStatus = 'PARTIAL';
+        }
+
+        invoiceUpdatePromise = tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            balanceAmount: newBalanceAmount,
+            paymentStatus: newPaymentStatus,
+          },
+        });
+      }
+
+      // Create customer ledger entry, update return status, and update invoice in parallel
       await Promise.all([
         tx.customerLedger.create({
           data: {
@@ -118,6 +149,7 @@ export async function POST(
             status: 'COMPLETED',
           },
         }),
+        invoiceUpdatePromise,
       ]);
     }, {
       maxWait: 15000, // Increased timeout for batch operations

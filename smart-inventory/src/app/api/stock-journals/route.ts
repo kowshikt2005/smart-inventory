@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generateJournalNumber } from '@/lib/invoice-utils';
 import { SYSTEM_USER_ID } from '@/lib/order-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/stock-journals - List all stock journals
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('ledger_stock_journal', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const page = parseInt(searchParams.get('page') || '1');
@@ -70,6 +73,9 @@ export async function GET(request: Request) {
 // POST /api/stock-journals - Create a new stock journal entry
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('ledger_stock_journal', 'edit');
+    if (error) return error;
+
     const body = await request.json();
     const { itemId, date, adjustmentType, quantity, reason } = body;
 
@@ -144,7 +150,7 @@ export async function POST(request: Request) {
     }
 
     // Create journal entry in transaction
-    const result = await db.$transaction(async (tx) => {
+    const result = await transaction(async (tx) => {
       // Generate journal number
       const journalNumber = await generateJournalNumber(tx as any);
 

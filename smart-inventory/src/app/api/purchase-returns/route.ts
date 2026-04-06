@@ -1,15 +1,21 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generatePurchaseReturnNumber, calculatePurchaseLineItem, calculatePurchaseTotals } from '@/lib/purchase-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/purchase-returns - Get all purchase returns with filtering
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('purchases_returns', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const vendorId = searchParams.get('vendorId') || '';
     const purchaseInvoiceId = searchParams.get('purchaseInvoiceId') || '';
+    const brandId = searchParams.get('brandId') || '';
+    const dateFrom = searchParams.get('dateFrom') || '';
+    const dateTo = searchParams.get('dateTo') || '';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
@@ -27,6 +33,20 @@ export async function GET(request: Request) {
 
     if (purchaseInvoiceId) {
       where.purchaseInvoiceId = purchaseInvoiceId;
+    }
+
+    if (brandId) {
+      where.items = { some: { item: { brandId } } };
+    }
+
+    if (dateFrom || dateTo) {
+      where.date = {};
+      if (dateFrom) where.date.gte = new Date(dateFrom);
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23, 59, 59, 999);
+        where.date.lte = to;
+      }
     }
 
     if (search) {
@@ -104,6 +124,9 @@ export async function GET(request: Request) {
 // POST /api/purchase-returns - Create a new purchase return
 export async function POST(request: Request) {
   try {
+    const { error: postError } = await checkPermission('purchases_returns', 'edit');
+    if (postError) return postError;
+
     const body = await request.json();
 
     // Validate required fields
@@ -211,7 +234,7 @@ export async function POST(request: Request) {
     }
 
     // Create return in a transaction
-    const purchaseReturn = await db.$transaction(async (tx) => {
+    const purchaseReturn = await transaction(async (tx) => {
       // Generate return number
       const returnNumber = await generatePurchaseReturnNumber(tx as any);
 

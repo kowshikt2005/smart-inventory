@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/vendors/[id] - Get a single vendor by ID
 export async function GET(
@@ -7,6 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_vendors', 'view');
+    if (error) return error;
     const { id } = await params;
 
     const vendor = await db.vendor.findUnique({
@@ -36,6 +39,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_vendors', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
@@ -72,7 +77,12 @@ export async function PUT(
     if (body.pincode !== undefined) updateData.pincode = body.pincode || null;
     if (body.creditDays !== undefined) updateData.creditDays = body.creditDays;
     if (body.openingBalance !== undefined) updateData.openingBalance = body.openingBalance;
-    if (body.isActive !== undefined) updateData.isActive = body.isActive;
+    if (body.isActive !== undefined) {
+      if (typeof body.isActive !== 'boolean') {
+        return NextResponse.json({ error: 'isActive must be a boolean' }, { status: 400 });
+      }
+      updateData.isActive = body.isActive;
+    }
 
     // Update vendor
     const vendor = await db.vendor.update({
@@ -105,6 +115,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_vendors', 'edit');
+    if (error) return error;
     const { id } = await params;
 
     // Check if vendor exists

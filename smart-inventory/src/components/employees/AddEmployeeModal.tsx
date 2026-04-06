@@ -11,7 +11,43 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { X, Loader2 } from "lucide-react";
+import {
+  X,
+  Loader2,
+  User,
+  Upload,
+  Plus,
+  FileText,
+  Image as ImageIcon,
+  Eye,
+  EyeOff,
+} from "lucide-react";
+import useSWR from "swr";
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
+const SUGGESTED_LABELS = [
+  "Aadhar Card",
+  "PAN Card",
+  "Resume",
+  "ID Proof",
+  "Address Proof",
+  "Appointment Letter",
+  "Experience Letter",
+  "10th Certificate",
+  "12th Certificate",
+];
+
+interface RoleOption {
+  id: string;
+  name: string;
+}
+
+interface PendingDocument {
+  localId: string;
+  file: File;
+  label: string;
+}
 
 interface AddEmployeeModalProps {
   isOpen: boolean;
@@ -19,28 +55,40 @@ interface AddEmployeeModalProps {
   onSuccess?: () => void;
 }
 
-const USER_ROLES = [
-  { value: "SALESMAN", label: "Salesman" },
-  { value: "BILLING_OPERATOR", label: "Billing Operator" },
-  { value: "ACCOUNTANT", label: "Accountant" },
-  { value: "MANAGER", label: "Manager" },
-  { value: "ADMIN", label: "Administrator" },
-];
-
 export function AddEmployeeModal({
   isOpen,
   onClose,
   onSuccess,
 }: AddEmployeeModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitStep, setSubmitStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+
+  // Photo state
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Documents state
+  const [pendingDocs, setPendingDocs] = useState<PendingDocument[]>([]);
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docLabel, setDocLabel] = useState("");
+  const [docError, setDocError] = useState("");
+  const docFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch roles dynamically
+  const { data: roles } = useSWR<RoleOption[]>(
+    isOpen ? "/api/roles?activeOnly=true" : null,
+    fetcher
+  );
 
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
-    role: "SALESMAN",
+    roleId: "",
     phone: "",
     designation: "",
     department: "",
@@ -48,14 +96,24 @@ export function AddEmployeeModal({
     joinDate: new Date().toISOString().split("T")[0],
   });
 
+  // Set default roleId when roles load
+  useEffect(() => {
+    if (roles?.length && !formData.roleId) {
+      const salesman = roles.find((r) => r.name === "SALESMAN");
+      setFormData((prev) => ({ ...prev, roleId: salesman?.id || roles[0].id }));
+    }
+  }, [roles, formData.roleId]);
+
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
+      const defaultRoleId =
+        roles?.find((r) => r.name === "SALESMAN")?.id || roles?.[0]?.id || "";
       setFormData({
         name: "",
         email: "",
         password: "",
-        role: "SALESMAN",
+        roleId: defaultRoleId,
         phone: "",
         designation: "",
         department: "",
@@ -63,23 +121,64 @@ export function AddEmployeeModal({
         joinDate: new Date().toISOString().split("T")[0],
       });
       setError(null);
+      setSubmitStep(null);
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setPendingDocs([]);
+      setDocFile(null);
+      setDocLabel("");
+      setDocError("");
     }
-  }, [isOpen]);
+  }, [isOpen, roles]);
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Profile photo must be JPEG, PNG, or WebP");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Profile photo must be under 5MB");
+      return;
+    }
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhotoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleAddDocument = () => {
+    if (!docFile || !docLabel.trim()) {
+      setDocError("Both a label and a file are required");
+      return;
+    }
+    setPendingDocs((prev) => [
+      ...prev,
+      { localId: crypto.randomUUID(), file: docFile, label: docLabel.trim() },
+    ]);
+    setDocFile(null);
+    setDocLabel("");
+    setDocError("");
+    if (docFileInputRef.current) docFileInputRef.current.value = "";
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
+    setSubmitStep("Creating employee…");
 
     try {
-      const response = await fetch("/api/employees", {
+      // Step 1: Create employee record
+      const res = await fetch("/api/employees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formData.name,
           email: formData.email,
           password: formData.password,
-          role: formData.role,
+          roleId: formData.roleId,
           phone: formData.phone || null,
           designation: formData.designation || null,
           department: formData.department || null,
@@ -88,10 +187,32 @@ export function AddEmployeeModal({
         }),
       });
 
-      const data = await response.json();
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create employee");
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to create employee");
+      const employeeId: string = data.id;
+
+      // Step 2: Upload profile photo (non-fatal if it fails)
+      if (photoFile) {
+        setSubmitStep("Uploading profile photo…");
+        const photoForm = new FormData();
+        photoForm.append("photo", photoFile);
+        await fetch(`/api/employees/${employeeId}/photo`, {
+          method: "POST",
+          body: photoForm,
+        });
+      }
+
+      // Step 3: Upload documents sequentially (non-fatal)
+      for (let i = 0; i < pendingDocs.length; i++) {
+        setSubmitStep(`Uploading document ${i + 1} of ${pendingDocs.length}…`);
+        const docForm = new FormData();
+        docForm.append("file", pendingDocs[i].file);
+        docForm.append("label", pendingDocs[i].label);
+        await fetch(`/api/employees/${employeeId}/documents`, {
+          method: "POST",
+          body: docForm,
+        });
       }
 
       onSuccess?.();
@@ -100,12 +221,11 @@ export function AddEmployeeModal({
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setIsSubmitting(false);
+      setSubmitStep(null);
     }
   };
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -114,18 +234,16 @@ export function AddEmployeeModal({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Handle Escape key
+  // Escape key closes modal (disabled during submit)
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
-        onClose();
-      }
+      if (e.key === "Escape" && isOpen && !isSubmitting) onClose();
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, isSubmitting]);
 
-  // Focus first input when modal opens
+  // Auto-focus first field
   useEffect(() => {
     if (isOpen && firstInputRef.current) {
       setTimeout(() => firstInputRef.current?.focus(), 100);
@@ -142,21 +260,85 @@ export function AddEmployeeModal({
           <h2 className="text-xl font-bold text-gray-900">Add New Employee</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            disabled={isSubmitting}
+            className="text-gray-400 hover:text-gray-600 disabled:opacity-40"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
               {error}
             </div>
           )}
 
-          {/* Basic Information */}
+          {/* ── Profile Photo ── */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              Profile Photo
+            </h3>
+            <div className="flex items-center gap-4">
+              {/* Avatar preview */}
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 hover:border-teal-400 transition-colors shrink-0"
+              >
+                {photoPreview ? (
+                  <img
+                    src={photoPreview}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <User className="h-8 w-8 text-gray-400" />
+                )}
+              </button>
+
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => photoInputRef.current?.click()}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {photoFile ? "Change Photo" : "Upload Photo"}
+                  </Button>
+                  {photoFile && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhotoFile(null);
+                        setPhotoPreview(null);
+                        if (photoInputRef.current)
+                          photoInputRef.current.value = "";
+                      }}
+                      className="text-sm text-red-500 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">
+                  JPEG, PNG, or WebP — max 5 MB. Optional.
+                </p>
+              </div>
+
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handlePhotoChange}
+              />
+            </div>
+          </div>
+
+          {/* ── Basic Information ── */}
           <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
               Basic Information
@@ -195,16 +377,22 @@ export function AddEmployeeModal({
                 <Label htmlFor="password">
                   Password <span className="text-red-500">*</span>
                 </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
-                  placeholder="Enter password"
-                  minLength={6}
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    required
+                    placeholder="Enter password"
+                    minLength={6}
+                    className="pr-10"
+                  />
+                  <button type="button" onClick={() => setShowPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <div>
                 <Label htmlFor="phone">Phone Number</Label>
@@ -220,7 +408,7 @@ export function AddEmployeeModal({
             </div>
           </div>
 
-          {/* Role & Access */}
+          {/* ── Role & Access ── */}
           <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
               Role & Access
@@ -231,16 +419,24 @@ export function AddEmployeeModal({
                   User Role <span className="text-red-500">*</span>
                 </Label>
                 <Select
-                  value={formData.role}
-                  onValueChange={(value) => handleSelectChange("role", value)}
+                  value={formData.roleId}
+                  onValueChange={(value) =>
+                    handleSelectChange("roleId", value)
+                  }
                 >
                   <SelectTrigger id="role">
-                    <SelectValue />
+                    <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
-                    {USER_ROLES.map((role) => (
-                      <SelectItem key={role.value} value={role.value}>
-                        {role.label}
+                    {roles?.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name
+                          .split("_")
+                          .map(
+                            (w: string) =>
+                              w.charAt(0) + w.slice(1).toLowerCase()
+                          )
+                          .join(" ")}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -262,7 +458,7 @@ export function AddEmployeeModal({
             </div>
           </div>
 
-          {/* Job Details */}
+          {/* ── Job Details ── */}
           <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
               Job Details
@@ -306,7 +502,113 @@ export function AddEmployeeModal({
             </div>
           </div>
 
-          {/* Actions */}
+          {/* ── Documents ── */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              Documents{" "}
+              <span className="text-gray-400 font-normal">(optional)</span>
+            </h3>
+
+            <div className="border border-dashed border-gray-300 rounded-lg p-4 space-y-3">
+              {docError && (
+                <p className="text-sm text-red-600">{docError}</p>
+              )}
+
+              {/* Add a document row */}
+              <div className="flex gap-3 items-end">
+                <div className="flex-1 min-w-0">
+                  <Label htmlFor="docLabel" className="text-xs">
+                    Document Name
+                  </Label>
+                  <Input
+                    id="docLabel"
+                    value={docLabel}
+                    onChange={(e) => setDocLabel(e.target.value)}
+                    placeholder="e.g., Aadhar Card"
+                    className="h-9"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <Label htmlFor="docFile" className="text-xs">
+                    File (PDF or image)
+                  </Label>
+                  <Input
+                    id="docFile"
+                    ref={docFileInputRef}
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    onChange={(e) =>
+                      setDocFile(e.target.files?.[0] || null)
+                    }
+                    className="h-9"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAddDocument}
+                  className="h-9 shrink-0"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add
+                </Button>
+              </div>
+
+              {/* Quick-fill label chips */}
+              <div className="flex flex-wrap gap-1.5">
+                {SUGGESTED_LABELS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setDocLabel(s)}
+                    className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+
+              {/* Queued documents */}
+              {pendingDocs.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  {pendingDocs.map((doc) => (
+                    <div
+                      key={doc.localId}
+                      className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-200"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {doc.file.type === "application/pdf" ? (
+                          <FileText className="h-4 w-4 text-red-500 shrink-0" />
+                        ) : (
+                          <ImageIcon className="h-4 w-4 text-blue-500 shrink-0" />
+                        )}
+                        <span className="text-sm font-medium truncate">
+                          {doc.label}
+                        </span>
+                        <span className="text-xs text-gray-400 shrink-0 hidden sm:inline">
+                          {doc.file.name}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPendingDocs((prev) =>
+                            prev.filter((d) => d.localId !== doc.localId)
+                          )
+                        }
+                        className="text-gray-400 hover:text-red-500 shrink-0 ml-2"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Actions ── */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
             <Button
               type="button"
@@ -319,12 +621,12 @@ export function AddEmployeeModal({
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
+              className="bg-teal-500 hover:bg-teal-600 text-white min-w-[140px]"
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
+                  {submitStep || "Creating…"}
                 </>
               ) : (
                 "Create Employee"

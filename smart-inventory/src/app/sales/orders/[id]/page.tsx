@@ -73,15 +73,10 @@ interface OrderItem {
     unit: string;
     hsnCode: string | null;
     gstRate: number;
+    purchasePrice: number; // MRP is stored as purchasePrice
+    mrp: number | null;
+    discountPercent: number | null;
   };
-}
-
-interface InsufficientStockItem {
-  itemName: string;
-  itemCode: string;
-  required: number;
-  available: number;
-  shortfall: number;
 }
 
 interface SalesOrder {
@@ -184,42 +179,8 @@ export default function SalesOrderDetailPage() {
     }
   };
 
-  const handleCreateInvoice = async () => {
-    try {
-      const response = await fetch("/api/sales-invoices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ salesOrderId: id }),
-      });
-
-      const data = await response.json();
-
-      if (response.status === 409 && data.invoiceId) {
-        router.push(`/sales/invoices/${data.invoiceId}`);
-        return;
-      }
-
-      // Handle insufficient stock error
-      if (!response.ok && data.insufficientStock) {
-        const stockDetails = data.insufficientStock
-          .map(
-            (item: InsufficientStockItem) =>
-              `${item.itemName} (${item.itemCode}):\n  Required: ${item.required}\n  Available: ${item.available}\n  Missing: ${item.shortfall}`
-          )
-          .join("\n\n");
-        alert(`${data.error}\n\n${stockDetails}`);
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to create invoice");
-      }
-
-      router.push(`/sales/invoices/${data.id}`);
-    } catch (err) {
-      console.error("Error creating invoice:", err);
-      alert(err instanceof Error ? err.message : "Failed to create invoice");
-    }
+  const handleCreateInvoice = () => {
+    router.push(`/sales/invoices/new?salesOrderId=${id}`);
   };
 
   const formatCurrency = (amount: number) => {
@@ -271,7 +232,7 @@ export default function SalesOrderDetailPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-5xl mx-auto">
+      <div className="p-6 max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-6">
           <Button
@@ -301,8 +262,8 @@ export default function SalesOrderDetailPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {/* Edit - only for OPEN orders */}
-                  {order.status === "OPEN" && (
+                  {/* Edit - for OPEN and HOLD orders */}
+                  {(order.status === "OPEN" || order.status === "HOLD") && (
                     <DropdownMenuItem
                       onClick={() => router.push(`/sales/orders/new?edit=${id}`)}
                     >
@@ -357,11 +318,11 @@ export default function SalesOrderDetailPage() {
                     </>
                   )}
 
-                  {/* Delete - only for OPEN orders */}
-                  {order.status === "OPEN" && (
+                  {/* Delete - for OPEN, HOLD, and REJECTED orders */}
+                  {(order.status === "OPEN" || order.status === "HOLD" || order.status === "REJECTED") && (
                     <DropdownMenuItem
                       onClick={handleDelete}
-                      className="text-red-600"
+                      className="text-red-600 focus:text-red-600"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete Order
@@ -374,9 +335,9 @@ export default function SalesOrderDetailPage() {
         </div>
 
         {/* Customer & Order Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Customer Details</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Customer Details</h2>
             <div className="space-y-2 text-sm">
               <div>
                 <p className="text-gray-600">Name</p>
@@ -404,7 +365,7 @@ export default function SalesOrderDetailPage() {
           </div>
 
           <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Order Information</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Order Information</h2>
             <div className="space-y-2 text-sm">
               {order.referenceNumber && (
                 <div>
@@ -505,16 +466,18 @@ export default function SalesOrderDetailPage() {
                 <TableRow className="bg-gray-50">
                   <TableHead className="font-semibold">Item</TableHead>
                   <TableHead className="font-semibold">HSN</TableHead>
+                  <TableHead className="font-semibold text-right">MRP</TableHead>
+                  <TableHead className="font-semibold text-right">Item Disc %</TableHead>
                   <TableHead className="font-semibold text-right">Qty</TableHead>
                   <TableHead className="font-semibold text-center">Stock Status</TableHead>
-                  <TableHead className="font-semibold text-right">Rate</TableHead>
+                  <TableHead className="font-semibold text-right">Rate (Incl. Tax)</TableHead>
                   <TableHead className="font-semibold text-right">
-                    Discount %
+                    Order Disc %
                   </TableHead>
                   <TableHead className="font-semibold text-right">
                     Tax %
                   </TableHead>
-                  <TableHead className="font-semibold text-right">Amount</TableHead>
+                  <TableHead className="font-semibold text-right">Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -522,6 +485,13 @@ export default function SalesOrderDetailPage() {
                   const stockInfo = item.stockInfo;
                   const hasStockInfo = stockInfo !== undefined;
                   const itemHasStock = hasStockInfo ? stockInfo.stockStatus === 'Available' : item.hasStock;
+
+                  // Calculate discount percentage from MRP (purchasePrice) and Rate
+                  const mrp = item.item.purchasePrice ? Number(item.item.purchasePrice) : null;
+                  const rate = Number(item.rate);
+                  const calculatedDiscount = mrp && rate && mrp > rate && mrp > 0
+                    ? ((mrp - rate) / mrp) * 100
+                    : null;
 
                   return (
                     <TableRow
@@ -538,6 +508,12 @@ export default function SalesOrderDetailPage() {
                       </TableCell>
                       <TableCell className="text-sm">
                         {item.item.hsnCode || "-"}
+                      </TableCell>
+                      <TableCell className="text-right text-sm text-gray-900 font-medium">
+                        {mrp ? formatCurrency(mrp) : "-"}
+                      </TableCell>
+                      <TableCell className="text-right text-sm text-green-600 font-medium">
+                        {calculatedDiscount !== null ? `${calculatedDiscount.toFixed(2)}%` : "-"}
                       </TableCell>
                       <TableCell className="text-right">
                         {Number(item.quantity)} {item.item.unit}
@@ -590,7 +566,7 @@ export default function SalesOrderDetailPage() {
                         {Number(item.taxRate)}%
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(Number(item.amount) + Number(item.taxAmount))}
+                        {formatCurrency(Number(item.quantity) * Number(item.rate))}
                       </TableCell>
                     </TableRow>
                   );
@@ -603,7 +579,7 @@ export default function SalesOrderDetailPage() {
         {/* Totals */}
         <div className="flex justify-end">
           <div className="bg-white rounded-lg border border-gray-200 p-6 w-full md:w-1/2">
-            <h2 className="text-lg font-semibold mb-4">Order Summary</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Order Summary</h2>
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Subtotal</span>

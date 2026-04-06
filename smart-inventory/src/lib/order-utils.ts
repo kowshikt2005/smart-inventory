@@ -6,26 +6,70 @@ export const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 /**
  * Generate the next order number in sequence (SO-0001, SO-0002, etc.)
+ * Checks both SalesOrder table AND Invoice table (which stores orderNumber from deleted orders)
  */
 export async function generateOrderNumber(db: PrismaClient): Promise<string> {
-  const lastOrder = await db.salesOrder.findFirst({
-    orderBy: { orderNumber: 'desc' },
-    select: { orderNumber: true },
-  });
+  // Check both tables to find the highest SO number ever used
+  const [lastSalesOrder, lastInvoice] = await Promise.all([
+    db.salesOrder.findFirst({
+      orderBy: { orderNumber: 'desc' },
+      select: { orderNumber: true },
+    }),
+    db.invoice.findFirst({
+      where: { orderNumber: { startsWith: 'SO-' } },
+      orderBy: { orderNumber: 'desc' },
+      select: { orderNumber: true },
+    }),
+  ]);
 
-  let nextNum = 1;
-  if (lastOrder) {
-    const match = lastOrder.orderNumber.match(/SO-(\d+)/);
+  let maxNum = 0;
+
+  // Extract number from sales order
+  if (lastSalesOrder) {
+    const match = lastSalesOrder.orderNumber.match(/SO-(\d+)/);
     if (match) {
-      nextNum = parseInt(match[1], 10) + 1;
+      maxNum = Math.max(maxNum, parseInt(match[1], 10));
     }
   }
 
-  return `SO-${String(nextNum).padStart(4, '0')}`;
+  // Extract number from invoice (deleted orders end up here)
+  if (lastInvoice?.orderNumber) {
+    const match = lastInvoice.orderNumber.match(/SO-(\d+)/);
+    if (match) {
+      maxNum = Math.max(maxNum, parseInt(match[1], 10));
+    }
+  }
+
+  return `SO-${String(maxNum + 1).padStart(4, '0')}`;
 }
 
 /**
- * Calculate tax amount based on taxable amount and rate
+ * Calculate tax amount from tax-inclusive amount (back-calculation)
+ * For tax-inclusive pricing: inclusiveAmount = baseAmount + tax
+ * So: baseAmount = inclusiveAmount / (1 + taxRate/100)
+ * And: taxAmount = inclusiveAmount - baseAmount
+ */
+export function calculateTaxInclusive(inclusiveAmount: number, taxRate: number): {
+  baseAmount: number;
+  taxAmount: number;
+  cgst: number;
+  sgst: number
+} {
+  const baseAmount = inclusiveAmount / (1 + taxRate / 100);
+  const taxAmount = inclusiveAmount - baseAmount;
+  const cgst = taxAmount / 2;
+  const sgst = taxAmount / 2;
+
+  return {
+    baseAmount: Math.round(baseAmount * 1000) / 1000,
+    taxAmount: Math.round(taxAmount * 1000) / 1000,
+    cgst: Math.round(cgst * 1000) / 1000,
+    sgst: Math.round(sgst * 1000) / 1000,
+  };
+}
+
+/**
+ * Calculate tax amount based on taxable amount and rate (tax exclusive - kept for backward compatibility)
  */
 export function calculateTax(amount: number, taxRate: number): { taxAmount: number; cgst: number; sgst: number } {
   const taxAmount = amount * (taxRate / 100);
@@ -33,14 +77,15 @@ export function calculateTax(amount: number, taxRate: number): { taxAmount: numb
   const sgst = taxAmount / 2;
 
   return {
-    taxAmount: Math.round(taxAmount * 100) / 100,
-    cgst: Math.round(cgst * 100) / 100,
-    sgst: Math.round(sgst * 100) / 100,
+    taxAmount: Math.round(taxAmount * 1000) / 1000,
+    cgst: Math.round(cgst * 1000) / 1000,
+    sgst: Math.round(sgst * 1000) / 1000,
   };
 }
 
 /**
- * Calculate line item totals
+ * Calculate line item totals (Tax Inclusive System)
+ * Rate is the tax-inclusive price (MRP). We back-calculate the base amount and tax.
  */
 export function calculateLineItem(
   quantity: number,
@@ -48,21 +93,72 @@ export function calculateLineItem(
   taxRate: number,
   discountPercent: number = 0
 ): {
-  amount: number;
-  taxAmount: number;
-  totalAmount: number;
+  amount: number;      // Base amount (excluding tax)
+  taxAmount: number;   // Tax amount
+  totalAmount: number; // Total (amount + tax) = quantity * rate after discount
 } {
-  const grossAmount = quantity * rate;
-  const discountAmount = grossAmount * (discountPercent / 100);
-  const amount = grossAmount - discountAmount;
-  const { taxAmount } = calculateTax(amount, taxRate);
-  const totalAmount = amount + taxAmount;
+  // Rate is tax-inclusive, so total line value is simply quantity * rate
+  const grossTotal = quantity * rate;
+  const discountAmount = grossTotal * (discountPercent / 100);
+  const totalAmount = grossTotal - discountAmount;
+
+  // Back-calculate base amount and tax from the inclusive total
+  const { baseAmount, taxAmount } = calculateTaxInclusive(totalAmount, taxRate);
 
   return {
-    amount: Math.round(amount * 100) / 100,
-    taxAmount: Math.round(taxAmount * 100) / 100,
-    totalAmount: Math.round(totalAmount * 100) / 100,
+    amount: baseAmount,  // Base amount (taxable value)
+    taxAmount: taxAmount,
+    totalAmount: Math.round(totalAmount * 1000) / 1000,
   };
+}
+
+/**
+ * Calculate line item totals with automatic GST model detection
+ * - If discountPercent > 0: Rate is MRP (tax-inclusive), use inclusive calculation
+ * - If discountPercent == 0: Rate is selling price (tax-exclusive), use exclusive calculation
+ *
+ * This matches the pricing logic:
+ * - No rate sheet → selling price + EXCLUSIVE GST
+ * - Rate sheet with 0% discount → selling price + EXCLUSIVE GST
+ * - Rate sheet with discount > 0 → MRP + INCLUSIVE GST
+ */
+export function calculateLineItemV2(
+  quantity: number,
+  rate: number,
+  taxRate: number,
+  discountPercent: number = 0
+): {
+  amount: number;      // Base amount (excluding tax)
+  taxAmount: number;   // Tax amount
+  totalAmount: number; // Total (amount + tax)
+  isGstInclusive: boolean;
+} {
+  const isGstInclusive = discountPercent > 0;
+
+  if (isGstInclusive) {
+    // MRP-based pricing with discount: Rate includes GST, back-calculate
+    const grossTotal = quantity * rate;
+    const { baseAmount, taxAmount } = calculateTaxInclusive(grossTotal, taxRate);
+
+    return {
+      amount: baseAmount,
+      taxAmount: taxAmount,
+      totalAmount: Math.round(grossTotal * 1000) / 1000,
+      isGstInclusive: true,
+    };
+  } else {
+    // Selling price: Rate is exclusive, add GST on top
+    const baseAmount = quantity * rate;
+    const { taxAmount } = calculateTax(baseAmount, taxRate);
+    const totalAmount = baseAmount + taxAmount;
+
+    return {
+      amount: Math.round(baseAmount * 1000) / 1000,
+      taxAmount: taxAmount,
+      totalAmount: Math.round(totalAmount * 1000) / 1000,
+      isGstInclusive: false,
+    };
+  }
 }
 
 /**
@@ -85,49 +181,243 @@ export function calculateOrderTotals(
   const totalAmount = subtotal + totalTax + roundOff;
 
   return {
-    subtotal: Math.round(subtotal * 100) / 100,
-    totalTax: Math.round(totalTax * 100) / 100,
-    cgst: Math.round(cgst * 100) / 100,
-    sgst: Math.round(sgst * 100) / 100,
-    totalAmount: Math.round(totalAmount * 100) / 100,
+    subtotal: Math.round(subtotal * 1000) / 1000,
+    totalTax: Math.round(totalTax * 1000) / 1000,
+    cgst: Math.round(cgst * 1000) / 1000,
+    sgst: Math.round(sgst * 1000) / 1000,
+    totalAmount: Math.round(totalAmount * 1000) / 1000,
   };
 }
 
 /**
- * Get effective rate considering customer rate sheet
+ * Inclusion discounts structure
+ */
+interface InclusionDiscount {
+  id: string;
+  discountPercent: number;
+}
+
+interface InclusionDiscounts {
+  brands?: InclusionDiscount[];
+  subBrands?: InclusionDiscount[];
+  items?: InclusionDiscount[];
+}
+
+/**
+ * Get effective rate considering customer rate sheet (Legacy function)
+ *
+ * Logic:
+ * - Customer WITH rate sheet: Use MRP as base, apply rate sheet discounts (inclusive GST)
+ * - Customer WITHOUT rate sheet: Use sellingPrice as base, no discount (inclusive GST)
+ *
+ * @param sellingPrice - The item's selling price (tax-inclusive) - used when no rate sheet
+ * @param mrp - The item's MRP (tax-inclusive) - used when customer has rate sheet
  */
 export function getEffectiveRate(
-  standardPrice: number,
+  sellingPrice: number,
   rateSheet?: {
     isActive: boolean;
-    itemRatePercent: number | Decimal;
     discountPercent: number | Decimal;
     excludedItemIds?: string[];
+    excludedBrandIds?: string[];
+    excludedSubBrandIds?: string[];
   } | null,
-  itemId?: string
+  item?: {
+    id: string;
+    brandId?: string | null;
+    subBrandId?: string | null;
+  },
+  mrp?: number
 ): number {
+  // No rate sheet - use sellingPrice, no discount
   if (!rateSheet || !rateSheet.isActive) {
-    return standardPrice;
+    return sellingPrice;
   }
 
+  // Customer has rate sheet - use MRP as base (fallback to sellingPrice if MRP not provided)
+  const basePrice = mrp !== undefined ? mrp : sellingPrice;
+
   // Check if item is excluded from this rate sheet
-  if (itemId && rateSheet.excludedItemIds) {
-    const excludedIds = Array.isArray(rateSheet.excludedItemIds)
-      ? rateSheet.excludedItemIds
-      : [];
-    if (excludedIds.includes(itemId)) {
-      return standardPrice;
+  if (item) {
+    // Check item exclusion
+    if (rateSheet.excludedItemIds) {
+      const excludedIds = Array.isArray(rateSheet.excludedItemIds)
+        ? rateSheet.excludedItemIds
+        : [];
+      if (excludedIds.includes(item.id)) {
+        // Excluded item - use MRP with 0% discount
+        return basePrice;
+      }
+    }
+
+    // Check brand exclusion
+    if (item.brandId && rateSheet.excludedBrandIds) {
+      const excludedBrandIds = Array.isArray(rateSheet.excludedBrandIds)
+        ? rateSheet.excludedBrandIds
+        : [];
+      if (excludedBrandIds.includes(item.brandId)) {
+        // Excluded brand - use MRP with 0% discount
+        return basePrice;
+      }
+    }
+
+    // Check sub-brand exclusion
+    if (item.subBrandId && rateSheet.excludedSubBrandIds) {
+      const excludedSubBrandIds = Array.isArray(rateSheet.excludedSubBrandIds)
+        ? rateSheet.excludedSubBrandIds
+        : [];
+      if (excludedSubBrandIds.includes(item.subBrandId)) {
+        // Excluded sub-brand - use MRP with 0% discount
+        return basePrice;
+      }
     }
   }
 
-  const itemRatePercent = Number(rateSheet.itemRatePercent);
   const discountPercent = Number(rateSheet.discountPercent);
 
-  // Apply item rate percent first, then discount
-  const rateAfterPercent = standardPrice * (itemRatePercent / 100);
-  const effectiveRate = rateAfterPercent * (1 - discountPercent / 100);
+  // Apply rate sheet discount on MRP
+  const effectiveRate = basePrice * (1 - discountPercent / 100);
 
-  return Math.round(effectiveRate * 100) / 100;
+  return Math.round(effectiveRate * 1000) / 1000;
+}
+
+/**
+ * Resolve discount from inclusion model using cascade logic
+ * Priority: Item discount > Sub-brand discount > Brand discount > 0%
+ */
+export function resolveInclusionDiscount(
+  itemId: string,
+  brandId: string | null | undefined,
+  subBrandId: string | null | undefined,
+  inclusionDiscounts: InclusionDiscounts | null | undefined
+): number {
+  if (!inclusionDiscounts) return 0;
+
+  // Check item first (highest priority)
+  if (inclusionDiscounts.items && Array.isArray(inclusionDiscounts.items)) {
+    const itemDiscount = inclusionDiscounts.items.find(i => i.id === itemId);
+    if (itemDiscount) return Number(itemDiscount.discountPercent);
+  }
+
+  // Check sub-brand second
+  if (subBrandId && inclusionDiscounts.subBrands && Array.isArray(inclusionDiscounts.subBrands)) {
+    const subBrandDiscount = inclusionDiscounts.subBrands.find(sb => sb.id === subBrandId);
+    if (subBrandDiscount) return Number(subBrandDiscount.discountPercent);
+  }
+
+  // Check brand last
+  if (brandId && inclusionDiscounts.brands && Array.isArray(inclusionDiscounts.brands)) {
+    const brandDiscount = inclusionDiscounts.brands.find(b => b.id === brandId);
+    if (brandDiscount) return Number(brandDiscount.discountPercent);
+  }
+
+  // Item not included in rate sheet
+  return 0;
+}
+
+/**
+ * Calculate inclusive tax pricing rate
+ * Formula: Final = (baseAmount/(1+(gstRate/100)))*(1-(discountPercent/100))*(1+(gstRate/100))
+ * Simplified: Final = baseAmount * (1 - discountPercent/100)
+ *
+ * This applies discount correctly on tax-inclusive prices
+ */
+export function calculateInclusiveTaxRate(
+  baseAmount: number,
+  gstRate: number,
+  discountPercent: number
+): number {
+  const gstFactor = 1 + (gstRate / 100);
+  // Extract base price, apply discount, then add tax back
+  const result = (baseAmount / gstFactor) * (1 - discountPercent / 100) * gstFactor;
+  return Math.round(result * 1000) / 1000;
+}
+
+/**
+ * Get effective rate V2 - Uses MRP for rate sheet customers, sellingPrice for non-rate sheet customers
+ * GST is always inclusive in both cases.
+ *
+ * @param item - Item details including MRP and sellingPrice
+ * @param rateSheet - Customer's rate sheet (if any)
+ *
+ * Logic:
+ * - Customer WITH rate sheet: Use MRP as base, apply rate sheet discounts (inclusive GST)
+ * - Customer WITHOUT rate sheet: Use sellingPrice as base, no discount (inclusive GST)
+ */
+export function getEffectiveRateV2(
+  item: {
+    id: string;
+    mrp: number | Decimal;
+    sellingPrice: number | Decimal;
+    gstRate: number | Decimal;
+    brandId?: string | null;
+    subBrandId?: string | null;
+  },
+  rateSheet?: {
+    isActive: boolean;
+    useInclusionModel?: boolean;
+    discountPercent: number | Decimal;
+    inclusionDiscounts?: InclusionDiscounts | null;
+    excludedItemIds?: string[];
+    excludedBrandIds?: string[];
+    excludedSubBrandIds?: string[];
+  } | null
+): { rate: number; discountPercent: number } {
+  const mrp = Number(item.mrp);
+  const sellingPrice = Number(item.sellingPrice);
+  const gstRate = Number(item.gstRate);
+
+  // No rate sheet - use sellingPrice as base, no discount (GST inclusive)
+  if (!rateSheet || !rateSheet.isActive) {
+    return { rate: sellingPrice, discountPercent: 0 };
+  }
+
+  // Customer has rate sheet - always use MRP as base (GST inclusive)
+  // Check if using inclusion model (new system)
+  const useInclusionModel = rateSheet.useInclusionModel !== false;
+
+  if (useInclusionModel && rateSheet.inclusionDiscounts) {
+    // Inclusion model: Use MRP as base, apply cascade discount
+    const discountPercent = resolveInclusionDiscount(
+      item.id,
+      item.brandId,
+      item.subBrandId,
+      rateSheet.inclusionDiscounts
+    );
+
+    if (discountPercent > 0) {
+      // Apply inclusive tax pricing formula on MRP
+      const rate = calculateInclusiveTaxRate(mrp, gstRate, discountPercent);
+      return { rate, discountPercent };
+    }
+
+    // Item not in inclusion list - use MRP with 0% discount
+    return { rate: mrp, discountPercent: 0 };
+  }
+
+  // Legacy exclusion model - still use MRP as base for rate sheet customers
+  // Check if item is excluded
+  const excludedItemIds = Array.isArray(rateSheet.excludedItemIds) ? rateSheet.excludedItemIds : [];
+  const excludedBrandIds = Array.isArray(rateSheet.excludedBrandIds) ? rateSheet.excludedBrandIds : [];
+  const excludedSubBrandIds = Array.isArray(rateSheet.excludedSubBrandIds) ? rateSheet.excludedSubBrandIds : [];
+
+  if (excludedItemIds.includes(item.id)) {
+    // Excluded item - use MRP with 0% discount
+    return { rate: mrp, discountPercent: 0 };
+  }
+  if (item.brandId && excludedBrandIds.includes(item.brandId)) {
+    // Excluded brand - use MRP with 0% discount
+    return { rate: mrp, discountPercent: 0 };
+  }
+  if (item.subBrandId && excludedSubBrandIds.includes(item.subBrandId)) {
+    // Excluded sub-brand - use MRP with 0% discount
+    return { rate: mrp, discountPercent: 0 };
+  }
+
+  // Apply discount percent on MRP
+  const discountPercent = Number(rateSheet.discountPercent);
+  const rate = calculateInclusiveTaxRate(mrp, gstRate, discountPercent);
+  return { rate, discountPercent };
 }
 
 /**
@@ -153,7 +443,7 @@ export function formatCurrency(amount: number, currency: string = 'INR'): string
     style: 'currency',
     currency,
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 3,
   }).format(amount);
 }
 

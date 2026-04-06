@@ -16,6 +16,7 @@ import {
   Loader2,
   CheckCircle2,
   Ban,
+  Trash2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
@@ -118,19 +119,35 @@ export default function SalesReturnDetailPage() {
     if (!confirm("Are you sure you want to cancel this return?")) return;
 
     try {
-      const response = await fetch(`/api/sales-returns/${id}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(`/api/sales-returns/${id}/cancel`, { method: "POST" });
 
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Failed to cancel return");
       }
 
-      router.push("/sales/returns");
+      window.location.reload();
     } catch (err) {
       console.error("Error cancelling return:", err);
       alert(err instanceof Error ? err.message : "Failed to cancel return");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm("Permanently delete this return? This cannot be undone.")) return;
+
+    try {
+      const response = await fetch(`/api/sales-returns/${id}`, { method: "DELETE" });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to delete return");
+      }
+
+      router.push("/sales/returns");
+    } catch (err) {
+      console.error("Error deleting return:", err);
+      alert(err instanceof Error ? err.message : "Failed to delete return");
     }
   };
 
@@ -193,26 +210,34 @@ export default function SalesReturnDetailPage() {
             </div>
             <div className="flex items-center gap-3">
               <ReturnStatusBadge status={salesReturn.status} />
-              {salesReturn.status === "OPEN" && (
-                <div className="flex gap-2">
-                  <Button onClick={handleComplete} className="bg-green-500 hover:bg-green-600">
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Complete Return
+              <div className="flex gap-2">
+                {salesReturn.status === "OPEN" && (
+                  <>
+                    <Button onClick={handleComplete} className="bg-green-500 hover:bg-green-600">
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Complete Return
+                    </Button>
+                    <Button onClick={handleCancel} variant="outline" className="text-orange-600 border-orange-300 hover:bg-orange-50">
+                      <Ban className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </>
+                )}
+                {(salesReturn.status === "OPEN" || salesReturn.status === "CANCELLED") && (
+                  <Button onClick={handleDelete} variant="outline" className="text-red-600 border-red-300 hover:bg-red-50">
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
                   </Button>
-                  <Button onClick={handleCancel} variant="outline" className="text-red-600">
-                    <Ban className="h-4 w-4 mr-2" />
-                    Cancel
-                  </Button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Customer & Return Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Customer Details</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Customer Details</h2>
             <div className="space-y-2 text-sm">
               <div>
                 <p className="text-gray-600">Name</p>
@@ -238,7 +263,7 @@ export default function SalesReturnDetailPage() {
           </div>
 
           <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Return Information</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Return Information</h2>
             <div className="space-y-2 text-sm">
               {salesReturn.invoice && (
                 <div>
@@ -299,7 +324,7 @@ export default function SalesReturnDetailPage() {
         {/* Totals */}
         <div className="flex justify-end">
           <div className="bg-white rounded-lg border border-gray-200 p-6 w-full md:w-1/2">
-            <h2 className="text-lg font-semibold mb-4">Return Summary</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Return Summary</h2>
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Subtotal</span>

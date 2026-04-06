@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { calculateLineItem, calculateOrderTotals } from '@/lib/order-utils';
+import { db, transaction } from '@/lib/db';
+import { calculateLineItemV2, calculateOrderTotals } from '@/lib/order-utils';
 import { calculateStockAllocation, getOrderAllocation, calculateOrderStockStatus } from '@/lib/stock-allocation';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/sales-orders/[id] - Get a single sales order
 export async function GET(
@@ -9,6 +10,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_orders', 'view');
+    if (error) return error;
     const { id } = await params;
 
     const salesOrder = await db.salesOrder.findUnique({
@@ -41,7 +44,10 @@ export async function GET(
                 unit: true,
                 hsnCode: true,
                 gstRate: true,
-                standardPrice: true,
+                sellingPrice: true,
+                purchasePrice: true,
+                mrp: true,
+                discountPercent: true,
                 inventory: {
                   select: {
                     physicalStock: true,
@@ -71,7 +77,7 @@ export async function GET(
             changedAt: 'desc',
           },
         },
-        invoice: {
+        invoices: {
           select: {
             id: true,
             invoiceNumber: true,
@@ -159,6 +165,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_orders', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
@@ -177,12 +185,25 @@ export async function PUT(
       );
     }
 
-    // Only allow updates for OPEN orders
-    if (existingOrder.status !== 'OPEN') {
+    // Only allow updates for OPEN and HOLD orders
+    if (existingOrder.status !== 'OPEN' && existingOrder.status !== 'HOLD') {
       return NextResponse.json(
-        { error: 'Can only edit orders with OPEN status' },
+        { error: 'Can only edit orders with OPEN or HOLD status' },
         { status: 400 }
       );
+    }
+
+    // Validate customer if changed
+    if (body.customerId && body.customerId !== existingOrder.customerId) {
+      const customer = await db.customer.findUnique({
+        where: { id: body.customerId },
+      });
+      if (!customer) {
+        return NextResponse.json(
+          { error: 'Customer not found' },
+          { status: 400 }
+        );
+      }
     }
 
     // Validate items if provided
@@ -217,7 +238,7 @@ export async function PUT(
       }
 
       // Update in transaction with extended timeout
-      const updatedOrder = await db.$transaction(async (tx) => {
+      const updatedOrder = await transaction(async (tx) => {
         // Release old inventory reservations (only if inventory exists) - OPTIMIZED
         const oldItemIds = existingOrder.items.map(item => item.itemId);
         const newItemIds = body.items.map((item: any) => item.itemId);
@@ -251,12 +272,12 @@ export async function PUT(
           }),
         ]);
 
-        // Calculate new item totals
+        // Calculate new item totals using V2 which handles both inclusive and exclusive GST
         const orderItems = body.items.map((orderItem: any) => {
           const item = items.find((i) => i.id === orderItem.itemId)!;
           const taxRate = Number(item.gstRate);
           const discountPercent = orderItem.discountPercent || 0;
-          const { amount, taxAmount } = calculateLineItem(
+          const { amount, taxAmount } = calculateLineItemV2(
             orderItem.quantity,
             orderItem.rate,
             taxRate,
@@ -285,6 +306,7 @@ export async function PUT(
         const order = await tx.salesOrder.update({
           where: { id },
           data: {
+            customerId: body.customerId || existingOrder.customerId,
             orderDate: body.orderDate ? new Date(body.orderDate) : undefined,
             expectedDelivery: body.expectedDelivery
               ? new Date(body.expectedDelivery)
@@ -351,6 +373,7 @@ export async function PUT(
 
     // Update only non-item fields
     const updateData: any = {};
+    if (body.customerId !== undefined) updateData.customerId = body.customerId;
     if (body.orderDate !== undefined) updateData.orderDate = new Date(body.orderDate);
     if (body.expectedDelivery !== undefined)
       updateData.expectedDelivery = body.expectedDelivery
@@ -402,6 +425,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_orders', 'edit');
+    if (error) return error;
     const { id } = await params;
 
     // Get existing order
@@ -419,16 +444,16 @@ export async function DELETE(
       );
     }
 
-    // Only allow deletion for OPEN orders
-    if (existingOrder.status !== 'OPEN') {
+    // Only allow deletion for OPEN, HOLD, and REJECTED orders
+    if (!['OPEN', 'HOLD', 'REJECTED'].includes(existingOrder.status)) {
       return NextResponse.json(
-        { error: 'Can only delete orders with OPEN status' },
+        { error: 'Cannot delete invoiced orders' },
         { status: 400 }
       );
     }
 
     // Delete in transaction with extended timeout - OPTIMIZED
-    await db.$transaction(async (tx) => {
+    await transaction(async (tx) => {
       // Get all inventory records in one query
       const itemIds = existingOrder.items.map(item => item.itemId);
       const inventories = await tx.inventory.findMany({

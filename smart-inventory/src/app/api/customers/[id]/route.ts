@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
+import { normalizeGstin, validateGstin } from '@/lib/gst-validation';
 
 // GET /api/customers/[id] - Get a single customer by ID
 export async function GET(
@@ -7,12 +9,18 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_customers', 'view');
+    if (error) return error;
     const { id } = await params;
 
     const customer = await db.customer.findUnique({
       where: { id },
       include: {
-        rateSheet: true,
+        rateSheets: {
+          include: {
+            rateSheet: true,
+          },
+        },
       },
     });
 
@@ -39,6 +47,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_customers', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
@@ -54,21 +64,38 @@ export async function PUT(
       );
     }
 
-    // Validate GSTIN format if provided
-    if (body.gstin && body.gstin.length !== 15) {
-      return NextResponse.json(
-        { error: 'GSTIN must be exactly 15 characters' },
-        { status: 400 }
-      );
+    const hasGstinField = body.gstin !== undefined;
+    const normalizedGstin = hasGstinField ? normalizeGstin(body.gstin || '') : null;
+
+    if (hasGstinField) {
+      const gstValidation = validateGstin(normalizedGstin || '');
+      if (!gstValidation.valid) {
+        return NextResponse.json(
+          { error: gstValidation.error },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate financial fields
+    if (body.creditLimit !== undefined && Number(body.creditLimit) < 0) {
+      return NextResponse.json({ error: 'Credit limit cannot be negative' }, { status: 400 });
+    }
+    if (body.creditDays !== undefined && Number(body.creditDays) < 0) {
+      return NextResponse.json({ error: 'Credit days cannot be negative' }, { status: 400 });
+    }
+    if (body.openingBalance !== undefined && Number(body.openingBalance) < 0) {
+      return NextResponse.json({ error: 'Opening balance cannot be negative' }, { status: 400 });
     }
 
     // Build update data
     const updateData: any = {};
 
     if (body.name !== undefined) updateData.name = body.name;
+    if (body.contactName !== undefined) updateData.contactName = body.contactName || null;
     if (body.email !== undefined) updateData.email = body.email || null;
     if (body.phone !== undefined) updateData.phone = body.phone || null;
-    if (body.gstin !== undefined) updateData.gstin = body.gstin || null;
+    if (hasGstinField) updateData.gstin = normalizedGstin;
     if (body.address !== undefined) updateData.address = body.address || null;
     if (body.city !== undefined) updateData.city = body.city || null;
     if (body.state !== undefined) updateData.state = body.state || null;
@@ -76,7 +103,12 @@ export async function PUT(
     if (body.creditLimit !== undefined) updateData.creditLimit = body.creditLimit;
     if (body.creditDays !== undefined) updateData.creditDays = body.creditDays;
     if (body.openingBalance !== undefined) updateData.openingBalance = body.openingBalance;
-    if (body.status !== undefined) updateData.status = body.status;
+    if (body.status !== undefined) {
+      if (!['ACTIVE', 'INACTIVE'].includes(body.status)) {
+        return NextResponse.json({ error: 'Invalid status value' }, { status: 400 });
+      }
+      updateData.status = body.status;
+    }
 
     // Update customer
     const customer = await db.customer.update({
@@ -109,6 +141,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_customers', 'edit');
+    if (error) return error;
     const { id } = await params;
 
     // Check if customer exists

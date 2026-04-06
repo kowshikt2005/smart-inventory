@@ -10,10 +10,10 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-background">
         <Sidebar />
         <Header />
-        <main className="ml-64 pt-16">
+        <main className="ml-[230px] pt-16">
           {children}
         </main>
       </div>

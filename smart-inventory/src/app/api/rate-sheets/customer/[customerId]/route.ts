@@ -1,34 +1,41 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { cache, cacheKeys, cacheTTL } from '@/lib/cache';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/rate-sheets/customer/[customerId] - Get the active rate sheet for a customer
-// This is used during sales order creation to calculate discounted prices
+// This is used during sales order creation to calculate discounted prices.
+// If a customer belongs to multiple rate sheets, the most recently created active one wins.
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ customerId: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_rate_sheets', 'view');
+    if (error) return error;
+
     const { customerId } = await params;
 
-    // Use cache for frequently accessed rate sheets
     const cachedData = await cache.getOrSet(
       cacheKeys.rateSheet(customerId),
       async () => {
-        // Fetch customer and rate sheet in parallel
-        const [customer, rateSheet] = await Promise.all([
+        // Fetch customer and all rate sheets for this customer via join table
+        const [customer, joinEntries] = await Promise.all([
           db.customer.findUnique({
             where: { id: customerId },
-            select: {
-              id: true,
-              customerNumber: true,
-              name: true,
-            },
+            select: { id: true, customerNumber: true, name: true },
           }),
-          db.rateSheet.findUnique({
+          db.rateSheetCustomer.findMany({
             where: { customerId },
+            include: {
+              rateSheet: true,
+            },
+            orderBy: { rateSheet: { createdAt: 'desc' } },
           }),
         ]);
+
+        // Pick the most recent rate sheet (first after desc sort)
+        const rateSheet = joinEntries.length > 0 ? joinEntries[0].rateSheet : null;
 
         return { customer, rateSheet };
       },
@@ -46,7 +53,6 @@ export async function GET(
 
     const now = new Date();
 
-    // Check if rate sheet is valid and active
     if (!rateSheet) {
       return NextResponse.json({
         customer,
@@ -64,15 +70,7 @@ export async function GET(
     const isValidTo = !rateSheet.validTo || rateSheet.validTo >= now;
     const isEffective = isActive && isValidFrom && isValidTo;
 
-    // Calculate effective discount
-    // Final price = basePrice * (itemRatePercent / 100) * (1 - discountPercent / 100)
-    const itemRatePercent = Number(rateSheet.itemRatePercent);
     const discountPercent = Number(rateSheet.discountPercent);
-
-    // Effective rate is the combined effect of item rate and discount
-    // e.g., 90% item rate with 10% discount = 90% * 90% = 81% of original price
-    const effectiveRatePercent = itemRatePercent * (1 - discountPercent / 100);
-    const effectiveDiscount = 100 - effectiveRatePercent;
 
     return NextResponse.json({
       customer,
@@ -80,19 +78,18 @@ export async function GET(
       rateSheet: {
         id: rateSheet.id,
         name: rateSheet.name,
-        itemRatePercent,
         discountPercent,
-        currency: rateSheet.currency,
-        roundOff: rateSheet.roundOff,
         validFrom: rateSheet.validFrom,
         validTo: rateSheet.validTo,
         isActive: rateSheet.isActive,
+        useInclusionModel: rateSheet.useInclusionModel,
+        inclusionDiscounts: rateSheet.inclusionDiscounts,
+        excludedItemIds: rateSheet.excludedItemIds || [],
+        excludedBrandIds: rateSheet.excludedBrandIds || [],
+        excludedSubBrandIds: rateSheet.excludedSubBrandIds || [],
       },
       isEffective,
-      effectiveRatePercent: isEffective ? effectiveRatePercent : 100,
-      effectiveDiscount: isEffective ? effectiveDiscount : 0,
-      currency: rateSheet.currency,
-      roundOff: rateSheet.roundOff,
+      discountPercent: isEffective ? discountPercent : 0,
     });
   } catch (error) {
     console.error('Error fetching customer rate sheet:', error);

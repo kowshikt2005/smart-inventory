@@ -38,6 +38,7 @@ import {
   X,
   Users,
   Search,
+  User,
 } from "lucide-react";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
@@ -45,6 +46,7 @@ import useSWR from "swr";
 import { useDebounce } from "@/hooks/useDebounce";
 import { AddEmployeeModal } from "@/components/employees/AddEmployeeModal";
 import { EditEmployeeModal } from "@/components/employees/EditEmployeeModal";
+import { ImportButton } from "@/components/import/ImportButton";
 
 interface Employee {
   id: string;
@@ -56,18 +58,11 @@ interface Employee {
   department?: string;
   salary?: number;
   joinDate: string;
-  role?: string;
+  photoUrl?: string;
+  roleName?: string;
   isActive: boolean;
   createdAt: string;
 }
-
-const ROLE_COLORS: Record<string, string> = {
-  ADMIN: "bg-red-100 text-red-800",
-  MANAGER: "bg-purple-100 text-purple-800",
-  ACCOUNTANT: "bg-blue-100 text-blue-800",
-  BILLING_OPERATOR: "bg-green-100 text-green-800",
-  SALESMAN: "bg-gray-100 text-gray-800",
-};
 
 export default function EmployeesPage() {
   const { data: session } = useSession();
@@ -81,11 +76,12 @@ export default function EmployeesPage() {
 
   const debouncedSearch = useDebounce(searchQuery, 300);
 
-  // Check if user is admin
-  const isAdmin = session?.user?.role === 'ADMIN';
+  // Permission-based access check
+  const canView = session?.user?.permissions?.masters_employees?.view;
+  const canEdit = session?.user?.permissions?.masters_employees?.edit;
 
   const { data, error, isLoading, mutate } = useSWR(
-    isAdmin ? `/api/employees?page=${currentPage}&limit=${itemsPerPage}&search=${encodeURIComponent(debouncedSearch)}` : null
+    canView ? `/api/employees?page=${currentPage}&limit=${itemsPerPage}&search=${encodeURIComponent(debouncedSearch)}` : null
   );
 
   const employees: Employee[] = data?.employees || [];
@@ -133,14 +129,14 @@ export default function EmployeesPage() {
     }).format(amount);
   };
 
-  if (!isAdmin) {
+  if (!canView) {
     return (
       <DashboardLayout>
         <div className="p-6">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
             <Users className="h-12 w-12 mx-auto mb-4 text-red-400" />
             <h2 className="text-lg font-semibold text-red-900 mb-2">Access Denied</h2>
-            <p className="text-red-700">You need administrator privileges to access employee management.</p>
+            <p className="text-red-700">You don&apos;t have permission to view employee management.</p>
           </div>
         </div>
       </DashboardLayout>
@@ -183,13 +179,18 @@ export default function EmployeesPage() {
               </p>
             )}
           </div>
-          <Button
-            className="bg-teal-500 hover:bg-teal-600 text-white"
-            onClick={() => setShowAddModal(true)}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Employee
-          </Button>
+          {canEdit && (
+            <>
+              <ImportButton entityType="EMPLOYEE" entityLabel="Employees" onSuccess={() => mutate()} />
+              <Button
+                className="bg-teal-500 hover:bg-teal-600 text-white"
+                onClick={() => setShowAddModal(true)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Employee
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Employees Table */}
@@ -244,11 +245,26 @@ export default function EmployeesPage() {
                     <TableCell className="font-mono font-medium">
                       {employee.employeeNumber}
                     </TableCell>
-                    <TableCell className="font-medium">{employee.name}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-gray-100 overflow-hidden shrink-0 flex items-center justify-center border border-gray-200">
+                          {employee.photoUrl ? (
+                            <img
+                              src={employee.photoUrl}
+                              alt={employee.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <User className="h-4 w-4 text-gray-400" />
+                          )}
+                        </div>
+                        <span className="font-medium">{employee.name}</span>
+                      </div>
+                    </TableCell>
                     <TableCell className="text-sm text-gray-600">{employee.email}</TableCell>
                     <TableCell>
-                      <Badge className={ROLE_COLORS[employee.role || 'SALESMAN']}>
-                        {employee.role?.replace('_', ' ') || 'SALESMAN'}
+                      <Badge variant="outline">
+                        {employee.roleName || 'Unknown'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm">{employee.designation || "-"}</TableCell>
@@ -262,31 +278,33 @@ export default function EmployeesPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEdit(employee)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit Employee
-                          </DropdownMenuItem>
-                          {employee.email !== session?.user?.email && (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => setDeleteId(employee.id)}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete Employee
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {canEdit && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEdit(employee)}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit Employee
+                            </DropdownMenuItem>
+                            {employee.email !== session?.user?.email && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => setDeleteId(employee.id)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Employee
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))

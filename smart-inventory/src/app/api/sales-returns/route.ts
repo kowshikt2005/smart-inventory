@@ -1,15 +1,21 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { generateReturnNumber } from '@/lib/invoice-utils';
 import { calculateTax } from '@/lib/order-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/sales-returns - Get all sales returns with filtering
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('sales_returns', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const customerId = searchParams.get('customerId') || '';
+    const brandId = searchParams.get('brandId') || '';
+    const dateFrom = searchParams.get('dateFrom') || '';
+    const dateTo = searchParams.get('dateTo') || '';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
@@ -23,6 +29,20 @@ export async function GET(request: Request) {
 
     if (customerId) {
       where.customerId = customerId;
+    }
+
+    if (brandId) {
+      where.items = { some: { item: { brandId } } };
+    }
+
+    if (dateFrom || dateTo) {
+      where.returnDate = {};
+      if (dateFrom) where.returnDate.gte = new Date(dateFrom);
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23, 59, 59, 999);
+        where.returnDate.lte = to;
+      }
     }
 
     if (search) {
@@ -93,12 +113,22 @@ export async function GET(request: Request) {
 // POST /api/sales-returns - Create a new sales return
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('sales_returns', 'edit');
+    if (error) return error;
+
     const body = await request.json();
 
     // Validate required fields
     if (!body.customerId) {
       return NextResponse.json(
         { error: 'Customer is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!body.invoiceId) {
+      return NextResponse.json(
+        { error: 'Invoice is required' },
         { status: 400 }
       );
     }
@@ -129,25 +159,23 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate invoice if provided
-    if (body.invoiceId) {
-      const invoice = await db.invoice.findUnique({
-        where: { id: body.invoiceId },
-      });
+    // Validate invoice
+    const invoice = await db.invoice.findUnique({
+      where: { id: body.invoiceId },
+    });
 
-      if (!invoice) {
-        return NextResponse.json(
-          { error: 'Invoice not found' },
-          { status: 404 }
-        );
-      }
+    if (!invoice) {
+      return NextResponse.json(
+        { error: 'Invoice not found' },
+        { status: 404 }
+      );
+    }
 
-      if (invoice.customerId !== body.customerId) {
-        return NextResponse.json(
-          { error: 'Invoice does not belong to this customer' },
-          { status: 400 }
-        );
-      }
+    if (invoice.customerId !== body.customerId) {
+      return NextResponse.json(
+        { error: 'Invoice does not belong to this customer' },
+        { status: 400 }
+      );
     }
 
     // Validate all items exist
@@ -164,7 +192,7 @@ export async function POST(request: Request) {
     }
 
     // Create sales return in transaction
-    const salesReturn = await db.$transaction(async (tx) => {
+    const salesReturn = await transaction(async (tx) => {
       // Generate return number
       const returnNumber = await generateReturnNumber(tx as any);
 
@@ -203,7 +231,7 @@ export async function POST(request: Request) {
           returnNumber,
           returnDate: new Date(body.returnDate),
           customerId: body.customerId,
-          invoiceId: body.invoiceId || null,
+          invoiceId: body.invoiceId,
           subtotal,
           cgst,
           sgst,

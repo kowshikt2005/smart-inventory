@@ -12,15 +12,61 @@ import {
   X,
   FileText,
   Trash2,
+  Plus,
+  MapPin,
+  Star,
+  DollarSign,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import useSWR from "swr";
+import { normalizeGstin, validateGstin } from "@/lib/gst-validation";
+import {
+  RateSheetEditor,
+  emptyRateSheetFormData,
+  type RateSheetFormData,
+  type InclusionDiscounts,
+} from "@/components/rate-sheets/RateSheetEditor";
+
+interface ShippingAddress {
+  id: string;
+  customerId: string;
+  label: string;
+  address: string;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface RateSheet {
+  id: string;
+  name: string;
+  discountPercent: number;
+  isActive: boolean;
+  validFrom: string;
+  validTo: string | null;
+  useInclusionModel: boolean;
+  inclusionDiscounts?: InclusionDiscounts;
+  createdAt: string;
+}
+
+const emptyAddressForm = {
+  label: "",
+  address: "",
+  city: "",
+  state: "",
+  pincode: "",
+  isDefault: false,
+};
 
 interface Customer {
   id: string;
   customerNumber: string;
   name: string;
+  contactName?: string | null;
   email: string | null;
   phone: string | null;
   gstin: string;
@@ -50,7 +96,27 @@ export default function CustomerDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<Partial<Customer>>({});
 
+  // Shipping address state
+  const [showAddressForm, setShowAddressForm] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [addressForm, setAddressForm] = useState(emptyAddressForm);
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+
+  // Rate sheet state
+  const [showRateSheetForm, setShowRateSheetForm] = useState(false);
+  const [editingRateSheetId, setEditingRateSheetId] = useState<string | null>(null);
+  const [rateSheetForm, setRateSheetForm] = useState<RateSheetFormData>(emptyRateSheetFormData);
+  const [isSavingRateSheet, setIsSavingRateSheet] = useState(false);
+
   const { data: customer, error, isLoading, mutate } = useSWR<Customer>(`/api/customers/${id}`);
+  const { data: addressesData, mutate: mutateAddresses } = useSWR<{ addresses: ShippingAddress[] }>(
+    id ? `/api/customers/${id}/shipping-addresses` : null
+  );
+  const shippingAddresses = addressesData?.addresses ?? [];
+  const { data: rateSheetsData, mutate: mutateRateSheets } = useSWR<{ rateSheets: (RateSheet & { customers: { customer: { id: string; name: string } }[] })[] }>(
+    id ? `/api/rate-sheets?customerId=${id}` : null
+  );
+  const rateSheets = rateSheetsData?.rateSheets ?? [];
 
   useEffect(() => {
     if (customer) {
@@ -59,12 +125,22 @@ export default function CustomerDetailPage() {
   }, [customer]);
 
   const handleSave = async () => {
+    const normalizedGstin = normalizeGstin(formData.gstin || "");
+    const gstValidation = validateGstin(normalizedGstin);
+    if (!gstValidation.valid) {
+      alert(gstValidation.error || "Invalid GSTIN");
+      return;
+    }
+
     setIsSaving(true);
     try {
       const response = await fetch(`/api/customers/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          gstin: normalizedGstin,
+        }),
       });
 
       if (!response.ok) {
@@ -105,6 +181,180 @@ export default function CustomerDetailPage() {
   const handleCancel = () => {
     setFormData(customer || {});
     setIsEditing(false);
+  };
+
+  const openAddAddress = () => {
+    setEditingAddressId(null);
+    setAddressForm(emptyAddressForm);
+    setShowAddressForm(true);
+  };
+
+  const openEditAddress = (addr: ShippingAddress) => {
+    setEditingAddressId(addr.id);
+    setAddressForm({
+      label: addr.label,
+      address: addr.address,
+      city: addr.city || "",
+      state: addr.state || "",
+      pincode: addr.pincode || "",
+      isDefault: addr.isDefault,
+    });
+    setShowAddressForm(true);
+  };
+
+  const handleSaveAddress = async () => {
+    if (!addressForm.label.trim() || !addressForm.address.trim()) {
+      alert("Label and address are required");
+      return;
+    }
+    setIsSavingAddress(true);
+    try {
+      const url = editingAddressId
+        ? `/api/customers/${id}/shipping-addresses/${editingAddressId}`
+        : `/api/customers/${id}/shipping-addresses`;
+      const method = editingAddressId ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(addressForm),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to save address");
+      }
+      await mutateAddresses();
+      setShowAddressForm(false);
+      setEditingAddressId(null);
+      setAddressForm(emptyAddressForm);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save address");
+    } finally {
+      setIsSavingAddress(false);
+    }
+  };
+
+  const handleDeleteAddress = async (addressId: string) => {
+    if (!confirm("Delete this shipping address?")) return;
+    try {
+      const res = await fetch(`/api/customers/${id}/shipping-addresses/${addressId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to delete address");
+      }
+      await mutateAddresses();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete address");
+    }
+  };
+
+  const handleSetDefaultAddress = async (addressId: string) => {
+    try {
+      const res = await fetch(`/api/customers/${id}/shipping-addresses/${addressId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isDefault: true }),
+      });
+      if (!res.ok) throw new Error("Failed to set default");
+      await mutateAddresses();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to set default");
+    }
+  };
+
+  const openAddRateSheet = () => {
+    setEditingRateSheetId(null);
+    setRateSheetForm({
+      ...emptyRateSheetFormData,
+      name: `Rate Sheet - ${new Date().toISOString().split("T")[0]}`,
+    });
+    setShowRateSheetForm(true);
+  };
+
+  const openEditRateSheet = (rs: RateSheet) => {
+    setEditingRateSheetId(rs.id);
+    setRateSheetForm({
+      name: rs.name,
+      validFrom: rs.validFrom.split("T")[0],
+      validTo: rs.validTo ? rs.validTo.split("T")[0] : "",
+      isActive: rs.isActive,
+      inclusionDiscounts: rs.inclusionDiscounts || { brands: [], subBrands: [], items: [] },
+    });
+    setShowRateSheetForm(true);
+  };
+
+  const handleSaveRateSheet = async () => {
+    setIsSavingRateSheet(true);
+    const totalInclusions =
+      rateSheetForm.inclusionDiscounts.brands.length +
+      rateSheetForm.inclusionDiscounts.subBrands.length +
+      rateSheetForm.inclusionDiscounts.items.length;
+
+    try {
+      const url = editingRateSheetId
+        ? `/api/rate-sheets/${editingRateSheetId}`
+        : "/api/rate-sheets";
+      const method = editingRateSheetId ? "PUT" : "POST";
+
+      const generatedName = rateSheetForm.name?.trim() || `Rate Sheet - ${rateSheetForm.validFrom} - ${customer?.name || "Customer"}`;
+
+      const payload: Record<string, unknown> = {
+        name: generatedName,
+        validFrom: rateSheetForm.validFrom,
+        validTo: rateSheetForm.validTo || null,
+        discountPercent: 0,
+        isActive: rateSheetForm.isActive,
+        useInclusionModel: totalInclusions > 0,
+        inclusionDiscounts: rateSheetForm.inclusionDiscounts,
+        excludedItemIds: [],
+        excludedBrandIds: [],
+        excludedSubBrandIds: [],
+      };
+      // Only send customerIds on create
+      if (!editingRateSheetId) {
+        payload.customerIds = [id];
+      }
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to save rate sheet");
+      }
+      await mutateRateSheets();
+      setShowRateSheetForm(false);
+      setEditingRateSheetId(null);
+      setRateSheetForm(emptyRateSheetFormData);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save rate sheet");
+    } finally {
+      setIsSavingRateSheet(false);
+    }
+  };
+
+  const handleDeleteRateSheet = async (rsId: string) => {
+    if (!confirm("Delete this rate sheet?")) return;
+    try {
+      const res = await fetch(`/api/rate-sheets/${rsId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete");
+      await mutateRateSheets();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete rate sheet");
+    }
+  };
+
+  const getRateSheetStatus = (rs: RateSheet) => {
+    if (!rs.isActive) return { label: "Inactive", color: "bg-gray-100 text-gray-600" };
+    const now = new Date();
+    const from = new Date(rs.validFrom);
+    const to = rs.validTo ? new Date(rs.validTo) : null;
+    if (from > now) return { label: "Pending", color: "bg-yellow-100 text-yellow-700" };
+    if (to && to < now) return { label: "Expired", color: "bg-red-100 text-red-700" };
+    return { label: "Active", color: "bg-green-100 text-green-700" };
   };
 
   const formatDate = (dateStr: string | null) => {
@@ -222,6 +472,14 @@ export default function CustomerDetailPage() {
                 )}
               </div>
               <div>
+                <Label>Contact Name</Label>
+                {isEditing ? (
+                  <Input value={formData.contactName || ""} onChange={(e) => setFormData({ ...formData, contactName: e.target.value })} />
+                ) : (
+                  <p className="mt-1">{customer.contactName || "-"}</p>
+                )}
+              </div>
+              <div>
                 <Label>Phone</Label>
                 {isEditing ? (
                   <Input value={formData.phone || ""} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
@@ -232,7 +490,7 @@ export default function CustomerDetailPage() {
               <div>
                 <Label>GSTIN</Label>
                 {isEditing ? (
-                  <Input value={formData.gstin || ""} onChange={(e) => setFormData({ ...formData, gstin: e.target.value })} maxLength={15} />
+                  <Input value={formData.gstin || ""} onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })} maxLength={15} />
                 ) : (
                   <p className="mt-1 font-mono">{customer.gstin}</p>
                 )}
@@ -353,6 +611,302 @@ export default function CustomerDetailPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Rate Sheets */}
+        <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-teal-500" />
+              <h2 className="text-lg font-semibold">Rate Sheets</h2>
+              <span className="text-sm text-gray-500">({rateSheets.length})</span>
+            </div>
+            {!showRateSheetForm && (
+              <Button variant="outline" size="sm" onClick={openAddRateSheet}>
+                <Plus className="h-4 w-4 mr-1" />
+                Add Rate Sheet
+              </Button>
+            )}
+          </div>
+
+          {/* Add / Edit Form — Comprehensive Editor */}
+          {showRateSheetForm && (
+            <div className="mb-5 p-5 border border-teal-200 bg-teal-50/50 rounded-lg">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-teal-800">
+                  {editingRateSheetId ? "Edit Rate Sheet" : "New Rate Sheet"}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowRateSheetForm(false);
+                    setEditingRateSheetId(null);
+                    setRateSheetForm(emptyRateSheetFormData);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <RateSheetEditor
+                value={rateSheetForm}
+                onChange={setRateSheetForm}
+                compact
+              />
+              <div className="flex gap-2 mt-4">
+                <Button size="sm" onClick={handleSaveRateSheet} disabled={isSavingRateSheet} className="bg-teal-500 hover:bg-teal-600">
+                  {isSavingRateSheet ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                  {editingRateSheetId ? "Update" : "Save"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setShowRateSheetForm(false);
+                    setEditingRateSheetId(null);
+                    setRateSheetForm(emptyRateSheetFormData);
+                  }}
+                  disabled={isSavingRateSheet}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Rate Sheet List */}
+          {!showRateSheetForm && rateSheets.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-6">
+              No rate sheets assigned to this customer.
+            </p>
+          ) : !showRateSheetForm && (
+            <div className="space-y-3">
+              {rateSheets.map((rs) => {
+                const status = getRateSheetStatus(rs);
+                const inclusions = rs.inclusionDiscounts;
+                const totalInc = inclusions
+                  ? (inclusions.brands?.length || 0) + (inclusions.subBrands?.length || 0) + (inclusions.items?.length || 0)
+                  : 0;
+                return (
+                  <div key={rs.id} className="p-4 rounded-lg border border-gray-200 bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{rs.name}</p>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${status.color}`}>
+                            {status.label}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-gray-500">
+                          <span>From: {formatDate(rs.validFrom)}</span>
+                          {rs.validTo && <span>To: {formatDate(rs.validTo)}</span>}
+                          {totalInc > 0 && (
+                            <span className="text-teal-600">{totalInc} discount rules</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 ml-4">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => openEditRateSheet(rs)}
+                        >
+                          <Edit className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs text-red-600 hover:text-red-700"
+                          onClick={() => handleDeleteRateSheet(rs.id)}
+                        >
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Shipping Addresses */}
+        <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-teal-500" />
+              <h2 className="text-lg font-semibold">Shipping Addresses</h2>
+              <span className="text-sm text-gray-500">({shippingAddresses.length})</span>
+            </div>
+            {!showAddressForm && (
+              <Button variant="outline" size="sm" onClick={openAddAddress}>
+                <Plus className="h-4 w-4 mr-1" />
+                Add Address
+              </Button>
+            )}
+          </div>
+
+          {/* Add / Edit Form */}
+          {showAddressForm && (
+            <div className="mb-5 p-4 border border-teal-200 bg-teal-50 rounded-lg">
+              <h3 className="text-sm font-semibold text-teal-800 mb-3">
+                {editingAddressId ? "Edit Address" : "New Shipping Address"}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Label *</Label>
+                  <Input
+                    placeholder="e.g. Warehouse, Site Office"
+                    value={addressForm.label}
+                    onChange={(e) => setAddressForm({ ...addressForm, label: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Address *</Label>
+                  <Input
+                    placeholder="Street / Building"
+                    value={addressForm.address}
+                    onChange={(e) => setAddressForm({ ...addressForm, address: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">City</Label>
+                  <Input
+                    placeholder="City"
+                    value={addressForm.city}
+                    onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">State</Label>
+                  <Input
+                    placeholder="State"
+                    value={addressForm.state}
+                    onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Pincode</Label>
+                  <Input
+                    placeholder="Pincode"
+                    value={addressForm.pincode}
+                    onChange={(e) => setAddressForm({ ...addressForm, pincode: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div className="flex items-end pb-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={addressForm.isDefault}
+                      onChange={(e) => setAddressForm({ ...addressForm, isDefault: e.target.checked })}
+                      className="rounded"
+                    />
+                    <span className="text-sm text-gray-700">Set as default</span>
+                  </label>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-3">
+                <Button
+                  size="sm"
+                  onClick={handleSaveAddress}
+                  disabled={isSavingAddress}
+                  className="bg-teal-500 hover:bg-teal-600"
+                >
+                  {isSavingAddress ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-1" />
+                  )}
+                  {editingAddressId ? "Update" : "Save"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setShowAddressForm(false);
+                    setEditingAddressId(null);
+                    setAddressForm(emptyAddressForm);
+                  }}
+                  disabled={isSavingAddress}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Address List */}
+          {shippingAddresses.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-6">
+              No shipping addresses added yet.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {shippingAddresses.map((addr) => (
+                <div
+                  key={addr.id}
+                  className={`relative p-4 rounded-lg border ${
+                    addr.isDefault
+                      ? "border-teal-300 bg-teal-50"
+                      : "border-gray-200 bg-gray-50"
+                  }`}
+                >
+                  {addr.isDefault && (
+                    <span className="absolute top-2 right-2 inline-flex items-center gap-1 text-xs font-medium text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full">
+                      <Star className="h-3 w-3" />
+                      Default
+                    </span>
+                  )}
+                  <p className="text-sm font-semibold text-gray-900 pr-16">{addr.label}</p>
+                  <p className="text-sm text-gray-600 mt-1">{addr.address}</p>
+                  {(addr.city || addr.state || addr.pincode) && (
+                    <p className="text-sm text-gray-500">
+                      {[addr.city, addr.state, addr.pincode].filter(Boolean).join(", ")}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-1 mt-3">
+                    {!addr.isDefault && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs text-teal-600 hover:text-teal-700"
+                        onClick={() => handleSetDefaultAddress(addr.id)}
+                      >
+                        <Star className="h-3 w-3 mr-1" />
+                        Set Default
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => openEditAddress(addr)}
+                    >
+                      <Edit className="h-3 w-3 mr-1" />
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs text-red-600 hover:text-red-700"
+                      onClick={() => handleDeleteAddress(addr.id)}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </DashboardLayout>

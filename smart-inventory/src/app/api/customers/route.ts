@@ -1,28 +1,33 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
+import { normalizeGstin, validateGstin } from '@/lib/gst-validation';
 
 // GET /api/customers - Get all customers with optional search and pagination
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('masters_customers', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1);
+    const limit = Math.min(1000, Math.max(1, parseInt(searchParams.get('limit') || '10') || 10));
+    const activeOnly = searchParams.get('activeOnly') === 'true';
     const skip = (page - 1) * limit;
 
-    // Build where clause for search
-    const where = search
-      ? {
-          OR: [
-            { name: { contains: search } },
-            { gstin: { contains: search } },
-            { city: { contains: search } },
-            { state: { contains: search } },
-            { email: { contains: search } },
-            { customerNumber: { contains: search } },
-          ],
-        }
-      : {};
+    // Build where clause for search and active filter
+    const where: Record<string, unknown> = {};
+    if (activeOnly) where.status = 'ACTIVE';
+    if (search) {
+      where.OR = [
+        { name: { contains: search } },
+        { gstin: { contains: search } },
+        { city: { contains: search } },
+        { state: { contains: search } },
+        { email: { contains: search } },
+        { customerNumber: { contains: search } },
+      ];
+    }
 
     // Get customers with pagination
     const [customers, total] = await Promise.all([
@@ -56,6 +61,8 @@ export async function GET(request: Request) {
 // POST /api/customers - Create a new customer
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('masters_customers', 'edit');
+    if (error) return error;
     const body = await request.json();
 
     // Validate required fields
@@ -75,10 +82,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // Validate GSTIN format (15 characters)
-    if (body.gstin && body.gstin.length !== 15) {
+    const normalizedGstin = normalizeGstin(body.gstin || '');
+    const gstValidation = validateGstin(normalizedGstin);
+    if (!gstValidation.valid) {
       return NextResponse.json(
-        { error: 'GSTIN must be exactly 15 characters' },
+        { error: gstValidation.error },
         { status: 400 }
       );
     }
@@ -88,9 +96,10 @@ export async function POST(request: Request) {
       data: {
         customerNumber: `customer-${Date.now()}`, // Generate customer number
         name: body.name,
+        contactName: body.contactName?.trim() || null,
         email: body.email || null,
         phone: body.phone || null,
-        gstin: body.gstin,
+        gstin: normalizedGstin,
         state: body.state,
         city: body.city,
         address: `${body.addressLine1}${body.addressLine2 ? ', ' + body.addressLine2 : ''}`,
@@ -102,12 +111,30 @@ export async function POST(request: Request) {
       },
     });
 
+    // Create initial shipping address if provided
+    if (body.shippingAddress || body.shippingCity) {
+      const shippingAddr = `${body.shippingAddress || ''}${body.shippingAddressLine2 ? ', ' + body.shippingAddressLine2 : ''}`.trim();
+      if (shippingAddr) {
+        await db.customerShippingAddress.create({
+          data: {
+            customerId: customer.id,
+            label: 'Default',
+            address: shippingAddr,
+            city: body.shippingCity || null,
+            state: body.shippingState || null,
+            pincode: body.shippingPincode || null,
+            isDefault: true,
+          },
+        });
+      }
+    }
+
     return NextResponse.json(customer, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating customer:', error);
 
     // Handle unique constraint violation (duplicate GSTIN)
-    if (error.code === 'P2002') {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
       return NextResponse.json(
         { error: 'A customer with this GSTIN already exists' },
         { status: 409 }

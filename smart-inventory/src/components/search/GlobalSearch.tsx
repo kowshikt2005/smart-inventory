@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,11 +11,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   Search,
   Users,
@@ -30,6 +26,7 @@ import {
   BookOpen,
   ClipboardList,
   ArrowRight,
+  Loader2,
 } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
 import useSWR from "swr";
@@ -188,26 +185,20 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-  
-  const debouncedQuery = useDebounce(query, 300);
+  const [isSearching, setIsSearching] = useState(false);
+  const debouncedQuery = useDebounce(query, 400);
+  const isMac = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);
 
-  // Fetch dynamic data based on search query
-  const { data: customersData } = useSWR(
-    debouncedQuery.length >= 2 ? `/api/customers?search=${encodeURIComponent(debouncedQuery)}&limit=5` : null
+  // Fetch unified search data with a single API call
+  const { data: searchData, isLoading } = useSWR(
+    debouncedQuery.length >= 2 ? `/api/search?q=${encodeURIComponent(debouncedQuery)}&limit=5` : null,
+    { revalidateOnFocus: false, dedupingInterval: 3000 }
   );
-  const { data: vendorsData } = useSWR(
-    debouncedQuery.length >= 2 ? `/api/vendors?search=${encodeURIComponent(debouncedQuery)}&limit=5` : null
-  );
-  const { data: itemsData } = useSWR(
-    debouncedQuery.length >= 2 ? `/api/items?search=${encodeURIComponent(debouncedQuery)}&limit=5` : null
-  );
-  const { data: ordersData } = useSWR(
-    debouncedQuery.length >= 2 ? `/api/sales-orders?search=${encodeURIComponent(debouncedQuery)}&limit=5` : null
-  );
-  const { data: journalsData } = useSWR(
-    debouncedQuery.length >= 2 ? `/api/stock-journals?search=${encodeURIComponent(debouncedQuery)}&limit=5` : null
-  );
+
+  // Track overall loading state
+  useEffect(() => {
+    setIsSearching(isLoading && debouncedQuery.length >= 2);
+  }, [debouncedQuery, isLoading]);
 
   // Combine all search results
   const searchResults = useMemo(() => {
@@ -222,11 +213,11 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
       results.push(...matchingNav);
     }
 
-    // Add dynamic results if query is long enough
-    if (debouncedQuery.length >= 2) {
+    // Add dynamic results if query is long enough and data is available
+    if (debouncedQuery.length >= 2 && searchData) {
       // Customers
-      if (customersData?.customers) {
-        const customerResults: SearchResult[] = customersData.customers.map((customer: { id: string; name: string; customerNumber: string; email?: string; phone?: string; city?: string; state?: string; gstin?: string }) => ({
+      if (searchData.customers?.length > 0) {
+        const customerResults: SearchResult[] = searchData.customers.map((customer: { id: string; name: string; customerNumber: string; email?: string; phone?: string; city?: string; state?: string; gstin?: string }) => ({
           id: `customer-${customer.id}`,
           title: customer.name,
           subtitle: customer.customerNumber,
@@ -241,8 +232,8 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
       }
 
       // Vendors
-      if (vendorsData?.vendors) {
-        const vendorResults: SearchResult[] = vendorsData.vendors.map((vendor: { id: string; name: string; vendorNumber: string; email?: string; phone?: string; city?: string; state?: string; gstin?: string }) => ({
+      if (searchData.vendors?.length > 0) {
+        const vendorResults: SearchResult[] = searchData.vendors.map((vendor: { id: string; name: string; vendorNumber: string; email?: string; phone?: string; city?: string; state?: string; gstin?: string }) => ({
           id: `vendor-${vendor.id}`,
           title: vendor.name,
           subtitle: vendor.vendorNumber,
@@ -257,13 +248,13 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
       }
 
       // Items
-      if (itemsData?.items) {
-        const itemResults: SearchResult[] = itemsData.items.map((item: { 
-          id: string; 
-          name: string; 
-          itemCode: string; 
-          description?: string; 
-          brand?: { name: string }; 
+      if (searchData.items?.length > 0) {
+        const itemResults: SearchResult[] = searchData.items.map((item: {
+          id: string;
+          name: string;
+          itemCode: string;
+          description?: string;
+          brand?: { name: string };
           subBrand?: { name: string };
           unit?: string;
           standardPrice?: number;
@@ -277,18 +268,18 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
           category: "items",
           url: `/masters/items/${item.id}`,
           icon: Package,
-          metadata: { 
+          metadata: {
             unit: item.unit,
             price: item.standardPrice,
-            stock: item.inventory?.physicalStock 
+            stock: item.inventory?.physicalStock
           },
         }));
         results.push(...itemResults);
       }
 
       // Sales Orders
-      if (ordersData?.salesOrders) {
-        const orderResults: SearchResult[] = ordersData.salesOrders.map((order: { id: string; orderNumber: string; orderDate: string; customer: { name: string }; totalAmount: number; status: string }) => ({
+      if (searchData.salesOrders?.length > 0) {
+        const orderResults: SearchResult[] = searchData.salesOrders.map((order: { id: string; orderNumber: string; orderDate: string; customer: { name: string }; totalAmount: number; status: string }) => ({
           id: `order-${order.id}`,
           title: order.orderNumber,
           subtitle: order.customer.name,
@@ -297,18 +288,18 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
           category: "orders",
           url: `/sales/orders/${order.id}`,
           icon: ShoppingCart,
-          metadata: { 
+          metadata: {
             status: order.status,
             amount: order.totalAmount,
-            date: order.orderDate 
+            date: order.orderDate
           },
         }));
         results.push(...orderResults);
       }
 
       // Stock Journals
-      if (journalsData?.journals) {
-        const journalResults: SearchResult[] = journalsData.journals.map((journal: { id: string; journalNumber: string; date: string; type: string; quantity: number; reason?: string; item?: { name: string; unit: string } }) => ({
+      if (searchData.journals?.length > 0) {
+        const journalResults: SearchResult[] = searchData.journals.map((journal: { id: string; journalNumber: string; date: string; type: string; quantity: number; reason?: string; item?: { name: string; unit: string } }) => ({
           id: `journal-${journal.id}`,
           title: journal.journalNumber,
           subtitle: journal.item?.name || "Unknown Item",
@@ -320,7 +311,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
           metadata: {
             type: journal.type,
             quantity: journal.quantity,
-            date: journal.date 
+            date: journal.date
           },
         }));
         results.push(...journalResults);
@@ -328,7 +319,7 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
     }
 
     return results;
-  }, [debouncedQuery, customersData, vendorsData, itemsData, ordersData, journalsData]);
+  }, [debouncedQuery, searchData]);
 
   // Group results by category
   const groupedResults = useMemo(() => {
@@ -351,7 +342,6 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         setOpen(true);
-        setTimeout(() => inputRef.current?.focus(), 100);
       }
       
       // Escape to close
@@ -389,30 +379,39 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className={`w-full justify-start text-sm text-muted-foreground ${className}`}
-          onClick={() => setOpen(true)}
-        >
-          <Search className="mr-2 h-4 w-4" />
-          {placeholder}
-          <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
-            <span className="text-xs">⌘</span>K
-          </kbd>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[600px] p-0" align="start">
+    <>
+      <Button
+        variant="outline"
+        className={`w-full justify-start text-sm text-muted-foreground ${className}`}
+        onClick={() => setOpen(true)}
+      >
+        <Search className="mr-2 h-4 w-4" />
+        {placeholder}
+        <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+          <span className="text-xs">{isMac ? "⌘" : "Ctrl+"}</span>K
+        </kbd>
+      </Button>
+
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="overflow-hidden p-0 shadow-lg sm:max-w-[600px]">
+        <DialogTitle className="sr-only">Search</DialogTitle>
         <Command shouldFilter={false}>
           <CommandInput
-            ref={inputRef}
             placeholder="Search customers, items, orders, navigation..."
             value={query}
             onValueChange={setQuery}
           />
           <CommandList className="max-h-[400px]">
-            {Object.keys(groupedResults).length === 0 && query.length > 0 && (
+            {/* Loading State */}
+            {isSearching && query.length >= 2 && (
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                <Loader2 className="mx-auto h-8 w-8 mb-2 animate-spin text-blue-500" />
+                <p>Searching...</p>
+              </div>
+            )}
+
+            {/* No Results */}
+            {!isSearching && Object.keys(groupedResults).length === 0 && query.length > 0 && (
               <CommandEmpty>No results found for &quot;{query}&quot;</CommandEmpty>
             )}
 
@@ -518,7 +517,8 @@ export function GlobalSearch({ placeholder = "Search anything...", className }: 
             )}
           </CommandList>
         </Command>
-      </PopoverContent>
-    </Popover>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

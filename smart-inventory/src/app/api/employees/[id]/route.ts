@@ -1,51 +1,37 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { hashPassword, hasRole } from '@/lib/auth-utils';
-import { UserRole } from '@/generated/prisma';
+import { db, transaction } from '@/lib/db';
+import { hashPassword } from '@/lib/auth-utils';
+import { checkPermission } from '@/lib/api-auth';
 
-// GET /api/employees/[id] - Get single employee (Admin only)
+// GET /api/employees/[id] - Get single employee
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
-    
-    if (!session?.user || !hasRole(session.user.role, 'ADMIN')) {
-      return NextResponse.json(
-        { error: 'Unauthorized - Admin access required' },
-        { status: 403 }
-      );
-    }
+    const { error } = await checkPermission('masters_employees', 'view');
+    if (error) return error;
 
     const { id } = await params;
 
-    // Fetch employee and user role in parallel (fixes N+1)
-    const [employee, user] = await Promise.all([
-      db.employee.findUnique({
-        where: { id },
-        select: {
-          id: true,
-          employeeNumber: true,
-          name: true,
-          email: true,
-          phone: true,
-          designation: true,
-          department: true,
-          salary: true,
-          joinDate: true,
-          isActive: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      }),
-      db.employee.findUnique({ where: { id }, select: { email: true } })
-        .then(emp => emp?.email ? db.user.findUnique({
-          where: { email: emp.email },
-          select: { role: true },
-        }) : null),
-    ]);
+    const employee = await db.employee.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        employeeNumber: true,
+        name: true,
+        email: true,
+        phone: true,
+        designation: true,
+        department: true,
+        salary: true,
+        joinDate: true,
+        photoUrl: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
     if (!employee) {
       return NextResponse.json(
@@ -54,9 +40,16 @@ export async function GET(
       );
     }
 
+    // Fetch role via User → Role join
+    const user = employee.email ? await (db.user.findUnique as any)({
+      where: { email: employee.email },
+      select: { roleId: true, roleRef: { select: { name: true } } },
+    }) as { roleId: string | null; roleRef: { name: string } | null } | null : null;
+
     return NextResponse.json({
       ...employee,
-      role: user?.role || 'SALESMAN',
+      roleId: user?.roleId || '',
+      roleName: user?.roleRef?.name || 'Unknown',
     });
   } catch (error) {
     console.error('Error fetching employee:', error);
@@ -67,26 +60,17 @@ export async function GET(
   }
 }
 
-// PUT /api/employees/[id] - Update employee (Admin only)
+// PUT /api/employees/[id] - Update employee
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
-    
-    if (!session?.user || !hasRole(session.user.role, 'ADMIN')) {
-      return NextResponse.json(
-        { error: 'Unauthorized - Admin access required' },
-        { status: 403 }
-      );
-    }
+    const { error } = await checkPermission('masters_employees', 'edit');
+    if (error) return error;
 
     const { id } = await params;
     const body = await request.json();
-
-    console.log('🔄 Updating employee:', id);
-    console.log('📝 Update data:', JSON.stringify(body, null, 2));
 
     // Check if employee exists
     const existingEmployee = await db.employee.findUnique({
@@ -100,12 +84,12 @@ export async function PUT(
       );
     }
 
-    // Validate role if provided
-    if (body.role) {
-      const validRoles = ['SALESMAN', 'BILLING_OPERATOR', 'ACCOUNTANT', 'MANAGER', 'ADMIN'];
-      if (!validRoles.includes(body.role)) {
+    // Validate roleId if provided
+    if (body.roleId) {
+      const role = await db.role.findUnique({ where: { id: body.roleId } });
+      if (!role) {
         return NextResponse.json(
-          { error: `Invalid role. Must be one of: ${validRoles.join(', ')}` },
+          { error: 'Invalid role selected' },
           { status: 400 }
         );
       }
@@ -126,7 +110,7 @@ export async function PUT(
     }
 
     // Update employee and user in transaction
-    const result = await db.$transaction(async (tx) => {
+    const result = await transaction(async (tx) => {
       // Update employee record
       const employee = await tx.employee.update({
         where: { id },
@@ -142,21 +126,15 @@ export async function PUT(
         },
       });
 
-      // Update user account
-      const userUpdateData: {
-        name: string;
-        email: string;
-        isActive: boolean;
-        role?: UserRole;
-        password?: string;
-      } = {
+      // Build user update data
+      const userUpdateData: Record<string, unknown> = {
         name: body.name || existingEmployee.name,
         email: body.email || existingEmployee.email,
         isActive: body.isActive !== undefined ? body.isActive : existingEmployee.isActive,
       };
 
-      if (body.role) {
-        userUpdateData.role = body.role as UserRole;
+      if (body.roleId) {
+        userUpdateData.roleId = body.roleId;
       }
 
       if (body.password) {
@@ -165,33 +143,28 @@ export async function PUT(
 
       // Update user account if email exists
       if (existingEmployee.email) {
-        console.log('🔄 Updating user account for:', existingEmployee.email);
-        console.log('📝 User update data:', JSON.stringify(userUpdateData, null, 2));
-        
         await tx.user.update({
           where: { email: existingEmployee.email },
           data: userUpdateData,
         });
-        
-        console.log('✅ User account updated successfully');
       }
 
-      // Return role directly from the update to avoid extra query
-      const updatedRole = body.role || (existingEmployee.email ?
-        (await tx.user.findUnique({ where: { email: existingEmployee.email }, select: { role: true } }))?.role : null);
+      // Fetch the updated role name
+      const updatedUser = existingEmployee.email
+        ? await (tx.user.findUnique as any)({
+            where: { email: body.email || existingEmployee.email },
+            select: { roleId: true, roleRef: { select: { name: true } } },
+          }) as { roleId: string | null; roleRef: { name: string } | null } | null
+        : null;
 
-      return { employee, role: updatedRole };
+      return { employee, roleId: updatedUser?.roleId, roleName: updatedUser?.roleRef?.name };
     });
 
-    const responseData = {
+    return NextResponse.json({
       ...result.employee,
-      role: result.role || 'SALESMAN',
-    };
-
-    console.log('✅ Employee update completed');
-    console.log('📝 Response data:', JSON.stringify(responseData, null, 2));
-
-    return NextResponse.json(responseData);
+      roleId: result.roleId || '',
+      roleName: result.roleName || 'Unknown',
+    });
   } catch (error) {
     console.error('Error updating employee:', error);
     return NextResponse.json(
@@ -207,14 +180,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
-    
-    if (!session?.user || !hasRole(session.user.role, 'ADMIN')) {
-      return NextResponse.json(
-        { error: 'Unauthorized - Admin access required' },
-        { status: 403 }
-      );
-    }
+    const { error, session } = await checkPermission('masters_employees', 'edit');
+    if (error) return error;
 
     const { id } = await params;
 
@@ -239,7 +206,7 @@ export async function DELETE(
     }
 
     // Delete employee and user in transaction
-    await db.$transaction(async (tx) => {
+    await transaction(async (tx) => {
       // Delete employee record
       await tx.employee.delete({
         where: { id },

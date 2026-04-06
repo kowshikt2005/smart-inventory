@@ -1,0 +1,1 @@
+-- This migration was empty (referenced a non-existent column `code`).

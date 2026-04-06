@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { OrderItemRow } from "@/components/sales-orders/OrderItemRow";
+import { ItemSelectionModal } from "@/components/sales-orders/ItemSelectionModal";
+import { ConfigureDiscountsModal, InclusionDiscounts as ModalInclusionDiscounts } from "@/components/sales-orders/ConfigureDiscountsModal";
+import { CustomerSelectionModal } from "@/components/sales-orders/CustomerSelectionModal";
 import {
   ArrowLeft,
   Loader2,
@@ -13,23 +16,43 @@ import {
   Search,
   X,
   Calculator,
+  Settings2,
+  Copy,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { mutate } from "swr";
+
+interface InclusionDiscount {
+  id: string;
+  discountPercent: number;
+}
+
+interface InclusionDiscounts {
+  brands?: InclusionDiscount[];
+  subBrands?: InclusionDiscount[];
+  items?: InclusionDiscount[];
+}
 
 interface Customer {
   id: string;
   customerNumber: string;
   name: string;
   gstin: string | null;
+  creditDays: number;
+  address: string | null;
   city: string | null;
   state: string | null;
+  pincode: string | null;
   rateSheet?: {
     id: string;
     isActive: boolean;
-    itemRatePercent: number;
     discountPercent: number;
+    useInclusionModel?: boolean;
+    inclusionDiscounts?: InclusionDiscounts;
+    excludedItemIds?: string[];
+    excludedBrandIds?: string[];
+    excludedSubBrandIds?: string[];
   } | null;
 }
 
@@ -40,11 +63,30 @@ interface Item {
   unit: string;
   hsnCode: string | null;
   gstRate: number;
-  standardPrice: number;
+  purchasePrice: number; // Cost price
+  mrp: number; // Maximum Retail Price
+  sellingPrice: number; // Actual selling price (used as base rate for orders)
+  discountPercent?: number | null;
+  brandId?: string | null;
+  subBrandId?: string | null;
+  brand?: { id: string; name: string } | null;
+  subBrand?: { id: string; name: string } | null;
+  uomConversions?: Array<{ name: string; factor: number }> | null;
   inventory?: {
     physicalStock: number;
     reservedQuantity: number;
   } | null;
+}
+
+interface Brand {
+  id: string;
+  name: string;
+}
+
+interface SubBrand {
+  id: string;
+  name: string;
+  brandId: string;
 }
 
 interface InsufficientStockItem {
@@ -59,20 +101,52 @@ interface OrderItemData {
   id: string;
   itemId: string;
   quantity: number;
+  unit?: string;
+  uomFactor?: number;
   rate: number;
   discountPercent: number;
   taxRate: number;
   taxAmount: number;
   amount: number;
+  isGstInclusive: boolean; // true = MRP with discount (inclusive), false = selling price (exclusive)
 }
 
 // Generate unique ID for new items
 const generateId = () => `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+const roundTo = (value: number, decimals: number) => {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+};
+
+const toPositiveNumber = (value: unknown, fallback = 1) => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const normalizeUomConversions = (rawConversions: unknown) => {
+  if (!Array.isArray(rawConversions)) return null;
+
+  const normalized = rawConversions
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const rawName = (entry as { name?: unknown }).name;
+      const rawFactor = (entry as { factor?: unknown }).factor;
+      const name = typeof rawName === "string" ? rawName.trim().toUpperCase() : "";
+      const factor = toPositiveNumber(rawFactor, 0);
+      if (!name || factor <= 0) return null;
+      return { name, factor };
+    })
+    .filter((entry): entry is { name: string; factor: number } => Boolean(entry));
+
+  return normalized.length > 0 ? normalized : null;
+};
+
 function NewSalesOrderPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
+  const copyId = searchParams.get("copy");
 
   // Form state
   const [orderDate, setOrderDate] = useState(
@@ -85,6 +159,7 @@ function NewSalesOrderPageContent() {
 
   // Customer state
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
     null
   );
@@ -103,14 +178,22 @@ function NewSalesOrderPageContent() {
       taxRate: 0,
       taxAmount: 0,
       amount: 0,
+      isGstInclusive: false,
     },
   ]);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
+
+  // Local discount overrides
+  const [localDiscounts, setLocalDiscounts] = useState<ModalInclusionDiscounts | null>(null);
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [subBrands, setSubBrands] = useState<SubBrand[]>([]);
 
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [orderNumber, setOrderNumber] = useState("(Auto-generated)");
+  const [orderNumber, setOrderNumber] = useState("Loading...");
 
   const fetchCustomers = useCallback(async () => {
     try {
@@ -130,15 +213,39 @@ function NewSalesOrderPageContent() {
   const fetchItems = useCallback(async () => {
     try {
       setIsLoadingItems(true);
-      const response = await fetch("/api/items?limit=1000&activeOnly=true");
+      // Fetch only essential fields for better performance
+      const response = await fetch("/api/items?limit=9999&activeOnly=true&isActive=true");
       if (response.ok) {
         const data = await response.json();
-        setItems(data.items || []);
+        const normalizedItems = (data.items || []).map((item: Item) => ({
+          ...item,
+          uomConversions: normalizeUomConversions(item.uomConversions),
+        }));
+        setItems(normalizedItems);
       }
     } catch (err) {
       console.error("Error fetching items:", err);
     } finally {
       setIsLoadingItems(false);
+    }
+  }, []);
+
+  const fetchBrandsAndSubBrands = useCallback(async () => {
+    try {
+      const [brandsRes, subBrandsRes] = await Promise.all([
+        fetch("/api/brands?limit=500"),
+        fetch("/api/sub-brands?limit=500"),
+      ]);
+      if (brandsRes.ok) {
+        const data = await brandsRes.json();
+        setBrands(data.brands || []);
+      }
+      if (subBrandsRes.ok) {
+        const data = await subBrandsRes.json();
+        setSubBrands(data.subBrands || []);
+      }
+    } catch (err) {
+      console.error("Error fetching brands/sub-brands:", err);
     }
   }, []);
 
@@ -149,8 +256,8 @@ function NewSalesOrderPageContent() {
         const order = await response.json();
 
         // Check if order is editable
-        if (order.status !== "OPEN") {
-          alert("Only orders with OPEN status can be edited");
+        if (order.status !== "OPEN" && order.status !== "HOLD") {
+          alert("Only orders with OPEN or HOLD status can be edited");
           router.push("/sales/orders");
           return;
         }
@@ -162,9 +269,25 @@ function NewSalesOrderPageContent() {
         setTerms(order.terms || "");
         setRoundOff(Number(order.discountAmount) || 0);
 
-        // Set customer
+        // Set customer - fetch full customer with rate sheet for proper pricing
         if (order.customer) {
-          setSelectedCustomer(order.customer);
+          try {
+            const customerResponse = await fetch(`/api/customers/${order.customer.id}`);
+            if (customerResponse.ok) {
+              const raw = await customerResponse.json();
+              const entries: Array<{ rateSheet: Customer["rateSheet"] & { createdAt?: string } }> = raw.rateSheets || [];
+              const sorted = [...entries].sort((a, b) => {
+                const aDate = new Date(a.rateSheet?.createdAt || 0).getTime();
+                const bDate = new Date(b.rateSheet?.createdAt || 0).getTime();
+                return bDate - aDate;
+              });
+              setSelectedCustomer({ ...raw, rateSheet: sorted.length > 0 ? sorted[0].rateSheet : null });
+            } else {
+              setSelectedCustomer(order.customer);
+            }
+          } catch {
+            setSelectedCustomer(order.customer);
+          }
         }
 
         // Set order items
@@ -178,17 +301,23 @@ function NewSalesOrderPageContent() {
             taxRate: number;
             taxAmount: number;
             amount: number;
+            item?: {
+              unit?: string;
+            };
           }
           setOrderItems(
             order.items.map((item: ApiOrderItem) => ({
               id: item.id,
               itemId: item.itemId,
               quantity: Number(item.quantity),
+              unit: item.item?.unit,
+              uomFactor: 1,
               rate: Number(item.rate),
               discountPercent: Number(item.discountPercent) || 0,
               taxRate: Number(item.taxRate),
               taxAmount: Number(item.taxAmount),
               amount: Number(item.amount),
+              isGstInclusive: Number(item.discountPercent) > 0, // If discount applied, it was MRP-based (inclusive)
             }))
           );
         }
@@ -200,18 +329,109 @@ function NewSalesOrderPageContent() {
     }
   }, [router]);
 
+  // Load order data for copy (pre-fills form but creates a new order)
+  const loadOrderForCopy = useCallback(async (id: string) => {
+    try {
+      const response = await fetch(`/api/sales-orders/${id}`);
+      if (response.ok) {
+        const order = await response.json();
+
+        setReferenceNumber(order.referenceNumber || "");
+        setNotes(order.notes || "");
+        setTerms(order.terms || "");
+        setRoundOff(Number(order.discountAmount) || 0);
+
+        // Set customer
+        if (order.customer) {
+          try {
+            const customerResponse = await fetch(`/api/customers/${order.customer.id}`);
+            if (customerResponse.ok) {
+              const raw = await customerResponse.json();
+              const entries: Array<{ rateSheet: Customer["rateSheet"] & { createdAt?: string } }> = raw.rateSheets || [];
+              const sorted = [...entries].sort((a, b) => {
+                const aDate = new Date(a.rateSheet?.createdAt || 0).getTime();
+                const bDate = new Date(b.rateSheet?.createdAt || 0).getTime();
+                return bDate - aDate;
+              });
+              setSelectedCustomer({ ...raw, rateSheet: sorted.length > 0 ? sorted[0].rateSheet : null });
+            } else {
+              setSelectedCustomer(order.customer);
+            }
+          } catch {
+            setSelectedCustomer(order.customer);
+          }
+        }
+
+        // Set order items
+        if (order.items && order.items.length > 0) {
+          interface ApiOrderItem {
+            id: string;
+            itemId: string;
+            quantity: number;
+            rate: number;
+            discountPercent?: number;
+            taxRate: number;
+            taxAmount: number;
+            amount: number;
+            item?: {
+              unit?: string;
+            };
+          }
+          setOrderItems(
+            order.items.map((item: ApiOrderItem) => ({
+              id: generateId(),
+              itemId: item.itemId,
+              quantity: Number(item.quantity),
+              unit: item.item?.unit,
+              uomFactor: 1,
+              rate: Number(item.rate),
+              discountPercent: Number(item.discountPercent) || 0,
+              taxRate: Number(item.taxRate),
+              taxAmount: Number(item.taxAmount),
+              amount: Number(item.amount),
+              isGstInclusive: Number(item.discountPercent) > 0,
+            }))
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Error loading order for copy:", err);
+      alert("Failed to load order data");
+      router.push("/sales/orders");
+    }
+  }, [router]);
+
+  // Fetch next order number for new orders
+  const fetchNextOrderNumber = useCallback(async () => {
+    try {
+      const response = await fetch("/api/sales-orders/next-number");
+      if (response.ok) {
+        const data = await response.json();
+        setOrderNumber(data.orderNumber);
+      }
+    } catch (err) {
+      console.error("Error fetching next order number:", err);
+    }
+  }, []);
+
   // Fetch customers
   useEffect(() => {
     fetchCustomers();
     fetchItems();
-  }, [fetchCustomers, fetchItems]);
+    fetchBrandsAndSubBrands();
+  }, [fetchCustomers, fetchItems, fetchBrandsAndSubBrands]);
 
-  // Load order for editing
+  // Load order for editing/copying OR fetch next order number for new order
   useEffect(() => {
     if (editId) {
       loadOrderForEdit(editId);
+    } else {
+      fetchNextOrderNumber();
+      if (copyId) {
+        loadOrderForCopy(copyId);
+      }
     }
-  }, [editId, loadOrderForEdit]);
+  }, [editId, copyId, loadOrderForEdit, loadOrderForCopy, fetchNextOrderNumber]);
 
   // Filter customers based on search
   const filteredCustomers = useMemo(() => {
@@ -232,46 +452,144 @@ function NewSalesOrderPageContent() {
     [orderItems]
   );
 
-  // Get effective rate for an item considering customer rate sheet
-  const getEffectiveRate = useCallback(
-    (item: Item, customer?: Customer | null) => {
-      const rateSheet = (customer || selectedCustomer)?.rateSheet;
-      if (!rateSheet || !rateSheet.isActive) {
-        return Number(item.standardPrice);
+  // Resolve discount from inclusion model using cascade logic
+  // Priority: Item discount > Sub-brand discount > Brand discount > 0%
+  const resolveInclusionDiscount = useCallback(
+    (itemId: string, brandId: string | null | undefined, subBrandId: string | null | undefined, inclusionDiscounts: InclusionDiscounts | undefined): number => {
+      if (!inclusionDiscounts) return 0;
+
+      // Check item first (highest priority)
+      if (inclusionDiscounts.items && Array.isArray(inclusionDiscounts.items)) {
+        const itemDiscount = inclusionDiscounts.items.find(i => i.id === itemId);
+        if (itemDiscount) return Number(itemDiscount.discountPercent);
       }
 
-      // Check if item is excluded from this rate sheet
-      const excludedItemIds = (rateSheet as { excludedItemIds?: string[] }).excludedItemIds || [];
-      if (Array.isArray(excludedItemIds) && excludedItemIds.includes(item.id)) {
-        return Number(item.standardPrice);
+      // Check sub-brand second
+      if (subBrandId && inclusionDiscounts.subBrands && Array.isArray(inclusionDiscounts.subBrands)) {
+        const subBrandDiscount = inclusionDiscounts.subBrands.find(sb => sb.id === subBrandId);
+        if (subBrandDiscount) return Number(subBrandDiscount.discountPercent);
       }
 
-      const itemRatePercent = Number(rateSheet.itemRatePercent);
-      const discountPercent = Number(rateSheet.discountPercent);
+      // Check brand last
+      if (brandId && inclusionDiscounts.brands && Array.isArray(inclusionDiscounts.brands)) {
+        const brandDiscount = inclusionDiscounts.brands.find(b => b.id === brandId);
+        if (brandDiscount) return Number(brandDiscount.discountPercent);
+      }
 
-      const rateAfterPercent =
-        Number(item.standardPrice) * (itemRatePercent / 100);
-      const effectiveRate = rateAfterPercent * (1 - discountPercent / 100);
-
-      return Math.round(effectiveRate * 100) / 100;
+      return 0; // Item not included
     },
-    [selectedCustomer]
+    []
+  );
+
+  // Get effective pricing for an item considering customer rate sheet
+  // Returns: { rate, isGstInclusive, discountApplied }
+  //
+  // NEW PRICING LOGIC:
+  // - No rate sheet → selling price + EXCLUSIVE GST
+  // - Rate sheet with 0% discount → selling price + EXCLUSIVE GST
+  // - Rate sheet with discount > 0 → MRP + INCLUSIVE GST
+  const getEffectivePricing = useCallback(
+    (item: Item, customer?: Customer | null): { rate: number; isGstInclusive: boolean; discountApplied: number } => {
+      const mrp = Number(item.mrp) || Number(item.sellingPrice);
+      const sellingPrice = Number(item.sellingPrice);
+      const _gstRate = Number(item.gstRate);
+      const rateSheet = (customer || selectedCustomer)?.rateSheet;
+
+      // No rate sheet - use sellingPrice + EXCLUSIVE GST
+      if (!rateSheet || !rateSheet.isActive) {
+        return {
+          rate: sellingPrice,
+          isGstInclusive: false,
+          discountApplied: 0,
+        };
+      }
+
+      // Customer has rate sheet - check for discount
+      const useInclusionModel = rateSheet.useInclusionModel !== false;
+      let discountPercent = 0;
+
+      // Use local overrides if configured, otherwise fall back to rate sheet
+      const effectiveDiscounts = localDiscounts || rateSheet.inclusionDiscounts;
+
+      if (useInclusionModel && effectiveDiscounts) {
+        // Inclusion model: Get cascade discount (item > sub-brand > brand)
+        discountPercent = resolveInclusionDiscount(
+          item.id,
+          item.brandId,
+          item.subBrandId,
+          effectiveDiscounts
+        );
+      } else {
+        // Legacy model
+        const excludedItemIds = rateSheet.excludedItemIds || [];
+        const excludedBrandIds = rateSheet.excludedBrandIds || [];
+        const excludedSubBrandIds = rateSheet.excludedSubBrandIds || [];
+
+        const isExcluded =
+          (Array.isArray(excludedItemIds) && excludedItemIds.includes(item.id)) ||
+          (item.brandId && Array.isArray(excludedBrandIds) && excludedBrandIds.includes(item.brandId)) ||
+          (item.subBrandId && Array.isArray(excludedSubBrandIds) && excludedSubBrandIds.includes(item.subBrandId));
+
+        if (!isExcluded) {
+          discountPercent = Number(rateSheet.discountPercent) || 0;
+        }
+      }
+
+      // If no discount configured, use selling price + EXCLUSIVE GST
+      if (discountPercent === 0) {
+        return {
+          rate: sellingPrice,
+          isGstInclusive: false,
+          discountApplied: 0,
+        };
+      }
+
+      // Discount is configured - use MRP + INCLUSIVE GST
+      // Apply discount to MRP (MRP already includes GST)
+      const discountedRate = mrp * (1 - discountPercent / 100);
+      return {
+        rate: Math.round(discountedRate * 100) / 100,
+        isGstInclusive: true,
+        discountApplied: discountPercent,
+      };
+    },
+    [selectedCustomer, localDiscounts, resolveInclusionDiscount]
+  );
+
+  // Backward compatible getEffectiveRate function
+  const _getEffectiveRate = useCallback(
+    (item: Item, customer?: Customer | null) => {
+      return getEffectivePricing(item, customer).rate;
+    },
+    [getEffectivePricing]
   );
 
   // Handle customer selection
   const handleCustomerSelect = async (customer: Customer) => {
-    // Fetch customer with rate sheet
+    // Fetch customer with rate sheet and normalize the shape
     let fullCustomer = customer;
     try {
       const response = await fetch(`/api/customers/${customer.id}`);
       if (response.ok) {
-        fullCustomer = await response.json();
+        const raw = await response.json();
+        // API returns rateSheets[] (join table), but pricing logic expects rateSheet (singular)
+        const entries: Array<{ rateSheet: Customer["rateSheet"] & { createdAt?: string } }> = raw.rateSheets || [];
+        const sorted = [...entries].sort((a, b) => {
+          const aDate = new Date(a.rateSheet?.createdAt || 0).getTime();
+          const bDate = new Date(b.rateSheet?.createdAt || 0).getTime();
+          return bDate - aDate;
+        });
+        fullCustomer = {
+          ...raw,
+          rateSheet: sorted.length > 0 ? sorted[0].rateSheet : null,
+        };
       }
     } catch {
       // Use the customer as-is if fetch fails
     }
-    
+
     setSelectedCustomer(fullCustomer);
+    setLocalDiscounts(null); // Reset local discount overrides for new customer
     setCustomerSearch("");
 
     // Recalculate item rates if rate sheet changes
@@ -282,58 +600,133 @@ function NewSalesOrderPageContent() {
           const item = items.find((i) => i.id === orderItem.itemId);
           if (!item) return orderItem;
 
-          const rate = getEffectiveRate(item, fullCustomer);
-          const amount = orderItem.quantity * rate;
-          const taxAmount = amount * (orderItem.taxRate / 100);
+          const pricing = getEffectivePricing(item, fullCustomer);
+          const quantity = orderItem.quantity;
+          const taxRate = orderItem.taxRate;
+          const factor = orderItem.uomFactor || 1;
+          const adjustedRate = pricing.rate * factor;
+
+          let baseAmount: number;
+          let taxAmount: number;
+
+          if (pricing.isGstInclusive) {
+            // MRP-based: Rate includes GST, extract tax
+            const totalInclusive = quantity * adjustedRate;
+            baseAmount = totalInclusive / (1 + taxRate / 100);
+            taxAmount = totalInclusive - baseAmount;
+          } else {
+            // Selling price: Rate is exclusive, add tax on top
+            baseAmount = quantity * adjustedRate;
+            taxAmount = baseAmount * (taxRate / 100);
+          }
 
           return {
             ...orderItem,
-            rate,
-            amount: Math.round(amount * 100) / 100,
+            rate: Math.round(adjustedRate * 100) / 100,
+            discountPercent: pricing.discountApplied,
+            amount: Math.round(baseAmount * 100) / 100,
             taxAmount: Math.round(taxAmount * 100) / 100,
+            isGstInclusive: pricing.isGstInclusive,
           };
         })
       );
     }
   };
 
+  const buildOrderItemFromSelection = useCallback(
+    (selectedItemData: Item, id: string, quantity = 1): OrderItemData => {
+      const pricing = getEffectivePricing(selectedItemData);
+      const taxRate = Number(selectedItemData.gstRate);
+
+      let baseAmount: number;
+      let taxAmount: number;
+
+      if (pricing.isGstInclusive) {
+        const totalInclusive = quantity * pricing.rate;
+        baseAmount = totalInclusive / (1 + taxRate / 100);
+        taxAmount = totalInclusive - baseAmount;
+      } else {
+        baseAmount = quantity * pricing.rate;
+        taxAmount = baseAmount * (taxRate / 100);
+      }
+
+      return {
+        id,
+        itemId: selectedItemData.id,
+        quantity,
+        unit: selectedItemData.unit,
+        uomFactor: 1,
+        rate: pricing.rate,
+        discountPercent: pricing.discountApplied,
+        taxRate,
+        taxAmount: Math.round(taxAmount * 100) / 100,
+        amount: Math.round(baseAmount * 100) / 100,
+        isGstInclusive: pricing.isGstInclusive,
+      };
+    },
+    [getEffectivePricing]
+  );
+
   // Handle adding new item row
   const handleAddItem = () => {
-    setOrderItems((prev) => [
-      ...prev,
-      {
-        id: generateId(),
-        itemId: "",
-        quantity: 1,
-        rate: 0,
-        discountPercent: 0,
-        taxRate: 0,
-        taxAmount: 0,
-        amount: 0,
-      },
-    ]);
+    setIsAddItemModalOpen(true);
+  };
+
+  const handleAddItemSelect = (selectedItemData: Item) => {
+    setOrderItems((prev) => {
+      const firstEmptyIndex = prev.findIndex((row) => !row.itemId);
+
+      if (firstEmptyIndex >= 0) {
+        const next = [...prev];
+        next[firstEmptyIndex] = buildOrderItemFromSelection(
+          selectedItemData,
+          next[firstEmptyIndex].id,
+          next[firstEmptyIndex].quantity || 1
+        );
+        return next;
+      }
+
+      return [...prev, buildOrderItemFromSelection(selectedItemData, generateId())];
+    });
   };
 
   // Handle updating item row
   const handleUpdateItem = (index: number, updatedItem: OrderItemData) => {
     // Apply customer rate sheet if selecting new item or item changed
     const itemChanged = updatedItem.itemId && orderItems[index].itemId !== updatedItem.itemId;
-    
+
     if (itemChanged) {
       const item = items.find((i) => i.id === updatedItem.itemId);
       if (item) {
-        const rate = getEffectiveRate(item);
+        const pricing = getEffectivePricing(item);
         const quantity = updatedItem.quantity || 1;
-        const amount = quantity * rate;
-        const taxAmount = amount * (Number(item.gstRate) / 100);
+        const taxRate = Number(item.gstRate);
+
+        let baseAmount: number;
+        let taxAmount: number;
+
+        if (pricing.isGstInclusive) {
+          // MRP-based: Rate includes GST, extract tax
+          const totalInclusive = quantity * pricing.rate;
+          baseAmount = totalInclusive / (1 + taxRate / 100);
+          taxAmount = totalInclusive - baseAmount;
+        } else {
+          // Selling price: Rate is exclusive, add tax on top
+          baseAmount = quantity * pricing.rate;
+          taxAmount = baseAmount * (taxRate / 100);
+        }
 
         updatedItem = {
           ...updatedItem,
           quantity,
-          rate,
-          taxRate: Number(item.gstRate),
-          amount: Math.round(amount * 100) / 100,
+          unit: item.unit,
+          uomFactor: 1,
+          rate: pricing.rate,
+          discountPercent: pricing.discountApplied,
+          taxRate,
+          amount: Math.round(baseAmount * 100) / 100,
           taxAmount: Math.round(taxAmount * 100) / 100,
+          isGstInclusive: pricing.isGstInclusive,
         };
       }
     }
@@ -359,6 +752,7 @@ function NewSalesOrderPageContent() {
           taxRate: 0,
           taxAmount: 0,
           amount: 0,
+          isGstInclusive: false,
         },
       ]);
     } else {
@@ -420,6 +814,18 @@ function NewSalesOrderPageContent() {
     setIsSubmitting(true);
 
     try {
+      const payloadItems = validItems.map((item) => {
+        const factor = toPositiveNumber(item.uomFactor, 1);
+        return {
+          itemId: item.itemId,
+          quantity: roundTo(item.quantity * factor, 3),
+          rate: roundTo(item.rate / factor, 2),
+          discountPercent: item.discountPercent,
+          unit: item.unit,
+          uomFactor: factor,
+        };
+      });
+
       const payload = {
         customerId: selectedCustomer.id,
         orderDate,
@@ -427,12 +833,7 @@ function NewSalesOrderPageContent() {
         notes: notes || null,
         terms: terms || null,
         roundOff,
-        items: validItems.map((item) => ({
-          itemId: item.itemId,
-          quantity: item.quantity,
-          rate: item.rate,
-          discountPercent: item.discountPercent,
-        })),
+        items: payloadItems,
       };
 
       const url = editId
@@ -501,109 +902,97 @@ function NewSalesOrderPageContent() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.push("/sales/orders")}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Orders
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {editId ? "Edit Sales Order" : "New Sales Order"}
-              </h1>
-              <p className="text-sm text-gray-600">
-                Order #: {orderNumber}
-              </p>
+      <div className="min-h-screen bg-gray-50">
+        {/* Sticky action bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-3 sticky top-0 z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => router.push("/sales/orders")} className="text-gray-500 -ml-2">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+              <div className="h-4 w-px bg-gray-200" />
+              <div>
+                <span className="text-base font-bold text-gray-900">
+                  {editId ? "Edit Sales Order" : copyId ? "Duplicate Sales Order" : "New Sales Order"}
+                </span>
+                <span className="ml-2 text-sm text-gray-400">#{orderNumber}</span>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => router.push("/sales/orders")}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  {editId ? "Update Order" : "Create Order"}
-                </>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => router.push("/sales/orders")}>Cancel</Button>
+              <Button size="sm" onClick={handleSubmit} disabled={isSubmitting} className="bg-teal-500 hover:bg-teal-600 text-white">
+                {isSubmitting ? (
+                  <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Saving...</>
+                ) : (
+                  <><Save className="h-4 w-4 mr-1.5" />{editId ? "Update Order" : "Create Order"}</>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* Error Display */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
+        <div className="p-6 space-y-4">
+          {/* Copy mode notice */}
+          {copyId && (
+            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-700 text-sm flex items-center gap-2">
+              <Copy className="h-4 w-4 shrink-0" />
+              Duplicating from an existing order — review and save to create a new order.
+            </div>
+          )}
 
-        {/* Form */}
-        <div className="space-y-6">
-          {/* Header Fields */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Order Details
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Order Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Order Date <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  type="date"
-                  value={orderDate}
-                  onChange={(e) => setOrderDate(e.target.value)}
-                  max={new Date().toISOString().split("T")[0]}
-                />
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
+          )}
+
+          {/* Row 1: Order details + Customer */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Order Details</p>
+              <div className="space-y-3">
+                {/* Order Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Order Date <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={orderDate}
+                    onChange={(e) => setOrderDate(e.target.value)}
+                    max={new Date().toISOString().split("T")[0]}
+                  />
+                </div>
+
+                {/* Reference Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Reference #
+                  </label>
+                  <Input
+                    type="text"
+                    value={referenceNumber}
+                    onChange={(e) => setReferenceNumber(e.target.value)}
+                    placeholder="PO No, Quotes, Delivery Challan..."
+                  />
+                </div>
               </div>
+            </div>
 
-              {/* Reference Number */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Reference Number
-                </label>
-                <Input
-                  type="text"
-                  value={referenceNumber}
-                  onChange={(e) => setReferenceNumber(e.target.value)}
-                  placeholder="e.g., PO-12345"
-                />
-              </div>
-
-              {/* Customer Selection */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Customer <span className="text-red-500">*</span>
-                </label>
-                {isLoadingCustomers ? (
-                  <div className="flex items-center gap-2 text-gray-500 p-3">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading customers...
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {!selectedCustomer && (
-                      <div className="relative">
+            {/* Customer Card */}
+            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
+                Customer <span className="text-red-400">*</span>
+              </p>
+              {isLoadingCustomers ? (
+                <div className="flex items-center gap-2 text-gray-500 py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Loading customers...</span>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {!selectedCustomer && (
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <Input
                           type="text"
@@ -613,7 +1002,16 @@ function NewSalesOrderPageContent() {
                           className="pl-10"
                         />
                       </div>
-                    )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsCustomerModalOpen(true)}
+                        className="shrink-0"
+                      >
+                        Browse
+                      </Button>
+                    </div>
+                  )}
                     {customerSearch && !selectedCustomer && (
                       <div className="border rounded-lg max-h-48 overflow-y-auto">
                         {filteredCustomers.length === 0 ? (
@@ -640,80 +1038,119 @@ function NewSalesOrderPageContent() {
                       </div>
                     )}
                     {selectedCustomer && (
-                      <div className="flex items-center justify-between p-4 bg-teal-50 border border-teal-200 rounded-lg">
-                        <div>
-                          <p className="font-medium text-teal-900">
-                            {selectedCustomer.name}
-                          </p>
-                          <p className="text-sm text-teal-700">
-                            {selectedCustomer.customerNumber}
-                            {selectedCustomer.gstin &&
-                              ` | GSTIN: ${selectedCustomer.gstin}`}
-                          </p>
-                          {selectedCustomer.rateSheet?.isActive && (
-                            <p className="text-xs text-teal-600 mt-1">
-                              Rate Sheet Applied: {selectedCustomer.rateSheet.itemRatePercent}%
-                              {Number(selectedCustomer.rateSheet.discountPercent) > 0 &&
-                                ` + ${selectedCustomer.rateSheet.discountPercent}% discount`}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-4 bg-teal-50 border border-teal-200 rounded-lg">
+                          <div>
+                            <p className="font-medium text-teal-900">
+                              {selectedCustomer.name}
                             </p>
-                          )}
+                            <p className="text-sm text-teal-700">
+                              {selectedCustomer.customerNumber}
+                              {selectedCustomer.gstin &&
+                                ` | GSTIN: ${selectedCustomer.gstin}`}
+                            </p>
+                            {selectedCustomer.rateSheet?.isActive && (
+                              <p className="text-xs text-teal-600 mt-1">
+                                {selectedCustomer.rateSheet.useInclusionModel ? (
+                                  <>
+                                    Rate Sheet Applied: Custom discounts configured
+                                  </>
+                                ) : (
+                                  <>
+                                    Rate Sheet Applied: {selectedCustomer.rateSheet.discountPercent}% discount
+                                  </>
+                                )}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {selectedCustomer.rateSheet?.isActive && selectedCustomer.rateSheet?.useInclusionModel !== false && (
+                              <button
+                                type="button"
+                                onClick={() => setShowDiscountModal(true)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                                  localDiscounts
+                                    ? "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100"
+                                    : "bg-white border-teal-300 text-teal-700 hover:bg-teal-50"
+                                }`}
+                              >
+                                <Settings2 className="h-4 w-4" />
+                                {localDiscounts ? "Custom Discounts" : "Configure Discounts"}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => { setSelectedCustomer(null); setLocalDiscounts(null); }}
+                              className="text-teal-600 hover:text-teal-800"
+                            >
+                              <X className="h-5 w-5" />
+                            </button>
+                          </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedCustomer(null)}
-                          className="text-teal-600 hover:text-teal-800"
-                        >
-                          <X className="h-5 w-5" />
-                        </button>
+                        {/* Billing Address Section */}
+                        {(selectedCustomer.address || selectedCustomer.city || selectedCustomer.state || selectedCustomer.pincode) && (
+                          <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                            <p className="text-sm font-medium text-gray-700 mb-2">Billing Address</p>
+                            <div className="text-sm text-gray-600">
+                              {selectedCustomer.address && (
+                                <p>{selectedCustomer.address}</p>
+                              )}
+                              <p>
+                                {[
+                                  selectedCustomer.city,
+                                  selectedCustomer.state,
+                                  selectedCustomer.pincode,
+                                ]
+                                  .filter(Boolean)
+                                  .join(", ")}
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
+                    <CustomerSelectionModal
+                      isOpen={isCustomerModalOpen}
+                      onClose={() => setIsCustomerModalOpen(false)}
+                      customers={customers}
+                      onSelect={(customer) => {
+                        setIsCustomerModalOpen(false);
+                        handleCustomerSelect(customer);
+                      }}
+                    />
                   </div>
                 )}
-              </div>
             </div>
           </div>
 
           {/* Items Section */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Order Items
-            </h2>
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">Line Items</p>
+            </div>
             {isLoadingItems ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                <span className="ml-2 text-gray-500">Loading items...</span>
+              <div className="flex items-center justify-center py-10 gap-2 text-gray-400">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Loading items...</span>
               </div>
             ) : (
               <>
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b bg-gray-50">
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          Item
-                        </th>
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          HSN
-                        </th>
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          Qty
-                        </th>
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          Unit
-                        </th>
-                        <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700">
-                          Rate
-                        </th>
-                        <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
-                          Tax %
-                        </th>
-                        <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
-                          Tax Amt
-                        </th>
-                        <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
-                          Amount
-                        </th>
-                        <th className="px-3 py-3 w-12"></th>
+                      <tr className="bg-gray-50 border-b border-gray-100">
+                        <th className="px-3 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-10">S.No</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Item</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-20">HSN/SAC</th>
+                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">Tax %</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Qty</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">Unit</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Rate ₹</th>
+                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Rate ₹ (Incl. Tax)</th>
+                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">MRP</th>
+                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-20">Disc %</th>
+                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Amount</th>
+                        <th className="px-3 py-2.5 w-10"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -723,113 +1160,181 @@ function NewSalesOrderPageContent() {
                           item={item}
                           items={items}
                           selectedItemIds={selectedItemIds}
+                          sno={index + 1}
                           onUpdate={(updatedItem) =>
                             handleUpdateItem(index, updatedItem)
                           }
                           onRemove={() => handleRemoveItem(index)}
+                          onItemCreated={fetchItems}
                         />
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddItem}
-                  className="mt-4"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Item
-                </Button>
+                <div className="px-5 py-3 border-t border-gray-100">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddItem}
+                  >
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Add Item
+                  </Button>
+                </div>
               </>
             )}
           </div>
 
-          {/* Notes and Terms */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Notes
-              </label>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Internal notes about this order..."
-                rows={3}
-              />
+          {/* Notes + Summary */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-3 space-y-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Notes</p>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Internal notes about this order..."
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
+              <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Terms & Conditions</p>
+                <Textarea
+                  value={terms}
+                  onChange={(e) => setTerms(e.target.value)}
+                  placeholder="Terms and conditions for this order..."
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
             </div>
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Terms & Conditions
-              </label>
-              <Textarea
-                value={terms}
-                onChange={(e) => setTerms(e.target.value)}
-                placeholder="Terms and conditions for this order..."
-                rows={3}
-              />
-            </div>
-          </div>
-
-          {/* Summary Panel */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex justify-end">
-              <div className="w-full max-w-sm space-y-3">
-                <div className="flex items-center gap-2 mb-4">
-                  <Calculator className="h-5 w-5 text-gray-500" />
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Order Summary
-                  </h3>
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Calculator className="h-4 w-4 text-gray-400" />
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Summary</p>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Taxable Value</span>
+                  <span className="font-medium">{formatCurrency(totals.subtotal)}</span>
                 </div>
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal</span>
-                  <span className="font-medium">
-                    {formatCurrency(totals.subtotal)}
-                  </span>
-                </div>
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">CGST</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">CGST</span>
                   <span>{formatCurrency(totals.cgst)}</span>
                 </div>
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">SGST</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">SGST</span>
                   <span>{formatCurrency(totals.sgst)}</span>
                 </div>
-
-                <div className="flex justify-between text-sm items-center">
-                  <span className="text-gray-600">Round Off</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Round Off</span>
                   <Input
-                    type="number"
-                    step="0.01"
-                    min="-1"
-                    max="1"
+                    type="number" step="0.01" min="-1" max="1"
                     value={roundOff}
-                    onChange={(e) =>
-                      setRoundOff(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setRoundOff(parseFloat(e.target.value) || 0)}
                     className="w-24 text-right h-8"
                   />
                 </div>
-
-                <div className="border-t pt-3">
-                  <div className="flex justify-between">
-                    <span className="text-lg font-semibold text-gray-900">
-                      Total
-                    </span>
-                    <span className="text-lg font-bold text-teal-600">
-                      {formatCurrency(totals.totalAmount)}
-                    </span>
-                  </div>
+                <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
+                  <span>Total</span>
+                  <span className="text-teal-600">{formatCurrency(totals.totalAmount)}</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Configure Discounts Modal */}
+      {selectedCustomer && (
+        <ConfigureDiscountsModal
+          open={showDiscountModal}
+          onClose={() => setShowDiscountModal(false)}
+          discounts={
+            localDiscounts || {
+              brands: selectedCustomer.rateSheet?.inclusionDiscounts?.brands || [],
+              subBrands: selectedCustomer.rateSheet?.inclusionDiscounts?.subBrands || [],
+              items: selectedCustomer.rateSheet?.inclusionDiscounts?.items || [],
+            }
+          }
+          onSave={(newDiscounts) => {
+            setLocalDiscounts(newDiscounts);
+            // Recalculate all existing order items with new discounts
+            setOrderItems((prev) =>
+              prev.map((orderItem) => {
+                if (!orderItem.itemId) return orderItem;
+                const item = items.find((i) => i.id === orderItem.itemId);
+                if (!item) return orderItem;
+
+                // Resolve discount using the new local discounts
+                let discountPercent = 0;
+                if (newDiscounts.items?.length) {
+                  const itemDiscount = newDiscounts.items.find(i => i.id === item.id);
+                  if (itemDiscount) discountPercent = Number(itemDiscount.discountPercent);
+                }
+                if (discountPercent === 0 && item.subBrandId && newDiscounts.subBrands?.length) {
+                  const sbDiscount = newDiscounts.subBrands.find(sb => sb.id === item.subBrandId);
+                  if (sbDiscount) discountPercent = Number(sbDiscount.discountPercent);
+                }
+                if (discountPercent === 0 && item.brandId && newDiscounts.brands?.length) {
+                  const bDiscount = newDiscounts.brands.find(b => b.id === item.brandId);
+                  if (bDiscount) discountPercent = Number(bDiscount.discountPercent);
+                }
+
+                const mrp = Number(item.mrp) || Number(item.sellingPrice);
+                const sellingPrice = Number(item.sellingPrice);
+                const taxRate = orderItem.taxRate;
+                const quantity = orderItem.quantity;
+                const factor = orderItem.uomFactor || 1;
+
+                let rate: number;
+                let isGstInclusive: boolean;
+                if (discountPercent > 0) {
+                  rate = Math.round(mrp * (1 - discountPercent / 100) * factor * 100) / 100;
+                  isGstInclusive = true;
+                } else {
+                  rate = Math.round(sellingPrice * factor * 100) / 100;
+                  isGstInclusive = false;
+                }
+
+                let baseAmount: number;
+                let taxAmount: number;
+                if (isGstInclusive) {
+                  const totalInclusive = quantity * rate;
+                  baseAmount = totalInclusive / (1 + taxRate / 100);
+                  taxAmount = totalInclusive - baseAmount;
+                } else {
+                  baseAmount = quantity * rate;
+                  taxAmount = baseAmount * (taxRate / 100);
+                }
+
+                return {
+                  ...orderItem,
+                  rate,
+                  discountPercent,
+                  amount: Math.round(baseAmount * 100) / 100,
+                  taxAmount: Math.round(taxAmount * 100) / 100,
+                  isGstInclusive,
+                };
+              })
+            );
+          }}
+          brands={brands}
+          subBrands={subBrands}
+          items={items}
+        />
+      )}
+
+      <ItemSelectionModal
+        isOpen={isAddItemModalOpen}
+        onClose={() => setIsAddItemModalOpen(false)}
+        items={items}
+        selectedItemIds={selectedItemIds}
+        onSelect={handleAddItemSelect}
+        onItemCreated={fetchItems}
+      />
     </DashboardLayout>
   );
 }

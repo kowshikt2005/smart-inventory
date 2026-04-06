@@ -1,14 +1,19 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
+import { cache, cacheKeys } from '@/lib/cache';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/rate-sheets - Get all rate sheets
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('masters_rate_sheets', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
     const activeOnly = searchParams.get('activeOnly') === 'true';
+    const customerId = searchParams.get('customerId') || '';
     const skip = (page - 1) * limit;
 
     // Build where clause
@@ -18,27 +23,35 @@ export async function GET(request: Request) {
       where.isActive = true;
     }
 
+    if (customerId) {
+      where.customers = { some: { customerId } };
+    }
+
     if (search) {
       where.OR = [
         { name: { contains: search } },
-        { customer: { name: { contains: search } } },
-        { customer: { customerNumber: { contains: search } } },
+        { customers: { some: { customer: { name: { contains: search } } } } },
+        { customers: { some: { customer: { customerNumber: { contains: search } } } } },
       ];
     }
 
-    // Get rate sheets with customer relation
+    // Get rate sheets with customers via join table
     const [rateSheets, total] = await Promise.all([
       db.rateSheet.findMany({
         where,
         include: {
-          customer: {
-            select: {
-              id: true,
-              customerNumber: true,
-              name: true,
-              gstin: true,
-              city: true,
-              state: true,
+          customers: {
+            include: {
+              customer: {
+                select: {
+                  id: true,
+                  customerNumber: true,
+                  name: true,
+                  gstin: true,
+                  city: true,
+                  state: true,
+                },
+              },
             },
           },
         },
@@ -70,50 +83,38 @@ export async function GET(request: Request) {
 // POST /api/rate-sheets - Create a new rate sheet
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('masters_rate_sheets', 'edit');
+    if (error) return error;
+
     const body = await request.json();
 
     // Validate required fields
-    const requiredFields = ['name', 'customerId', 'validFrom'];
-    for (const field of requiredFields) {
-      if (!body[field]) {
-        return NextResponse.json(
-          { error: `Missing required field: ${field}` },
-          { status: 400 }
-        );
-      }
+    if (!body.validFrom) {
+      return NextResponse.json(
+        { error: 'Missing required field: validFrom' },
+        { status: 400 }
+      );
+    }
+    if (!Array.isArray(body.customerIds) || body.customerIds.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one customer must be selected' },
+        { status: 400 }
+      );
     }
 
-    // Validate customer exists
-    const customer = await db.customer.findUnique({
-      where: { id: body.customerId },
+    // Validate all customers exist
+    const customers = await db.customer.findMany({
+      where: { id: { in: body.customerIds } },
+      select: { id: true },
     });
-    if (!customer) {
+    if (customers.length !== body.customerIds.length) {
       return NextResponse.json(
-        { error: 'Customer not found' },
+        { error: 'One or more customers not found' },
         { status: 404 }
       );
     }
 
-    // Check if customer already has a rate sheet
-    const existingRateSheet = await db.rateSheet.findUnique({
-      where: { customerId: body.customerId },
-    });
-
-    if (existingRateSheet) {
-      return NextResponse.json(
-        { error: 'This customer already has a rate sheet. Please edit the existing one.' },
-        { status: 409 }
-      );
-    }
-
-    // Validate itemRatePercent (must be between 0 and 200)
-    const itemRatePercent = parseFloat(body.itemRatePercent) || 100;
-    if (itemRatePercent < 0 || itemRatePercent > 200) {
-      return NextResponse.json(
-        { error: 'Item rate percent must be between 0 and 200' },
-        { status: 400 }
-      );
-    }
+    const generatedName = body.name?.trim() || `Rate Sheet - ${new Date().toISOString().split('T')[0]} - ${body.customerIds.length} customer(s)`;
 
     // Validate discountPercent (must be between 0 and 100)
     const discountPercent = parseFloat(body.discountPercent) || 0;
@@ -124,30 +125,50 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create rate sheet
-    const rateSheet = await db.rateSheet.create({
-      data: {
-        name: body.name,
-        customerId: body.customerId,
-        validFrom: new Date(body.validFrom),
-        validTo: body.validTo ? new Date(body.validTo) : null,
-        itemRatePercent,
-        discountPercent,
-        excludedItemIds: body.excludedItemIds || [],
-        currency: body.currency || 'INR',
-        roundOff: body.roundOff || 'NONE',
-        isActive: body.isActive !== false, // Default to true
-      },
-      include: {
-        customer: {
-          select: {
-            id: true,
-            customerNumber: true,
-            name: true,
+    // Create rate sheet and join table entries in a transaction
+    const rateSheet = await transaction(async (tx) => {
+      const created = await tx.rateSheet.create({
+        data: {
+          name: generatedName,
+          validFrom: new Date(body.validFrom),
+          validTo: body.validTo ? new Date(body.validTo) : null,
+          discountPercent,
+          excludedItemIds: body.excludedItemIds || [],
+          excludedBrandIds: body.excludedBrandIds || [],
+          excludedSubBrandIds: body.excludedSubBrandIds || [],
+          useInclusionModel: body.useInclusionModel !== false,
+          inclusionDiscounts: body.inclusionDiscounts || {},
+          isActive: body.isActive !== false,
+        },
+      });
+
+      // Create join table entries for all selected customers
+      await tx.rateSheetCustomer.createMany({
+        data: body.customerIds.map((customerId: string) => ({
+          rateSheetId: created.id,
+          customerId,
+        })),
+      });
+
+      // Return with customers included
+      return tx.rateSheet.findUnique({
+        where: { id: created.id },
+        include: {
+          customers: {
+            include: {
+              customer: {
+                select: { id: true, customerNumber: true, name: true },
+              },
+            },
           },
         },
-      },
+      });
     });
+
+    // Invalidate rate sheet cache for all affected customers
+    for (const customerId of body.customerIds) {
+      cache.delete(cacheKeys.rateSheet(customerId));
+    }
 
     return NextResponse.json(rateSheet, { status: 201 });
   } catch (error: any) {
@@ -155,7 +176,7 @@ export async function POST(request: Request) {
 
     if (error.code === 'P2002') {
       return NextResponse.json(
-        { error: 'A rate sheet for this customer already exists' },
+        { error: 'Duplicate customer assignment detected' },
         { status: 409 }
       );
     }

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
+import { calculateLineItemV2 } from '@/lib/order-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/sales-invoices/[id] - Get single invoice
 export async function GET(
@@ -7,9 +9,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_invoices', 'view');
+    if (error) return error;
     const { id } = await params;
 
-    const invoice = await db.invoice.findUnique({
+    const invoice = await (db.invoice.findUnique as any)({
       where: { id },
       include: {
         customer: {
@@ -37,7 +41,8 @@ export async function GET(
                 unit: true,
                 hsnCode: true,
                 gstRate: true,
-                standardPrice: true,
+                sellingPrice: true,
+                mrp: true,
               },
             },
           },
@@ -53,6 +58,24 @@ export async function GET(
                 mode: true,
               },
             },
+          },
+        },
+        salesReturns: {
+          select: {
+            id: true,
+            returnNumber: true,
+            status: true,
+            returnDate: true,
+          },
+        },
+        shippingAddress: {
+          select: {
+            id: true,
+            label: true,
+            address: true,
+            city: true,
+            state: true,
+            pincode: true,
           },
         },
       },
@@ -90,18 +113,21 @@ export async function GET(
   }
 }
 
-// PUT /api/sales-invoices/[id] - Update invoice (limited fields)
+// PUT /api/sales-invoices/[id] - Update invoice
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_invoices', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
-    const invoice = await db.invoice.findUnique({
+    const invoice = await (db.invoice.findUnique as any)({
       where: { id },
-    });
+      include: { items: true, allocations: true },
+    }) as any;
 
     if (!invoice) {
       return NextResponse.json(
@@ -110,34 +136,207 @@ export async function PUT(
       );
     }
 
-    // Only allow updating notes and due date if not paid
-    if (invoice.paymentStatus === 'PAID') {
+    // Only allow updating if not paid or cancelled
+    if (invoice.paymentStatus === 'PAID' || invoice.paymentStatus === 'CANCELLED') {
       return NextResponse.json(
-        { error: 'Cannot update paid invoice' },
+        { error: 'Cannot update paid or cancelled invoice' },
         { status: 400 }
       );
     }
 
-    const updatedInvoice = await db.invoice.update({
+    // If items are provided, do a full update
+    if (body.items && Array.isArray(body.items) && body.items.length > 0) {
+      // Validate item values
+      for (const item of body.items) {
+        const dp = Number(item.discountPercent || 0);
+        if (dp < 0 || dp > 100) {
+          return NextResponse.json({ error: 'Discount percent must be between 0 and 100' }, { status: 400 });
+        }
+        if (Number(item.rate) < 0) {
+          return NextResponse.json({ error: 'Item rate cannot be negative' }, { status: 400 });
+        }
+        if (Number(item.quantity) <= 0) {
+          return NextResponse.json({ error: 'Item quantity must be greater than 0' }, { status: 400 });
+        }
+      }
+
+      // Reject duplicate itemIds
+      const incomingItemIds = body.items.map((i: { itemId: string }) => i.itemId).filter(Boolean);
+      if (new Set(incomingItemIds).size !== incomingItemIds.length) {
+        return NextResponse.json(
+          { error: 'Duplicate items found. Each item must appear only once per invoice.' },
+          { status: 400 }
+        );
+      }
+
+      const updatedInvoice = await transaction(async (tx) => {
+        // Check if negative billing is enabled
+        const negativeBillingSetting = await tx.appSetting.findUnique({ where: { key: 'negative_billing' } });
+        const negativeBillingEnabled = negativeBillingSetting?.value === 'true';
+
+        if (!negativeBillingEnabled) {
+          // Pre-validate: after restoring old sale quantities, ensure new quantities can be fulfilled
+          const oldQtyMap: Record<string, number> = {};
+          for (const oldItem of invoice.items) {
+            if (oldItem.itemId) oldQtyMap[oldItem.itemId] = Number(oldItem.quantity);
+          }
+          for (const newItem of body.items) {
+            const newQty = Number(newItem.quantity);
+            const oldQty = oldQtyMap[newItem.itemId] ?? 0;
+            const inv = await tx.inventory.findUnique({ where: { itemId: newItem.itemId } });
+            const currentStock = inv ? Number(inv.physicalStock) : 0;
+            const stockAfterRestore = currentStock + oldQty;
+            if (newQty > stockAfterRestore) {
+              const itm = await tx.item.findUnique({
+                where: { id: newItem.itemId },
+                select: { name: true, itemCode: true },
+              });
+              throw new Error(
+                `Insufficient stock for "${itm?.name || newItem.itemId}": ` +
+                `available after restoring old sale is ${stockAfterRestore}, but new quantity is ${newQty}.`
+              );
+            }
+          }
+        }
+
+        // Reverse old inventory changes - restore stock
+        for (const oldItem of invoice.items) {
+          if (!oldItem.itemId) continue; // skip items without catalog link
+          await tx.inventory.updateMany({
+            where: { itemId: oldItem.itemId },
+            data: { physicalStock: { increment: Number(oldItem.quantity) } },
+          });
+        }
+
+        // Delete old stock movements for this invoice
+        await tx.stockMovement.deleteMany({
+          where: { referenceType: 'INVOICE', referenceId: id },
+        });
+
+        // Delete old items
+        await tx.invoiceItem.deleteMany({
+          where: { invoiceId: id },
+        });
+
+        // Calculate new items
+        const newItems = body.items.map((item: { itemId: string; hsnCode?: string | null; quantity: number; rate: number; taxRate: number; discountPercent?: number }) => {
+          const quantity = Number(item.quantity);
+          const rate = Number(item.rate);
+          const taxRate = Number(item.taxRate);
+          const discountPercent = Number(item.discountPercent || 0);
+
+          const lineItem = calculateLineItemV2(quantity, rate, taxRate, discountPercent);
+
+          return {
+            itemId: item.itemId,
+            hsnCode: item.hsnCode || null,
+            quantity,
+            rate,
+            discountPercent,
+            taxRate,
+            taxAmount: lineItem.taxAmount,
+            amount: lineItem.amount,
+          };
+        });
+
+        const subtotal = newItems.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0);
+        const totalTax = newItems.reduce((sum: number, item: { taxAmount: number }) => sum + item.taxAmount, 0);
+        const rawTotal = subtotal + totalTax;
+        const roundOff = Math.round(rawTotal) - rawTotal;
+        const totalAmount = Math.round(rawTotal);
+
+        // Validate new total covers already paid amount
+        const paidAmount = Number(invoice.paidAmount || 0);
+        if (paidAmount > 0 && totalAmount < paidAmount) {
+          throw new Error(`New total (₹${totalAmount.toFixed(2)}) cannot be less than already paid amount (₹${paidAmount.toFixed(2)})`);
+        }
+
+        // Update invoice
+        const updated = await tx.invoice.update({
+          where: { id },
+          data: {
+            notes: body.notes !== undefined ? body.notes : invoice.notes,
+            dueDate: body.dueDate ? new Date(body.dueDate) : invoice.dueDate,
+            subtotal: Math.round(subtotal * 1000) / 1000,
+            cgst: Math.round(totalTax / 2 * 1000) / 1000,
+            sgst: Math.round(totalTax / 2 * 1000) / 1000,
+            taxAmount: Math.round(totalTax * 1000) / 1000,
+            roundOff: Math.round(roundOff * 1000) / 1000,
+            totalAmount,
+            balanceAmount: totalAmount - paidAmount,
+            items: { create: newItems },
+          },
+          include: {
+            customer: { select: { id: true, customerNumber: true, name: true } },
+          },
+        });
+
+        // Re-apply inventory changes - reduce stock for new items
+        for (const newItem of newItems) {
+          const inv = await tx.inventory.upsert({
+            where: { itemId: newItem.itemId },
+            create: {
+              itemId: newItem.itemId,
+              physicalStock: -newItem.quantity,
+              reservedQuantity: 0,
+              minStockLevel: 0,
+            },
+            update: {
+              physicalStock: { decrement: newItem.quantity },
+            },
+          });
+
+          await tx.stockMovement.create({
+            data: {
+              inventoryId: inv.id,
+              itemId: newItem.itemId,
+              type: 'SALE',
+              quantity: newItem.quantity,
+              referenceType: 'INVOICE',
+              referenceId: id,
+              notes: `Sales Invoice ${updated.invoiceNumber} (edited)`,
+            },
+          });
+        }
+
+        // Update customer ledger (only if customer is linked)
+        if (invoice.customerId) {
+          await tx.customerLedger.deleteMany({
+            where: { referenceId: id, referenceType: { in: ['sales_invoice', 'SALES_INVOICE'] } },
+          });
+
+          await tx.customerLedger.create({
+            data: {
+              customerId: invoice.customerId,
+              date: invoice.invoiceDate,
+              description: `Sales Invoice ${updated.invoiceNumber}`,
+              type: 'SALES_INVOICE',
+              debit: totalAmount,
+              credit: 0,
+              balance: 0,
+              referenceType: 'sales_invoice',
+              referenceId: id,
+            },
+          });
+        }
+
+        return updated;
+      }, { maxWait: 10000, timeout: 30000 });
+
+      return NextResponse.json(updatedInvoice);
+    }
+
+    // Simple update (only notes, due date, ref)
+    const updatedInvoice = await (db.invoice.update as any)({
       where: { id },
       data: {
         notes: body.notes !== undefined ? body.notes : invoice.notes,
         dueDate: body.dueDate ? new Date(body.dueDate) : invoice.dueDate,
+        ref: body.ref !== undefined ? (body.ref || null) : invoice.ref,
       },
       include: {
-        customer: {
-          select: {
-            id: true,
-            customerNumber: true,
-            name: true,
-          },
-        },
-        salesOrder: {
-          select: {
-            id: true,
-            orderNumber: true,
-          },
-        },
+        customer: { select: { id: true, customerNumber: true, name: true } },
+        salesOrder: { select: { id: true, orderNumber: true } },
       },
     });
 
@@ -151,18 +350,22 @@ export async function PUT(
   }
 }
 
-// DELETE /api/sales-invoices/[id] - Cancel invoice
+// DELETE /api/sales-invoices/[id] - Delete invoice
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('sales_invoices', 'edit');
+    if (error) return error;
     const { id } = await params;
 
     const invoice = await db.invoice.findUnique({
       where: { id },
       include: {
         allocations: true,
+        items: true,
+        salesReturns: true,
       },
     });
 
@@ -173,54 +376,58 @@ export async function DELETE(
       );
     }
 
-    // Cannot cancel if payments have been made
+    // Cannot delete if payments have been made
     if (invoice.allocations.length > 0 || Number(invoice.paidAmount) > 0) {
       return NextResponse.json(
-        { error: 'Cannot cancel invoice with payments. Reverse payments first.' },
+        { error: 'Cannot delete invoice with payments. Reverse payments first.' },
         { status: 400 }
       );
     }
 
-    // Cancel invoice and reverse ledger entry in transaction
-    await db.$transaction(async (tx) => {
-      // Update invoice status to cancelled
-      await tx.invoice.update({
-        where: { id },
-        data: {
-          paymentStatus: 'CANCELLED',
-        },
+    // Cannot delete if returns exist
+    if (invoice.salesReturns.length > 0) {
+      return NextResponse.json(
+        { error: 'Cannot delete invoice with returns. Delete returns first.' },
+        { status: 400 }
+      );
+    }
+
+    // Delete invoice, restore inventory, and remove ledger entry in transaction
+    await transaction(async (tx) => {
+      // Restore physical stock for each item
+      for (const invoiceItem of invoice.items) {
+        if (!invoiceItem.itemId) continue;
+        await tx.inventory.updateMany({
+          where: { itemId: invoiceItem.itemId },
+          data: { physicalStock: { increment: Number(invoiceItem.quantity) } },
+        });
+      }
+
+      // Delete stock movements
+      await tx.stockMovement.deleteMany({
+        where: { referenceType: 'INVOICE', referenceId: id },
       });
 
-      // Create reversal ledger entry
-      const lastLedgerEntry = await tx.customerLedger.findFirst({
-        where: { customerId: invoice.customerId },
-        orderBy: { date: 'desc' },
-      });
+      // Delete customer ledger entries
+      if (invoice.customerId) {
+        await tx.customerLedger.deleteMany({
+          where: { referenceId: id, referenceType: { in: ['sales_invoice', 'SALES_INVOICE'] } },
+        });
+      }
 
-      const previousBalance = lastLedgerEntry ? Number(lastLedgerEntry.balance) : 0;
-      const newBalance = previousBalance - Number(invoice.totalAmount);
-
-      await tx.customerLedger.create({
-        data: {
-          customerId: invoice.customerId,
-          date: new Date(),
-          description: `Invoice Cancelled - ${invoice.invoiceNumber}`,
-          type: 'ADJUSTMENT',
-          debit: 0,
-          credit: Number(invoice.totalAmount),
-          balance: newBalance,
-          referenceType: 'sales_invoice',
-          referenceId: invoice.id,
-        },
-      });
+      // Hard delete the invoice (items cascade deleted)
+      await tx.invoice.delete({ where: { id } });
     });
 
-    return NextResponse.json({ message: 'Invoice cancelled successfully' });
-  } catch (error) {
-    console.error('Error cancelling invoice:', error);
-    return NextResponse.json(
-      { error: 'Failed to cancel invoice' },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: 'Invoice deleted successfully' });
+  } catch (error: unknown) {
+    console.error('Error deleting invoice:', error);
+
+    const prismaError = error as { code?: string };
+    if (prismaError.code === 'P2025') {
+      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ error: 'Failed to delete invoice' }, { status: 500 });
   }
 }

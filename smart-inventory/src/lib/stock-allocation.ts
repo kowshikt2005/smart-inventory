@@ -53,16 +53,33 @@ export async function calculateStockAllocation(
     },
   });
 
-  // Build a map of available stock per item
+  // Fetch pending purchase order quantities per item (OPEN or PARTIAL POs)
+  const pendingPOItems = await db.purchaseOrderItem.findMany({
+    where: {
+      purchaseOrder: {
+        status: { in: ['OPEN', 'PARTIAL'] },
+      },
+    },
+    select: { itemId: true, quantity: true },
+  });
+
+  // Sum pending PO quantities per item
+  const pendingPOMap = new Map<string, number>();
+  for (const poi of pendingPOItems) {
+    const prev = pendingPOMap.get(poi.itemId) || 0;
+    pendingPOMap.set(poi.itemId, prev + Number(poi.quantity));
+  }
+
+  // Build a map of available stock per item (physical + incoming from pending POs)
   const itemStockMap = new Map<string, number>();
 
-  // Initialize with physical stock for each item
   activeOrders.forEach((order) => {
     order.items.forEach((orderItem) => {
       const itemId = orderItem.itemId;
       if (!itemStockMap.has(itemId)) {
         const physicalStock = Number(orderItem.item.inventory?.physicalStock || 0);
-        itemStockMap.set(itemId, physicalStock);
+        const incomingStock = pendingPOMap.get(itemId) || 0;
+        itemStockMap.set(itemId, physicalStock + incomingStock);
       }
     });
   });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { X } from "lucide-react";
+import { X, Upload, Trash2, Plus } from "lucide-react";
 import useSWR from "swr";
 
 interface Brand {
@@ -24,28 +25,52 @@ interface SubBrand {
   brandId: string;
 }
 
+interface UOMConversion {
+  name: string;
+  factor: string;
+}
+
 interface EditItem {
   id: string;
   itemCode: string;
   name: string;
   description?: string;
-  standardPrice: string | number;
-  purchasePrice: string | number;
+  purchasePrice: string | number; // Cost price
+  mrp: string | number; // Maximum Retail Price
+  sellingPrice: string | number; // Actual selling price
+  margin?: string | number;
+  marginType?: string;
+  userCode?: string;
+  barcode?: string | null;
   unit: string;
+  uomConversions?: Array<{ name: string; factor: number }> | null;
   hsnCode?: string;
   gstRate: string | number;
-  brand?: { id: string; name: string };
-  subBrand?: { id: string; name: string };
+  brand?: { id: string; name: string } | null;
+  subBrand?: { id: string; name: string } | null;
+  imageUrl?: string | null;
   inventory?: {
     minStockLevel: string | number;
   };
 }
 
+interface PrefillData {
+  name?: string;
+  purchasePrice?: string;
+  sellingPrice?: string;
+  gstRate?: string;
+  hsnCode?: string;
+  mrp?: string;
+  unit?: string;
+  quantity?: string;
+}
+
 interface AddItemModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (item: { id: string }) => void;
   editItem?: EditItem | null;
+  prefillData?: PrefillData;
 }
 
 export function AddItemModal({
@@ -53,84 +78,203 @@ export function AddItemModal({
   onClose,
   onSuccess,
   editItem,
+  prefillData,
 }: AddItemModalProps) {
+  const router = useRouter();
   const isEditing = !!editItem;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
+    userCode: "",
+    barcode: "",
     description: "",
     brandId: "",
     subBrandId: "",
     hsnCode: "",
     gstRate: "18",
-    standardPrice: "0",
-    purchasePrice: "0",
+    purchasePrice: "0", // Cost price
+    mrp: "0", // Maximum Retail Price
+    sellingPrice: "0", // Actual selling price
+    margin: "",
+    marginType: "PERCENTAGE",
     minStock: "0",
     unit: "PCS",
+    openingStock: "0",
   });
+  const [uomConversions, setUomConversions] = useState<UOMConversion[]>([]);
 
   // Use SWR to cache brands and sub-brands - NO N+1 queries!
-  const { data: brandsData } = useSWR(isOpen ? "/api/brands" : null);
-  const { data: subBrandsData } = useSWR(isOpen ? "/api/sub-brands" : null);
+  const { data: brandsData, isLoading: _brandsLoading } = useSWR(isOpen ? "/api/brands?activeOnly=true" : null);
+  const { data: subBrandsData, isLoading: _subBrandsLoading } = useSWR(isOpen ? "/api/sub-brands?activeOnly=true" : null);
 
-  const brands = brandsData?.brands || [];
+  // Ensure current brand is in the list (just like GST options are always there)
+  const brands = useMemo(() => {
+    const list = brandsData?.brands || [];
+    if (editItem?.brand && !list.find((b: Brand) => b.id === editItem.brand?.id)) {
+      return [{ id: editItem.brand.id, name: editItem.brand.name }, ...list];
+    }
+    return list;
+  }, [brandsData, editItem]);
 
-  // Populate form when editing
+  // Reset form when opening for a new item — must NOT depend on brandsData/subBrandsData
+  // or it will re-run (and wipe user input) every time SWR revalidates those queries.
   useEffect(() => {
-    if (editItem && isOpen) {
+    if (!editItem && isOpen) {
+      const hasInvoicePrefill = !!(prefillData?.name || prefillData?.quantity);
+      setFormData({
+        name: prefillData?.name || "",
+        userCode: "",
+        barcode: "",
+        description: "",
+        brandId: "",
+        subBrandId: "",
+        hsnCode: prefillData?.hsnCode || "",
+        gstRate: prefillData?.gstRate || "18",
+        purchasePrice: prefillData?.purchasePrice || "0",
+        mrp: prefillData?.mrp || "0",
+        sellingPrice: prefillData?.sellingPrice || "0",
+        margin: "",
+        marginType: "PERCENTAGE",
+        minStock: "0",
+        unit: prefillData?.unit || (hasInvoicePrefill ? "CTN" : "PCS"),
+        openingStock: "0",
+      });
+      setUomConversions([]);
+      setImageUrl(null);
+    }
+  }, [editItem, isOpen, prefillData]);
+
+  // Populate form when editing (wait for brands/sub-brands data to load first to avoid race condition)
+  useEffect(() => {
+    if (editItem && isOpen && brandsData && subBrandsData) {
       setFormData({
         name: editItem.name || "",
+        userCode: editItem.userCode || "",
+        barcode: editItem.barcode || "",
         description: editItem.description || "",
         brandId: editItem.brand?.id || "",
         subBrandId: editItem.subBrand?.id || "",
         hsnCode: editItem.hsnCode || "",
-        gstRate: String(editItem.gstRate) || "18",
-        standardPrice: String(editItem.standardPrice) || "0",
-        purchasePrice: String(editItem.purchasePrice) || "0",
-        minStock: String(editItem.inventory?.minStockLevel || 0),
+        gstRate: editItem.gstRate !== undefined && editItem.gstRate !== null ? String(editItem.gstRate) : "18",
+        purchasePrice: editItem.purchasePrice !== undefined && editItem.purchasePrice !== null ? String(editItem.purchasePrice) : "0",
+        mrp: editItem.mrp !== undefined && editItem.mrp !== null ? String(editItem.mrp) : "0",
+        sellingPrice: editItem.sellingPrice !== undefined && editItem.sellingPrice !== null ? String(editItem.sellingPrice) : "0",
+        margin: editItem.margin !== undefined && editItem.margin !== null ? String(editItem.margin) : "",
+        marginType: editItem.marginType || "PERCENTAGE",
+        minStock: String(editItem.inventory?.minStockLevel ?? 0),
         unit: editItem.unit || "PCS",
+        openingStock: "0",
       });
-    } else if (!editItem && isOpen) {
-      // Reset form for new item
-      setFormData({
-        name: "",
-        description: "",
-        brandId: "",
-        subBrandId: "",
-        hsnCode: "",
-        gstRate: "18",
-        standardPrice: "0",
-        purchasePrice: "0",
-        minStock: "0",
-        unit: "PCS",
-      });
+      setUomConversions(
+        (editItem.uomConversions || []).map((c) => ({
+          name: c.name,
+          factor: String(c.factor),
+        }))
+      );
+      setImageUrl(editItem.imageUrl || null);
     }
-  }, [editItem, isOpen]);
+  }, [editItem, isOpen, brandsData, subBrandsData]);
 
-  // Filter sub-brands based on selected brand
+  // Filter sub-brands based on selected brand (ensure current sub-brand is in the list)
   const filteredSubBrands = useMemo(() => {
     const subBrands = subBrandsData?.subBrands || [];
     if (!formData.brandId) return [];
-    return subBrands.filter((sb: SubBrand) => sb.brandId === formData.brandId);
-  }, [formData.brandId, subBrandsData]);
 
-  // Reset sub-brand when brand changes
+    let filtered = subBrands.filter((sb: SubBrand) => sb.brandId === formData.brandId);
+
+    // Ensure current sub-brand is in the list (just like GST options are always there)
+    if (editItem?.subBrand && !filtered.find((sb: SubBrand) => sb.id === editItem.subBrand?.id)) {
+      filtered = [{ id: editItem.subBrand.id, name: editItem.subBrand.name, brandId: formData.brandId }, ...filtered];
+    }
+
+    return filtered;
+  }, [formData.brandId, subBrandsData, editItem]);
+
+  // Reset sub-brand when brand changes (but only if sub-brands data is loaded)
+  // This prevents resetting subBrandId during initial form population when editing
   useEffect(() => {
-    if (formData.brandId && formData.subBrandId) {
+    // Only run this check if subBrandsData is loaded and there's an actual brand change
+    if (subBrandsData && formData.brandId && formData.subBrandId) {
       const isValid = filteredSubBrands.find((sb: SubBrand) => sb.id === formData.subBrandId);
       if (!isValid) {
         setFormData(prev => ({ ...prev, subBrandId: "" }));
       }
     }
-  }, [formData.brandId, formData.subBrandId, filteredSubBrands]);
+  }, [formData.brandId, formData.subBrandId, filteredSubBrands, subBrandsData]);
+
+  // Auto-calculate selling price from purchase price + margin
+  useEffect(() => {
+    const marginVal = parseFloat(formData.margin);
+    const purchaseVal = parseFloat(formData.purchasePrice);
+    if (!isNaN(marginVal) && marginVal > 0 && !isNaN(purchaseVal)) {
+      let calculatedPrice: number;
+      if (formData.marginType === "PERCENTAGE") {
+        calculatedPrice = purchaseVal + (purchaseVal * marginVal / 100);
+      } else {
+        calculatedPrice = purchaseVal + marginVal;
+      }
+      setFormData(prev => ({
+        ...prev,
+        sellingPrice: (Math.round(calculatedPrice * 1000) / 1000).toString(),
+      }));
+    }
+  }, [formData.purchasePrice, formData.margin, formData.marginType]);
+
+  const hasMargin = formData.margin !== "" && parseFloat(formData.margin) > 0;
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setError(null);
+
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append("file", file);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formDataUpload,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to upload image");
+      }
+
+      setImageUrl(data.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload image");
+    } finally {
+      setIsUploading(false);
+      // Reset file input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
     setError(null);
+
+    // Client-side validation for required fields
+    const missing: string[] = [];
+    if (!formData.name.trim()) missing.push("Item Name");
+    if (!formData.brandId) missing.push("Brand");
+
+    if (missing.length > 0) {
+      setError(`Required fields missing: ${missing.join(", ")}`);
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
       const url = isEditing ? `/api/items/${editItem.id}` : "/api/items";
@@ -143,15 +287,27 @@ export function AddItemModal({
         },
         body: JSON.stringify({
           name: formData.name,
+          userCode: formData.userCode || null,
+          barcode: formData.barcode || null,
           description: formData.description || null,
-          brandId: formData.brandId || null,
-          subBrandId: formData.subBrandId || null,
+          brandId: formData.brandId,
+          subBrandId: formData.subBrandId,
           hsnCode: formData.hsnCode || null,
           gstRate: parseFloat(formData.gstRate) || 0,
-          standardPrice: parseFloat(formData.standardPrice) || 0,
           purchasePrice: parseFloat(formData.purchasePrice) || 0,
+          mrp: parseFloat(formData.mrp) || 0,
+          sellingPrice: parseFloat(formData.sellingPrice) || 0,
+          margin: formData.margin !== "" ? parseFloat(formData.margin) : null,
+          marginType: formData.marginType,
           minStock: parseFloat(formData.minStock) || 0,
           unit: formData.unit,
+          openingStock: parseFloat(formData.openingStock) || 0,
+          uomConversions: uomConversions.length > 0
+            ? uomConversions
+                .filter((c) => c.name.trim() && parseFloat(c.factor) > 0)
+                .map((c) => ({ name: c.name.trim().toUpperCase(), factor: parseFloat(c.factor) }))
+            : null,
+          imageUrl: imageUrl || null,
         }),
       });
 
@@ -162,22 +318,30 @@ export function AddItemModal({
       }
 
       // Success
-      onSuccess?.();
+      onSuccess?.(data);
       onClose();
 
       // Reset form
       setFormData({
         name: "",
+        userCode: "",
+        barcode: "",
         description: "",
         brandId: "",
         subBrandId: "",
         hsnCode: "",
         gstRate: "18",
-        standardPrice: "0",
         purchasePrice: "0",
+        mrp: "0",
+        sellingPrice: "0",
+        margin: "",
+        marginType: "PERCENTAGE",
         minStock: "0",
         unit: "PCS",
+        openingStock: "0",
       });
+      setUomConversions([]);
+      setImageUrl(null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       setError(errorMessage);
@@ -272,6 +436,40 @@ export function AddItemModal({
                   placeholder="Enter item name"
                 />
               </div>
+              <div>
+                <label
+                  htmlFor="item-usercode"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Item Code
+                </label>
+                <Input
+                  id="item-usercode"
+                  type="text"
+                  name="userCode"
+                  value={formData.userCode}
+                  onChange={handleChange}
+                  placeholder="Enter your item code"
+                />
+                <p className="text-xs text-gray-500 mt-1">Your own code for searching</p>
+              </div>
+              <div>
+                <label
+                  htmlFor="item-barcode"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Barcode
+                </label>
+                <Input
+                  id="item-barcode"
+                  type="text"
+                  name="barcode"
+                  value={formData.barcode}
+                  onChange={handleChange}
+                  placeholder="Scan or enter barcode"
+                />
+                <p className="text-xs text-gray-500 mt-1">Unique barcode for this item</p>
+              </div>
               <div className="md:col-span-2">
                 <label
                   htmlFor="item-description"
@@ -288,6 +486,67 @@ export function AddItemModal({
                   placeholder="Enter item description (optional)"
                 />
               </div>
+
+              {/* Image Upload */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Item Image
+                </label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+                {imageUrl ? (
+                  <div className="flex items-start gap-3">
+                    <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-200 shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imageUrl}
+                        alt="Item preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                      >
+                        <Upload className="h-3.5 w-3.5 mr-1.5" />
+                        Change
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setImageUrl(null)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-teal-400 hover:bg-teal-50/50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Upload className="h-6 w-6 mx-auto text-gray-400 mb-1" />
+                    <p className="text-sm text-gray-600">
+                      {isUploading ? "Uploading..." : "Click to upload image"}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">JPEG, PNG or WebP (max 5MB)</p>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -299,11 +558,12 @@ export function AddItemModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Brand
+                  Brand <span className="text-red-500">*</span>
                 </label>
                 <Select
-                  value={formData.brandId || undefined}
-                  onValueChange={(value) => handleSelectChange("brandId", value || "")}
+                  key={`brand-${formData.brandId}-${brands.length}`}
+                  value={formData.brandId}
+                  onValueChange={(value) => handleSelectChange("brandId", value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a brand" />
@@ -316,14 +576,23 @@ export function AddItemModal({
                     ))}
                   </SelectContent>
                 </Select>
+                <button
+                  type="button"
+                  onClick={() => router.push("/masters/items/brands?create=1&returnTo=/masters/items")}
+                  className="mt-1 flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700"
+                >
+                  <Plus className="h-3 w-3" />
+                  Create new brand
+                </button>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Sub-brand
                 </label>
                 <Select
-                  value={formData.subBrandId || undefined}
-                  onValueChange={(value) => handleSelectChange("subBrandId", value || "")}
+                  key={`subbrand-${formData.subBrandId}-${filteredSubBrands.length}`}
+                  value={formData.subBrandId}
+                  onValueChange={(value) => handleSelectChange("subBrandId", value)}
                   disabled={!formData.brandId}
                 >
                   <SelectTrigger>
@@ -337,6 +606,19 @@ export function AddItemModal({
                     ))}
                   </SelectContent>
                 </Select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = formData.brandId
+                      ? `/masters/items/sub-brands?create=1&returnTo=/masters/items&brandId=${formData.brandId}`
+                      : "/masters/items/sub-brands?create=1&returnTo=/masters/items";
+                    router.push(url);
+                  }}
+                  className="mt-1 flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700"
+                >
+                  <Plus className="h-3 w-3" />
+                  Create new sub-brand
+                </button>
               </div>
             </div>
           </div>
@@ -396,44 +678,129 @@ export function AddItemModal({
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
               Pricing
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label
-                  htmlFor="item-standard-price"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Standard Price (₹) <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  id="item-standard-price"
-                  type="number"
-                  name="standardPrice"
-                  value={formData.standardPrice}
-                  onChange={handleChange}
-                  step="0.01"
-                  min="0"
-                  required
-                  placeholder="0.00"
-                />
+            <div className="space-y-4">
+              {/* Row 1: Purchase Price */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label
+                    htmlFor="item-purchase-price"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Purchase Price (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    id="item-purchase-price"
+                    type="number"
+                    name="purchasePrice"
+                    value={formData.purchasePrice}
+                    onChange={handleChange}
+                    step="0.01"
+                    min="0"
+                    required
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Cost price (what you pay)</p>
+                </div>
               </div>
-              <div>
-                <label
-                  htmlFor="item-purchase-price"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Purchase Price (₹) <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  id="item-purchase-price"
-                  type="number"
-                  name="purchasePrice"
-                  value={formData.purchasePrice}
-                  onChange={handleChange}
-                  step="0.01"
-                  min="0"
-                  required
-                  placeholder="0.00"
-                />
+
+              {/* Row 2: Margin + Selling Price */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label
+                    htmlFor="item-margin"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Margin
+                  </label>
+                  <div className="flex gap-1">
+                    <Input
+                      id="item-margin"
+                      type="number"
+                      name="margin"
+                      value={formData.margin}
+                      onChange={handleChange}
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      className="flex-1"
+                    />
+                    <div className="flex rounded-md border border-gray-300 overflow-hidden shrink-0">
+                      <button
+                        type="button"
+                        className={`px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                          formData.marginType === "PERCENTAGE"
+                            ? "bg-teal-500 text-white"
+                            : "bg-white text-gray-600 hover:bg-gray-50"
+                        }`}
+                        onClick={() => handleSelectChange("marginType", "PERCENTAGE")}
+                      >
+                        %
+                      </button>
+                      <button
+                        type="button"
+                        className={`px-2.5 py-1.5 text-sm font-medium border-l border-gray-300 transition-colors ${
+                          formData.marginType === "AMOUNT"
+                            ? "bg-teal-500 text-white"
+                            : "bg-white text-gray-600 hover:bg-gray-50"
+                        }`}
+                        onClick={() => handleSelectChange("marginType", "AMOUNT")}
+                      >
+                        ₹
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formData.marginType === "PERCENTAGE" ? "Percentage markup on purchase price" : "Fixed amount added to purchase price"}
+                  </p>
+                </div>
+                <div>
+                  <label
+                    htmlFor="item-selling-price"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Selling Price (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    id="item-selling-price"
+                    type="number"
+                    name="sellingPrice"
+                    value={formData.sellingPrice}
+                    onChange={handleChange}
+                    step="0.01"
+                    min="0"
+                    required
+                    placeholder="0.00"
+                    disabled={hasMargin}
+                    className={hasMargin ? "bg-gray-100" : ""}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {hasMargin ? "Auto-calculated from margin" : "Actual price you sell at"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Row 3: MRP */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label
+                    htmlFor="item-mrp"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    MRP (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    id="item-mrp"
+                    type="number"
+                    name="mrp"
+                    value={formData.mrp}
+                    onChange={handleChange}
+                    step="0.01"
+                    min="0"
+                    required
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Maximum Retail Price</p>
+                </div>
               </div>
             </div>
           </div>
@@ -460,6 +827,7 @@ export function AddItemModal({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="PCS">PCS (Pieces)</SelectItem>
+                    <SelectItem value="CTN">CTN (Cartons)</SelectItem>
                     <SelectItem value="KG">KG (Kilograms)</SelectItem>
                     <SelectItem value="LTR">LTR (Liters)</SelectItem>
                     <SelectItem value="MTR">MTR (Meters)</SelectItem>
@@ -486,7 +854,93 @@ export function AddItemModal({
                   placeholder="0"
                 />
               </div>
+              {!isEditing && (
+                <div>
+                  <label
+                    htmlFor="item-opening-stock"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Opening Stock
+                  </label>
+                  <Input
+                    id="item-opening-stock"
+                    type="number"
+                    name="openingStock"
+                    value={formData.openingStock}
+                    onChange={handleChange}
+                    step="0.001"
+                    min="0"
+                    placeholder="0"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Stock quantity on hand when adding this item</p>
+                </div>
+              )}
             </div>
+          </div>
+
+          {/* UOM / Packing Configuration */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">UOM / Packing Configuration</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Define how many <span className="font-medium">{formData.unit}</span> are in each packing type (e.g., 1 BOX = 12 {formData.unit})
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setUomConversions((prev) => [...prev, { name: "", factor: "" }])}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add
+              </Button>
+            </div>
+            {uomConversions.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">No packing configurations added.</p>
+            ) : (
+              <div className="space-y-2">
+                {uomConversions.map((conv, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500 shrink-0">1</span>
+                    <Input
+                      type="text"
+                      value={conv.name}
+                      onChange={(e) =>
+                        setUomConversions((prev) =>
+                          prev.map((c, i) => i === idx ? { ...c, name: e.target.value.toUpperCase() } : c)
+                        )
+                      }
+                      placeholder="BOX / SET / CASE..."
+                      className="w-32"
+                    />
+                    <span className="text-sm text-gray-500 shrink-0">=</span>
+                    <Input
+                      type="number"
+                      value={conv.factor}
+                      onChange={(e) =>
+                        setUomConversions((prev) =>
+                          prev.map((c, i) => i === idx ? { ...c, factor: e.target.value } : c)
+                        )
+                      }
+                      placeholder="12"
+                      min="1"
+                      step="1"
+                      className="w-24"
+                    />
+                    <span className="text-sm text-gray-500 shrink-0">{formData.unit}</span>
+                    <button
+                      type="button"
+                      onClick={() => setUomConversions((prev) => prev.filter((_, i) => i !== idx))}
+                      className="text-red-400 hover:text-red-600 ml-auto"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Actions */}
@@ -504,7 +958,7 @@ export function AddItemModal({
               disabled={isSubmitting}
               className="bg-teal-500 hover:bg-teal-600 text-white"
             >
-              {isSubmitting ? "Creating..." : "Create Item"}
+              {isSubmitting ? (isEditing ? "Updating..." : "Creating...") : (isEditing ? "Update Item" : "Create Item")}
             </Button>
           </div>
         </form>

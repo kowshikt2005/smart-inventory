@@ -4,9 +4,23 @@ import { PrismaClient } from '@/generated/prisma';
 export const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 /**
+ * Acquire a named MySQL lock to prevent race conditions in number generation.
+ */
+async function acquireNumberLock(db: PrismaClient, lockName: string): Promise<void> {
+  const result = await db.$queryRawUnsafe<{ lock_result: number }[]>(
+    `SELECT GET_LOCK(?, 10) as lock_result`, lockName
+  );
+  if (!result[0] || result[0].lock_result !== 1) {
+    throw new Error(`Failed to acquire lock for ${lockName} generation`);
+  }
+}
+
+/**
  * Generate the next purchase order number in sequence (PO-0001, PO-0002, etc.)
  */
 export async function generatePurchaseOrderNumber(db: PrismaClient): Promise<string> {
+  await acquireNumberLock(db, 'po_number_lock');
+
   const lastOrder = await db.purchaseOrder.findFirst({
     orderBy: { orderNumber: 'desc' },
     select: { orderNumber: true },
@@ -27,6 +41,8 @@ export async function generatePurchaseOrderNumber(db: PrismaClient): Promise<str
  * Generate the next purchase invoice number in sequence (PI-0001, PI-0002, etc.)
  */
 export async function generatePurchaseInvoiceNumber(db: PrismaClient): Promise<string> {
+  await acquireNumberLock(db, 'pi_number_lock');
+
   const lastInvoice = await db.purchaseInvoice.findFirst({
     orderBy: { invoiceNumber: 'desc' },
     select: { invoiceNumber: true },
@@ -47,6 +63,8 @@ export async function generatePurchaseInvoiceNumber(db: PrismaClient): Promise<s
  * Generate the next vendor payment number in sequence (VP-0001, VP-0002, etc.)
  */
 export async function generateVendorPaymentNumber(db: PrismaClient): Promise<string> {
+  await acquireNumberLock(db, 'vp_number_lock');
+
   const lastPayment = await db.vendorPayment.findFirst({
     orderBy: { paymentNumber: 'desc' },
     select: { paymentNumber: true },
@@ -67,6 +85,8 @@ export async function generateVendorPaymentNumber(db: PrismaClient): Promise<str
  * Generate the next purchase return number in sequence (PR-0001, PR-0002, etc.)
  */
 export async function generatePurchaseReturnNumber(db: PrismaClient): Promise<string> {
+  await acquireNumberLock(db, 'pr_number_lock');
+
   const lastReturn = await db.purchaseReturn.findFirst({
     orderBy: { returnNumber: 'desc' },
     select: { returnNumber: true },
@@ -92,9 +112,9 @@ export function calculateTax(amount: number, taxRate: number): { taxAmount: numb
   const sgst = taxAmount / 2;
 
   return {
-    taxAmount: Math.round(taxAmount * 100) / 100,
-    cgst: Math.round(cgst * 100) / 100,
-    sgst: Math.round(sgst * 100) / 100,
+    taxAmount: Math.round(taxAmount * 1000) / 1000,
+    cgst: Math.round(cgst * 1000) / 1000,
+    sgst: Math.round(sgst * 1000) / 1000,
   };
 }
 
@@ -115,9 +135,9 @@ export function calculatePurchaseLineItem(
   const totalAmount = amount + taxAmount;
 
   return {
-    amount: Math.round(amount * 100) / 100,
-    taxAmount: Math.round(taxAmount * 100) / 100,
-    totalAmount: Math.round(totalAmount * 100) / 100,
+    amount: Math.round(amount * 1000) / 1000,
+    taxAmount: Math.round(taxAmount * 1000) / 1000,
+    totalAmount: Math.round(totalAmount * 1000) / 1000,
   };
 }
 
@@ -125,7 +145,8 @@ export function calculatePurchaseLineItem(
  * Calculate purchase document totals from line items
  */
 export function calculatePurchaseTotals(
-  items: Array<{ amount: number; taxAmount: number }>
+  items: Array<{ amount: number; taxAmount: number }>,
+  roundOff: number = 0
 ): {
   subtotal: number;
   totalTax: number;
@@ -133,12 +154,12 @@ export function calculatePurchaseTotals(
 } {
   const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
   const totalTax = items.reduce((sum, item) => sum + item.taxAmount, 0);
-  const totalAmount = subtotal + totalTax;
+  const totalAmount = subtotal + totalTax + roundOff;
 
   return {
-    subtotal: Math.round(subtotal * 100) / 100,
-    totalTax: Math.round(totalTax * 100) / 100,
-    totalAmount: Math.round(totalAmount * 100) / 100,
+    subtotal: Math.round(subtotal * 1000) / 1000,
+    totalTax: Math.round(totalTax * 1000) / 1000,
+    totalAmount: Math.round(totalAmount * 1000) / 1000,
   };
 }
 
@@ -204,7 +225,7 @@ export function formatCurrency(amount: number, currency: string = 'INR'): string
     style: 'currency',
     currency,
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 3,
   }).format(amount);
 }
 

@@ -10,6 +10,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { PurchaseInvoiceStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,11 +26,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { PurchaseInvoiceStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
 import {
   Plus,
-  MoreHorizontal,
+  Edit,
   Trash2,
   Loader2,
   X,
@@ -31,8 +38,14 @@ import {
   CheckCircle,
   CreditCard,
   AlertCircle,
+  Filter,
+  Copy,
+  MoreVertical,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { ImportButton } from "@/components/import/ImportButton";
+import { ExportButtons } from "@/components/ui/ExportButtons";
+import { exportToExcel, exportToPDF, fmtDateExport, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -51,12 +64,15 @@ interface PurchaseInvoice {
   vendorId: string;
   vendorName: string;
   status: string;
+  effectiveStatus: string;
   amount: number;
   taxAmount: number;
   totalAmount: number;
   paidAmount: number;
   balanceAmount: number;
-  vendor: Vendor;
+  ref: string | null;
+  isImported: boolean;
+  vendor: Vendor | null;
   purchaseOrder?: { id: string; orderNumber: string } | null;
 }
 
@@ -68,25 +84,82 @@ const STATUS_FILTERS = [
   { value: "CANCELLED", label: "Cancelled" },
 ];
 
+interface Brand {
+  id: string;
+  name: string;
+}
+
 export default function PurchaseInvoicesPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [brandFilter, setBrandFilter] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
+  // Clipboard copy/paste
+  const [copiedInvoiceId, setCopiedInvoiceId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
+
+  const handleCopyInvoice = (id: string) => {
+    setCopiedInvoiceId(id);
+    setContextMenu(null);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (!copiedInvoiceId) return;
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [contextMenu]);
+
   const debouncedSearch = useDebounce(searchQuery, 300);
+
+  // Fetch brands and vendors for filters
+  const { data: brandsData } = useSWR("/api/brands");
+  const { data: vendorsData } = useSWR("/api/vendors?limit=500");
+  const brands: Brand[] = brandsData?.brands || [];
+  const vendors = vendorsData?.vendors || [];
+
+  const activeFilterCount = [brandFilter, vendorFilter, dateFrom, dateTo].filter(Boolean).length;
 
   const apiUrl = useMemo(() => {
     let url = `/api/purchase-invoices?page=${currentPage}&limit=${itemsPerPage}`;
     if (statusFilter !== "ALL") {
       url += `&status=${statusFilter}`;
     }
+    if (brandFilter) {
+      url += `&brandId=${brandFilter}`;
+    }
+    if (vendorFilter) {
+      url += `&vendorId=${vendorFilter}`;
+    }
+    if (dateFrom) {
+      url += `&dateFrom=${dateFrom}`;
+    }
+    if (dateTo) {
+      url += `&dateTo=${dateTo}`;
+    }
     if (debouncedSearch) {
       url += `&search=${encodeURIComponent(debouncedSearch)}`;
     }
     return url;
-  }, [currentPage, statusFilter, debouncedSearch]);
+  }, [currentPage, statusFilter, brandFilter, vendorFilter, dateFrom, dateTo, debouncedSearch]);
 
   const { data, error, isLoading, mutate } = useSWR(apiUrl);
 
@@ -142,12 +215,19 @@ export default function PurchaseInvoicesPage() {
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
   const stats = useMemo(() => {
+    if (data?.stats) {
+      return data.stats;
+    }
+    // Fallback to client-side calculation
     const invoices = data?.purchaseInvoices || [];
     return {
       total: totalCount,
-      pending: invoices.filter((i: PurchaseInvoice) => i.status === "PENDING").length,
-      paid: invoices.filter((i: PurchaseInvoice) => i.status === "PAID").length,
-      overdue: invoices.filter((i: PurchaseInvoice) => i.status === "OVERDUE").length,
+      pending: invoices.filter((i: PurchaseInvoice) => i.effectiveStatus === "PENDING").length,
+      paid: invoices.filter((i: PurchaseInvoice) => i.effectiveStatus === "PAID").length,
+      overdue: invoices.filter((i: PurchaseInvoice) => i.effectiveStatus === "OVERDUE").length,
+      totalPayable: invoices
+        .filter((i: PurchaseInvoice) => i.effectiveStatus !== "PAID" && i.effectiveStatus !== "CANCELLED")
+        .reduce((sum: number, i: PurchaseInvoice) => sum + Number(i.balanceAmount), 0),
     };
   }, [data, totalCount]);
 
@@ -200,58 +280,204 @@ export default function PurchaseInvoicesPage() {
                 <AlertCircle className="h-5 w-5 text-red-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Overdue</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.overdue}</p>
+                <p className="text-sm text-gray-600">Total Payable</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {formatCurrency(stats.totalPayable || 0)}
+                </p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Filters and Search */}
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-          <div className="flex flex-wrap items-center gap-2">
-            {STATUS_FILTERS.map((filter) => (
-              <Button
-                key={filter.value}
-                variant={statusFilter === filter.value ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleStatusFilter(filter.value)}
-                className={statusFilter === filter.value ? "bg-teal-500 hover:bg-teal-600" : ""}
-              >
-                {filter.label}
-              </Button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="relative w-64">
-              <Input
-                type="text"
-                placeholder="Search invoices..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pr-8"
-              />
-              {searchQuery && (
-                <button
-                  onClick={handleClearSearch}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+        <div className="space-y-4 mb-6">
+          {/* Row 1: Status + Search + New */}
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {STATUS_FILTERS.map((filter) => (
+                <Button
+                  key={filter.value}
+                  variant={statusFilter === filter.value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleStatusFilter(filter.value)}
+                  className={statusFilter === filter.value ? "bg-teal-500 hover:bg-teal-600" : ""}
                 >
-                  <X className="h-4 w-4" />
-                </button>
+                  {filter.label}
+                </Button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative w-64">
+                <Input
+                  type="text"
+                  placeholder="Search invoices..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-8"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={handleClearSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+                className={activeFilterCount > 0 ? "border-teal-500 text-teal-600" : ""}
+              >
+                <Filter className="h-4 w-4 mr-1" />
+                Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
+              </Button>
+              <ExportButtons
+                onExportExcel={async () => {
+                  const { company } = await fetchCompanySettings();
+                  const piList = data?.purchaseInvoices || [];
+                  const headers = ["Date", "Invoice #", "Vendor", "Due Date", "Status", "Amount", "Tax", "Total", "Paid", "Balance"];
+                  const rows = piList.map((i: PurchaseInvoice) => [
+                    fmtDateExport(i.date),
+                    i.invoiceNumber,
+                    i.vendorName,
+                    fmtDateExport(i.dueDate),
+                    i.effectiveStatus,
+                    Number(i.amount),
+                    Number(i.taxAmount),
+                    Number(i.totalAmount),
+                    Number(i.paidAmount),
+                    Number(i.balanceAmount),
+                  ]);
+                  exportToExcel({ fileName: "Purchase-Invoices.xlsx", sheets: [{ name: "Purchase Invoices", headers, rows }], company });
+                }}
+                onExportPDF={async () => {
+                  const { company } = await fetchCompanySettings();
+                  const piList = data?.purchaseInvoices || [];
+                  const headers = ["Date", "Invoice #", "Vendor", "Status", "Total", "Balance"];
+                  const rows = piList.map((i: PurchaseInvoice) => [
+                    fmtDateExport(i.date),
+                    i.invoiceNumber,
+                    i.vendorName,
+                    i.effectiveStatus,
+                    fmtNum(Number(i.totalAmount)),
+                    fmtNum(Number(i.balanceAmount)),
+                  ]);
+                  exportToPDF({ fileName: "Purchase-Invoices.pdf", title: "Purchase Invoices", subtitle: `Generated on ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, orientation: "landscape", sheets: [{ name: "Purchase Invoices", headers, rows }], company });
+                }}
+                disabled={isLoading || (data?.purchaseInvoices || []).length === 0}
+              />
+              <ImportButton entityType="PURCHASE_INVOICE" entityLabel="Purchase Invoices" onSuccess={() => mutate()} />
+              <Button
+                onClick={() => router.push("/purchases/invoices/new")}
+                className="bg-teal-500 hover:bg-teal-600 text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New Invoice
+              </Button>
+            </div>
+          </div>
+
+          {/* Row 2: Advanced Filters (collapsible) */}
+          {showFilters && (
+            <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="min-w-[160px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Brand</label>
+                <Select value={brandFilter} onValueChange={(v) => { setBrandFilter(v === "ALL" ? "" : v); setCurrentPage(1); }}>
+                  <SelectTrigger className="h-9 bg-white">
+                    <SelectValue placeholder="All Brands" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Brands</SelectItem>
+                    {brands.map((brand: Brand) => (
+                      <SelectItem key={brand.id} value={brand.id}>{brand.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-[200px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Vendor</label>
+                <Select value={vendorFilter} onValueChange={(v) => { setVendorFilter(v === "ALL" ? "" : v); setCurrentPage(1); }}>
+                  <SelectTrigger className="h-9 bg-white">
+                    <SelectValue placeholder="All Vendors" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Vendors</SelectItem>
+                    {vendors.map((v: { id: string; name: string }) => (
+                      <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-[150px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }}
+                  className="h-9 bg-white"
+                />
+              </div>
+              <div className="min-w-[150px]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }}
+                  className="h-9 bg-white"
+                />
+              </div>
+              {activeFilterCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setBrandFilter("");
+                    setVendorFilter("");
+                    setDateFrom("");
+                    setDateTo("");
+                    setCurrentPage(1);
+                  }}
+                  className="text-gray-500 hover:text-gray-700 h-9"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
               )}
             </div>
-            <Button
-              onClick={() => router.push("/purchases/invoices/new")}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              New Invoice
-            </Button>
-          </div>
+          )}
         </div>
 
+        {/* Clipboard copy banner */}
+        {copiedInvoiceId && (
+          <div className="mb-3 flex items-center gap-3 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-800">
+            <Copy className="h-4 w-4 shrink-0" />
+            <span>Invoice copied — right-click anywhere in the table to paste.</span>
+            <button onClick={() => setCopiedInvoiceId(null)} className="ml-auto text-indigo-400 hover:text-indigo-600">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Context menu */}
+        {contextMenu && (
+          <div
+            className="fixed z-50 min-w-[140px] rounded-lg border border-gray-200 bg-white shadow-lg py-1 text-sm"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+          >
+            <button
+              onClick={() => { router.push(`/purchases/invoices/new?copy=${copiedInvoiceId}`); setCopiedInvoiceId(null); setContextMenu(null); }}
+              className="flex w-full items-center gap-2 px-3 py-2 hover:bg-indigo-50 text-gray-700 hover:text-indigo-700"
+            >
+              <Copy className="h-4 w-4" />
+              Paste Invoice
+            </button>
+          </div>
+        )}
+
         {/* Invoices Table */}
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div ref={tableRef} onContextMenu={handleContextMenu} className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -263,7 +489,7 @@ export default function PurchaseInvoicesPage() {
                   <TableHead className="font-semibold text-center">Status</TableHead>
                   <TableHead className="font-semibold text-right">Total</TableHead>
                   <TableHead className="font-semibold text-right">Balance</TableHead>
-                  <TableHead className="font-semibold">Actions</TableHead>
+                  <TableHead className="font-semibold w-12"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -295,27 +521,34 @@ export default function PurchaseInvoicesPage() {
                   </TableRow>
                 ) : (
                   (data?.purchaseInvoices || []).map((invoice: PurchaseInvoice) => (
-                    <TableRow key={invoice.id} className="hover:bg-gray-50">
+                    <TableRow key={invoice.id} className={invoice.isImported ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-gray-50"}>
                       <TableCell className="text-sm">{formatDate(invoice.date)}</TableCell>
                       <TableCell>
-                        <button
-                          onClick={() => router.push(`/purchases/invoices/${invoice.id}`)}
-                          className="font-medium text-teal-600 hover:text-teal-800 hover:underline"
-                        >
-                          {invoice.invoiceNumber}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => router.push(`/purchases/invoices/${invoice.id}`)}
+                            className="font-medium text-teal-600 hover:text-teal-800 hover:underline"
+                          >
+                            {invoice.invoiceNumber}
+                          </button>
+                          {invoice.ref && (
+                            <span className="inline-flex items-center rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700 ring-1 ring-inset ring-purple-200">
+                              {invoice.ref}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{invoice.vendor.name}</p>
-                          <p className="text-xs text-gray-500">{invoice.vendor.vendorNumber}</p>
+                          <p className="font-medium">{invoice.vendor?.name || invoice.vendorName}</p>
+                          <p className="text-xs text-gray-500">{invoice.vendor?.vendorNumber || ''}</p>
                         </div>
                       </TableCell>
                       <TableCell className="text-sm text-gray-600">
                         {formatDate(invoice.dueDate)}
                       </TableCell>
                       <TableCell className="text-center">
-                        <PurchaseInvoiceStatusBadge status={invoice.status} />
+                        <PurchaseInvoiceStatusBadge status={invoice.effectiveStatus} />
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(Number(invoice.totalAmount))}
@@ -332,41 +565,45 @@ export default function PurchaseInvoicesPage() {
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600"
+                            >
+                              <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => router.push(`/purchases/invoices/${invoice.id}`)}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem onClick={() => router.push(`/purchases/invoices/${invoice.id}`)}>
+                              <Eye className="h-4 w-4 mr-2 text-teal-600" />
                               View Details
                             </DropdownMenuItem>
-
-                            {invoice.status !== "PAID" && invoice.status !== "CANCELLED" && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    router.push(`/purchases/payments/new?purchaseInvoiceId=${invoice.id}`)
-                                  }
-                                >
-                                  <CreditCard className="h-4 w-4 mr-2" />
-                                  Make Payment
-                                </DropdownMenuItem>
-                              </>
+                            {(invoice.effectiveStatus === "PENDING" || invoice.effectiveStatus === "OVERDUE") && (
+                              <DropdownMenuItem onClick={() => router.push(`/purchases/invoices/new?edit=${invoice.id}`)}>
+                                <Edit className="h-4 w-4 mr-2 text-blue-600" />
+                                Edit Invoice
+                              </DropdownMenuItem>
                             )}
-
-                            {invoice.status === "PENDING" && (
+                            <DropdownMenuItem onClick={() => handleCopyInvoice(invoice.id)}>
+                              <Copy className="h-4 w-4 mr-2 text-indigo-600" />
+                              Copy Invoice
+                            </DropdownMenuItem>
+                            {invoice.effectiveStatus !== "PAID" && invoice.effectiveStatus !== "CANCELLED" && (
+                              <DropdownMenuItem onClick={() => router.push(`/purchases/payments/new?purchaseInvoiceId=${invoice.id}`)}>
+                                <CreditCard className="h-4 w-4 mr-2 text-green-600" />
+                                Make Payment
+                              </DropdownMenuItem>
+                            )}
+                            <>
+                              <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 onClick={() => handleDelete(invoice.id)}
-                                className="text-red-600"
+                                className="text-red-600 focus:text-red-600 focus:bg-red-50"
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Delete Invoice
                               </DropdownMenuItem>
-                            )}
+                            </>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -380,7 +617,7 @@ export default function PurchaseInvoicesPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-between">
+          <div className="mt-6 flex items-center justify-between">
             <p className="text-sm text-gray-600">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} invoices
@@ -412,3 +649,4 @@ export default function PurchaseInvoicesPage() {
     </DashboardLayout>
   );
 }
+

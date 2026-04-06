@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { SYSTEM_USER_ID } from '@/lib/order-utils';
+import { checkPermission } from '@/lib/api-auth';
 
 // POST /api/items/[id]/adjust-stock - Adjust physical stock for an item
 export async function POST(
@@ -8,6 +9,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { error } = await checkPermission('masters_items', 'edit');
+    if (error) return error;
     const { id } = await params;
     const body = await request.json();
 
@@ -41,22 +44,11 @@ export async function POST(
       );
     }
 
-    const newAvailableStock = Number(body.newStock);
+    // User enters the actual physical count — reservations are sales-order-workflow
+    // only and must never affect physical stock adjustments
+    const newPhysicalStock = Number(body.newStock);
     const currentPhysicalStock = Number(item.inventory?.physicalStock || 0);
-    const reservedQty = Number(item.inventory?.reservedQuantity || 0);
-    const currentAvailableStock = currentPhysicalStock - reservedQty;
-    
-    // Calculate what the new physical stock should be to achieve the desired available stock
-    const newPhysicalStock = newAvailableStock + reservedQty;
     const adjustment = newPhysicalStock - currentPhysicalStock;
-
-    // Validate that new available stock is not negative
-    if (newAvailableStock < 0) {
-      return NextResponse.json(
-        { error: 'Available stock cannot be negative' },
-        { status: 400 }
-      );
-    }
 
     // Ensure system user exists
     let systemUser = await db.user.findUnique({
@@ -77,7 +69,7 @@ export async function POST(
     }
 
     // Update stock in transaction
-    const result = await db.$transaction(async (tx) => {
+    const result = await transaction(async (tx) => {
       let inventory;
 
       // Create or update inventory
@@ -110,7 +102,7 @@ export async function POST(
             type: movementType,
             referenceType: 'MANUAL_ADJUSTMENT',
             referenceId: null,
-            notes: body.notes || `Available stock adjusted from ${currentAvailableStock} to ${newAvailableStock} (Physical: ${currentPhysicalStock} to ${newPhysicalStock})`,
+            notes: body.notes || `Physical stock adjusted from ${currentPhysicalStock} to ${newPhysicalStock}`,
             createdBy: SYSTEM_USER_ID,
           },
         });
@@ -124,9 +116,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: 'Available stock adjusted successfully',
-      previousAvailableStock: currentAvailableStock,
-      newAvailableStock: newAvailableStock,
+      message: 'Physical stock adjusted successfully',
       previousPhysicalStock: currentPhysicalStock,
       newPhysicalStock: newPhysicalStock,
       adjustment: adjustment,

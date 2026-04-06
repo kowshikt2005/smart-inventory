@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { checkPermission } from '@/lib/api-auth';
 
 // GET /api/brands - Get all brands (with optional pagination)
 export async function GET(request: Request) {
   try {
+    const { error } = await checkPermission('masters_items', 'view');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const includeSubBrands = searchParams.get('includeSubBrands') === 'true';
@@ -11,24 +14,20 @@ export async function GET(request: Request) {
     const page = searchParams.get('page') ? parseInt(searchParams.get('page')!) : null;
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : null;
 
-    const where = search
-      ? {
-          name: { contains: search },
-        }
-      : {};
+    const activeOnly = searchParams.get('activeOnly') === 'true';
+    const where: any = {};
+    if (search) where.name = { contains: search };
+    if (activeOnly) where.isActive = true;
 
     // Use parallel queries for efficiency
     const [brands, total] = await Promise.all([
       db.brand.findMany({
         where,
         orderBy: { name: 'asc' },
-        include: includeSubBrands
-          ? {
-              subBrands: {
-                orderBy: { name: 'asc' },
-              },
-            }
-          : undefined,
+        include: {
+          ...(includeSubBrands ? { subBrands: { orderBy: { name: 'asc' } } } : {}),
+          preferredVendor: { select: { id: true, name: true } },
+        },
         ...(page && limit ? { skip: (page - 1) * limit, take: limit } : {}),
       }),
       page && limit ? db.brand.count({ where }) : Promise.resolve(0),
@@ -52,6 +51,8 @@ export async function GET(request: Request) {
 // POST /api/brands - Create a new brand
 export async function POST(request: Request) {
   try {
+    const { error } = await checkPermission('masters_items', 'edit');
+    if (error) return error;
     const body = await request.json();
 
     if (!body.name) {
@@ -76,6 +77,9 @@ export async function POST(request: Request) {
     const brand = await db.brand.create({
       data: {
         name: body.name,
+        discountPercent: body.discountPercent !== undefined ? parseFloat(body.discountPercent) : null,
+        logoUrl: body.logoUrl || null,
+        preferredVendorId: body.preferredVendorId || null,
       },
     });
 

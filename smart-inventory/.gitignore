@@ -41,6 +41,27 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.claude
+# Claude, Kiro, Playwright MCP
+.claude/
+.kiro/
+.playwright-mcp/
+agents/
 
 /src/generated/prisma
+
+# Infra docs (gitignored — contains server paths)
+AWS_INFRASTRUCTURE.md
+
+# One-time setup scripts
+scripts/
+
+# EC2/Server deployment
+*.log
+logs/
+*.pid
+ecosystem.config.js
+.pm2/
+*.crt
+*.key
+ssl/
+*.zip

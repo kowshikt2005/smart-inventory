@@ -2,17 +2,28 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { PurchaseInvoiceStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
-import { ArrowLeft, Loader2, Trash2, CreditCard, RotateCcw } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { PurchaseInvoiceStatusBadge, PurchaseReturnStatusBadge } from "@/components/purchase-orders/PurchaseOrderStatusBadge";
+import { ArrowLeft, Loader2, Edit, Trash2, CreditCard, RotateCcw } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import useSWR from "swr";
+import { useState } from "react";
+import { AddItemModal } from "@/components/items/AddItemModal";
+import { AddVendorModal } from "@/components/vendors/AddVendorModal";
 
 interface PurchaseInvoice {
   id: string;
   invoiceNumber: string;
   date: string;
   dueDate: string;
-  vendorId: string;
+  vendorId: string | null;
   vendorName: string;
   status: string;
   amount: number;
@@ -21,6 +32,8 @@ interface PurchaseInvoice {
   paidAmount: number;
   balanceAmount: number;
   notes: string | null;
+  ref: string | null;
+  isImported?: boolean;
   vendor: {
     id: string;
     vendorNumber: string;
@@ -31,16 +44,20 @@ interface PurchaseInvoice {
     address: string | null;
     city: string | null;
     state: string | null;
-  };
+  } | null;
   purchaseOrder?: {
     id: string;
     orderNumber: string;
   } | null;
   items: {
     id: string;
-    itemId: string;
+    itemId: string | null;
+    itemName: string | null;
+    hsnCode: string | null;
+    ref: string | null;
     quantity: number;
     rate: number;
+    discountPercent: number;
     taxRate: number;
     taxAmount: number;
     amount: number;
@@ -50,7 +67,7 @@ interface PurchaseInvoice {
       name: string;
       unit: string;
       hsnCode: string | null;
-    };
+    } | null;
   }[];
   vendorPayments: {
     id: string;
@@ -74,9 +91,15 @@ export default function PurchaseInvoiceDetailPage() {
   const params = useParams();
   const invoiceId = params.id as string;
 
-  const { data: invoice, error, isLoading, mutate: _mutate } = useSWR<PurchaseInvoice>(
+  const { data: invoice, error, isLoading, mutate } = useSWR<PurchaseInvoice>(
     `/api/purchase-invoices/${invoiceId}`
   );
+
+  // Inline modal state — avoids redirect to masters pages
+  const [addVendorOpen, setAddVendorOpen] = useState(false);
+  const [addItemOpen, setAddItemOpen] = useState(false);
+  const [activeInvoiceItem, setActiveInvoiceItem] = useState<{ id: string; prefill: Record<string, string> } | null>(null);
+  const [linking, setLinking] = useState(false);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -141,53 +164,53 @@ export default function PurchaseInvoiceDetailPage() {
     );
   }
 
+  const hasLeftContent = invoice.vendorPayments.length > 0 || invoice.purchaseReturns.length > 0 || !!invoice.notes;
+
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-6xl mx-auto">
-        <div className="mb-6">
-          <Button variant="ghost" size="sm" onClick={() => router.push("/purchases/invoices")} className="mb-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Invoices
-          </Button>
-          <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                Purchase Invoice {invoice.invoiceNumber}
-              </h1>
-              <div className="flex items-center gap-4">
-                <PurchaseInvoiceStatusBadge status={invoice.status} />
-                <span className="text-gray-600">Due: {formatDate(invoice.dueDate)}</span>
+      <div className="min-h-screen bg-gray-50">
+        {/* Sticky action bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => router.push("/purchases/invoices")} className="text-gray-500 -ml-2">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+              <div className="h-4 w-px bg-gray-200" />
+              <div className="flex items-center gap-2">
+                <h1 className="text-base font-bold text-gray-900">PI {invoice.invoiceNumber}</h1>
+                {invoice.ref && (
+                  <span className="inline-flex items-center rounded bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-200">
+                    {invoice.ref}
+                  </span>
+                )}
               </div>
+              <PurchaseInvoiceStatusBadge status={invoice.status} />
+              <span className="text-sm text-gray-400">Due {formatDate(invoice.dueDate)}</span>
             </div>
             <div className="flex items-center gap-2">
+              {invoice.status === "PENDING" && invoice.vendorPayments.length === 0 && (
+                <Button size="sm" variant="outline" onClick={() => router.push(`/purchases/invoices/new?edit=${invoice.id}`)}>
+                  <Edit className="h-4 w-4 mr-1.5" />
+                  Edit
+                </Button>
+              )}
               {invoice.status !== "PAID" && invoice.status !== "CANCELLED" && (
                 <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push(`/purchases/payments/new?purchaseInvoiceId=${invoice.id}`)}
-                  >
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Make Payment
+                  <Button size="sm" variant="outline" onClick={() => router.push(`/purchases/payments/new?purchaseInvoiceId=${invoice.id}`)}>
+                    <CreditCard className="h-4 w-4 mr-1.5" />
+                    Pay
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push(`/purchases/returns/new?purchaseInvoiceId=${invoice.id}`)}
-                  >
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    Create Return
+                  <Button size="sm" variant="outline" onClick={() => router.push(`/purchases/returns/new?purchaseInvoiceId=${invoice.id}`)}>
+                    <RotateCcw className="h-4 w-4 mr-1.5" />
+                    Return
                   </Button>
                 </>
               )}
               {invoice.status === "PENDING" && invoice.vendorPayments.length === 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDelete}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
+                <Button size="sm" variant="outline" onClick={handleDelete} className="text-red-600 border-red-200 hover:bg-red-50">
+                  <Trash2 className="h-4 w-4 mr-1.5" />
                   Delete
                 </Button>
               )}
@@ -195,190 +218,350 @@ export default function PurchaseInvoiceDetailPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            {/* Invoice Details */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold mb-4">Invoice Details</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">Invoice Date</p>
-                  <p className="font-medium">{formatDate(invoice.date)}</p>
+        <div className="p-6 space-y-6">
+          {/* Row 1: Vendor + Invoice Meta */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            {/* Vendor — 3/5 */}
+            <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-6">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Vendor</p>
+              <p className="text-base font-semibold text-gray-900">{invoice.vendor?.name || invoice.vendorName}</p>
+              {invoice.vendor && (
+                <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-8 gap-y-2 text-sm">
+                  <span className="text-gray-400">Vendor #</span>
+                  <span className="text-gray-700">{invoice.vendor.vendorNumber}</span>
+                  {invoice.vendor.gstin && (
+                    <>
+                      <span className="text-gray-400">GSTIN</span>
+                      <span className="text-gray-700 font-mono text-xs">{invoice.vendor.gstin}</span>
+                    </>
+                  )}
+                  {invoice.vendor.email && (
+                    <>
+                      <span className="text-gray-400">Email</span>
+                      <span className="text-gray-700">{invoice.vendor.email}</span>
+                    </>
+                  )}
+                  {invoice.vendor.phone && (
+                    <>
+                      <span className="text-gray-400">Phone</span>
+                      <span className="text-gray-700">{invoice.vendor.phone}</span>
+                    </>
+                  )}
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500">Due Date</p>
-                  <p className="font-medium">{formatDate(invoice.dueDate)}</p>
+              )}
+              {!invoice.vendor && invoice.isImported && (
+                <div className="mt-2">
+                  <p className="text-xs text-amber-600 mb-1">Vendor not linked to masters</p>
+                  <button
+                    className="text-xs text-teal-600 hover:text-teal-700 underline underline-offset-2"
+                    onClick={() => setAddVendorOpen(true)}
+                  >
+                    Create &amp; link vendor
+                  </button>
                 </div>
+              )}
+            </div>
+
+            {/* Invoice meta — 2/5 */}
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-6 flex flex-col">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Invoice Details</p>
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm flex-1">
+                <dt className="text-gray-400">Invoice Date</dt>
+                <dd className="text-gray-900 font-medium text-right">{formatDate(invoice.date)}</dd>
+                <dt className="text-gray-400">Due Date</dt>
+                <dd className="text-gray-900 font-medium text-right">{formatDate(invoice.dueDate)}</dd>
                 {invoice.purchaseOrder && (
-                  <div>
-                    <p className="text-sm text-gray-500">Purchase Order</p>
-                    <button
-                      onClick={() => router.push(`/purchases/orders/${invoice.purchaseOrder!.id}`)}
-                      className="font-medium text-teal-600 hover:underline"
-                    >
-                      {invoice.purchaseOrder.orderNumber}
-                    </button>
+                  <>
+                    <dt className="text-gray-400">PO Ref</dt>
+                    <dd className="text-right">
+                      <button
+                        onClick={() => router.push(`/purchases/orders/${invoice.purchaseOrder!.id}`)}
+                        className="text-teal-600 hover:underline font-medium text-sm"
+                      >
+                        {invoice.purchaseOrder.orderNumber}
+                      </button>
+                    </dd>
+                  </>
+                )}
+              </dl>
+              {/* Quick totals */}
+              <div className="mt-5 pt-4 border-t border-gray-100 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Total</span>
+                  <span className="font-semibold text-gray-900">{formatCurrency(Number(invoice.totalAmount))}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Paid</span>
+                  <span className="font-medium text-green-600">{formatCurrency(Number(invoice.paidAmount))}</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold">
+                  <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>Balance</span>
+                  <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>
+                    {formatCurrency(Number(invoice.balanceAmount))}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2: Items table — full width */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">Line Items</p>
+              <span className="text-xs text-gray-400">{invoice.items.length} item{invoice.items.length !== 1 ? "s" : ""}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50">
+                    <TableHead className="font-semibold">Item</TableHead>
+                    <TableHead className="font-semibold">HSN</TableHead>
+                    <TableHead className="font-semibold text-right">Qty</TableHead>
+                    <TableHead className="font-semibold text-right">Rate</TableHead>
+                    <TableHead className="font-semibold text-right">Taxable</TableHead>
+                    <TableHead className="font-semibold text-right">GST %</TableHead>
+                    <TableHead className="font-semibold text-right">Tax</TableHead>
+                    <TableHead className="font-semibold text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {invoice.items.map((item) => {
+                    const taxableAmount = Number(item.amount);
+                    const taxAmount = Number(item.taxAmount);
+                    return (
+                      <TableRow key={item.id} className="hover:bg-gray-50">
+                        <TableCell>
+                          <p className="font-medium text-gray-900">{item.item?.name || item.itemName || "—"}</p>
+                          {item.item ? (
+                            <p className="text-xs text-gray-400">{item.item.itemCode}</p>
+                          ) : (
+                            <button
+                              className="text-xs text-amber-600 hover:text-amber-700 underline underline-offset-2 mt-0.5"
+                              onClick={() => {
+                                const hsn = item.hsnCode || (item.ref?.startsWith("HSN:") ? item.ref.slice(4) : "");
+                                const rawRate = Number(item.taxRate);
+                                const gstSlabs = [0, 5, 12, 18, 28];
+                                const snappedGst = gstSlabs.reduce((prev, curr) => Math.abs(curr - rawRate) < Math.abs(prev - rawRate) ? curr : prev);
+                                setActiveInvoiceItem({
+                                  id: item.id,
+                                  prefill: {
+                                    name: item.itemName || "",
+                                    purchasePrice: String(Number(item.rate)),
+                                    gstRate: String(snappedGst),
+                                    hsnCode: hsn,
+                                    mrp: String(Number(item.rate)),
+                                    unit: item.item?.unit || "PCS",
+                                    quantity: String(Number(item.quantity)),
+                                  },
+                                });
+                                setAddItemOpen(true);
+                              }}
+                            >
+                              Not in masters — Create item
+                            </button>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-500">{item.hsnCode || item.item?.hsnCode || (item.ref?.startsWith("HSN:") ? item.ref.slice(4) : null) || "—"}</TableCell>
+                        <TableCell className="text-right text-sm">{Number(item.quantity)} {item.item?.unit || ""}</TableCell>
+                        <TableCell className="text-right text-sm">{formatCurrency(Number(item.rate))}</TableCell>
+                        <TableCell className="text-right text-sm">{formatCurrency(taxableAmount)}</TableCell>
+                        <TableCell className="text-right text-sm">{Number(item.taxRate)}%</TableCell>
+                        <TableCell className="text-right text-sm">{formatCurrency(taxAmount)}</TableCell>
+                        <TableCell className="text-right font-semibold">{formatCurrency(taxableAmount + taxAmount)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          {/* Row 3: Payments/Returns/Notes (left) + Summary (right) */}
+          {hasLeftContent ? (
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              <div className="lg:col-span-3 space-y-6">
+                {invoice.vendorPayments.length > 0 && (
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Payments</p>
+                    <div className="space-y-0">
+                      {invoice.vendorPayments.map((payment) => (
+                        <button
+                          key={payment.id}
+                          onClick={() => router.push(`/purchases/payments/${payment.id}`)}
+                          className="w-full flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 rounded px-1 text-left"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-teal-600">{payment.paymentNumber}</p>
+                            <p className="text-xs text-gray-400">{formatDate(payment.date)} · {payment.mode}</p>
+                          </div>
+                          <span className="text-sm font-semibold text-green-600">{formatCurrency(Number(payment.amount))}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {invoice.purchaseReturns.length > 0 && (
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Returns</p>
+                    <div className="space-y-0">
+                      {invoice.purchaseReturns.map((ret) => (
+                        <button
+                          key={ret.id}
+                          onClick={() => router.push(`/purchases/returns/${ret.id}`)}
+                          className="w-full flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 rounded px-1 text-left"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-teal-600">{ret.returnNumber}</p>
+                            <p className="text-xs text-gray-400">{formatDate(ret.date)} · {formatCurrency(Number(ret.totalAmount))}</p>
+                          </div>
+                          <PurchaseReturnStatusBadge status={ret.status} size="sm" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {invoice.notes && (
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Notes</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{invoice.notes}</p>
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* Items */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold mb-4">Invoice Items</h2>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 px-2 text-sm font-medium text-gray-600">#</th>
-                      <th className="text-left py-2 px-2 text-sm font-medium text-gray-600">Item</th>
-                      <th className="text-left py-2 px-2 text-sm font-medium text-gray-600">HSN</th>
-                      <th className="text-right py-2 px-2 text-sm font-medium text-gray-600">Qty</th>
-                      <th className="text-right py-2 px-2 text-sm font-medium text-gray-600">Rate</th>
-                      <th className="text-right py-2 px-2 text-sm font-medium text-gray-600">Tax</th>
-                      <th className="text-right py-2 px-2 text-sm font-medium text-gray-600">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {invoice.items.map((item, index) => (
-                      <tr key={item.id} className="border-b last:border-b-0">
-                        <td className="py-3 px-2 text-sm text-gray-500">{index + 1}</td>
-                        <td className="py-3 px-2">
-                          <p className="font-medium">{item.item.name}</p>
-                          <p className="text-xs text-gray-500">{item.item.itemCode}</p>
-                        </td>
-                        <td className="py-3 px-2 text-sm text-gray-500">{item.item.hsnCode || "-"}</td>
-                        <td className="py-3 px-2 text-right text-sm">
-                          {Number(item.quantity).toFixed(3)} {item.item.unit}
-                        </td>
-                        <td className="py-3 px-2 text-right text-sm">{formatCurrency(Number(item.rate))}</td>
-                        <td className="py-3 px-2 text-right text-sm">{Number(item.taxRate)}%</td>
-                        <td className="py-3 px-2 text-right font-medium">
-                          {formatCurrency(Number(item.amount) + Number(item.taxAmount))}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t">
-                      <td colSpan={6} className="py-3 px-2 text-right text-sm text-gray-600">Subtotal:</td>
-                      <td className="py-3 px-2 text-right font-medium">{formatCurrency(Number(invoice.amount))}</td>
-                    </tr>
-                    <tr>
-                      <td colSpan={6} className="py-1 px-2 text-right text-sm text-gray-600">Tax:</td>
-                      <td className="py-1 px-2 text-right font-medium">{formatCurrency(Number(invoice.taxAmount))}</td>
-                    </tr>
-                    <tr className="bg-gray-50">
-                      <td colSpan={6} className="py-3 px-2 text-right text-sm font-semibold">Total:</td>
-                      <td className="py-3 px-2 text-right text-lg font-bold">
-                        {formatCurrency(Number(invoice.totalAmount))}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan={6} className="py-1 px-2 text-right text-sm text-gray-600">Paid:</td>
-                      <td className="py-1 px-2 text-right font-medium text-green-600">
-                        {formatCurrency(Number(invoice.paidAmount))}
-                      </td>
-                    </tr>
-                    <tr className="bg-yellow-50">
-                      <td colSpan={6} className="py-3 px-2 text-right text-sm font-semibold">Balance:</td>
-                      <td className="py-3 px-2 text-right text-lg font-bold text-red-600">
+              <div className="lg:col-span-2">
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Summary</p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Taxable Value</span>
+                      <span className="font-medium">{formatCurrency(Number(invoice.amount))}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">CGST</span>
+                      <span>{formatCurrency(Number(invoice.taxAmount) / 2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">SGST</span>
+                      <span>{formatCurrency(Number(invoice.taxAmount) / 2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Total Tax</span>
+                      <span>{formatCurrency(Number(invoice.taxAmount))}</span>
+                    </div>
+                    <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
+                      <span>Total</span>
+                      <span>{formatCurrency(Number(invoice.totalAmount))}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Paid</span>
+                      <span className="font-medium text-green-600">{formatCurrency(Number(invoice.paidAmount))}</span>
+                    </div>
+                    <div className="flex justify-between text-base font-bold pt-1 border-t border-gray-100">
+                      <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>Balance Due</span>
+                      <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>
                         {formatCurrency(Number(invoice.balanceAmount))}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-
-            {invoice.notes && (
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold mb-4">Notes</h2>
-                <p className="text-gray-700 whitespace-pre-wrap">{invoice.notes}</p>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-6">
-            {/* Vendor Info */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold mb-4">Vendor</h2>
-              <div className="space-y-3">
-                <div>
-                  <p className="font-medium">{invoice.vendor.name}</p>
-                  <p className="text-sm text-gray-500">{invoice.vendor.vendorNumber}</p>
+          ) : (
+            <div className="flex justify-end">
+              <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-5">
+                <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Summary</p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Taxable Value</span>
+                    <span className="font-medium">{formatCurrency(Number(invoice.amount))}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">CGST</span>
+                    <span>{formatCurrency(Number(invoice.taxAmount) / 2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">SGST</span>
+                    <span>{formatCurrency(Number(invoice.taxAmount) / 2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Total Tax</span>
+                    <span>{formatCurrency(Number(invoice.taxAmount))}</span>
+                  </div>
+                  <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
+                    <span>Total</span>
+                    <span>{formatCurrency(Number(invoice.totalAmount))}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Paid</span>
+                    <span className="font-medium text-green-600">{formatCurrency(Number(invoice.paidAmount))}</span>
+                  </div>
+                  <div className="flex justify-between text-base font-bold pt-1 border-t border-gray-100">
+                    <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>Balance Due</span>
+                    <span className={Number(invoice.balanceAmount) > 0 ? "text-red-600" : "text-green-600"}>
+                      {formatCurrency(Number(invoice.balanceAmount))}
+                    </span>
+                  </div>
                 </div>
-                {invoice.vendor.gstin && (
-                  <div>
-                    <p className="text-sm text-gray-500">GSTIN</p>
-                    <p className="font-medium">{invoice.vendor.gstin}</p>
-                  </div>
-                )}
-                {invoice.vendor.email && (
-                  <div>
-                    <p className="text-sm text-gray-500">Email</p>
-                    <p className="font-medium">{invoice.vendor.email}</p>
-                  </div>
-                )}
-                {invoice.vendor.phone && (
-                  <div>
-                    <p className="text-sm text-gray-500">Phone</p>
-                    <p className="font-medium">{invoice.vendor.phone}</p>
-                  </div>
-                )}
               </div>
             </div>
-
-            {/* Payments */}
-            {invoice.vendorPayments.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold mb-4">Payments</h2>
-                <div className="space-y-2">
-                  {invoice.vendorPayments.map((payment) => (
-                    <button
-                      key={payment.id}
-                      onClick={() => router.push(`/purchases/payments/${payment.id}`)}
-                      className="w-full p-3 text-left border rounded-lg hover:bg-gray-50"
-                    >
-                      <div className="flex items-center justify-between">
-                        <p className="font-medium text-teal-600">{payment.paymentNumber}</p>
-                        <span className="text-xs px-2 py-1 bg-gray-100 rounded">{payment.mode}</span>
-                      </div>
-                      <p className="text-sm text-gray-500">
-                        {formatDate(payment.date)} - {formatCurrency(Number(payment.amount))}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Returns */}
-            {invoice.purchaseReturns.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold mb-4">Returns</h2>
-                <div className="space-y-2">
-                  {invoice.purchaseReturns.map((ret) => (
-                    <button
-                      key={ret.id}
-                      onClick={() => router.push(`/purchases/returns/${ret.id}`)}
-                      className="w-full p-3 text-left border rounded-lg hover:bg-gray-50"
-                    >
-                      <div className="flex items-center justify-between">
-                        <p className="font-medium text-teal-600">{ret.returnNumber}</p>
-                        <span className="text-xs px-2 py-1 bg-gray-100 rounded">{ret.status}</span>
-                      </div>
-                      <p className="text-sm text-gray-500">
-                        {formatDate(ret.date)} - {formatCurrency(Number(ret.totalAmount))}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
+      {/* Inline modals — no redirect needed */}
+      <AddVendorModal
+        isOpen={addVendorOpen}
+        onClose={() => setAddVendorOpen(false)}
+        prefillName={invoice?.vendorName || ""}
+        onSuccess={async ({ id: vendorId }) => {
+          setAddVendorOpen(false);
+          setLinking(true);
+          try {
+            await fetch("/api/import/link-invoice-vendor", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ vendorId, purchaseInvoiceId: invoiceId }),
+            });
+            mutate();
+          } finally {
+            setLinking(false);
+          }
+        }}
+      />
+      <AddItemModal
+        isOpen={addItemOpen}
+        onClose={() => { setAddItemOpen(false); setActiveInvoiceItem(null); }}
+        prefillData={activeInvoiceItem ? {
+          name: activeInvoiceItem.prefill.name,
+          purchasePrice: activeInvoiceItem.prefill.purchasePrice,
+          gstRate: activeInvoiceItem.prefill.gstRate,
+          hsnCode: activeInvoiceItem.prefill.hsnCode,
+          mrp: activeInvoiceItem.prefill.mrp,
+          unit: activeInvoiceItem.prefill.unit,
+        } : undefined}
+        onSuccess={async ({ id: itemId }) => {
+          setAddItemOpen(false);
+          if (!activeInvoiceItem) return;
+          setLinking(true);
+          try {
+            await fetch("/api/import/link-invoice-item", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ itemId, invoiceItemId: activeInvoiceItem.id, invoiceType: "PURCHASE" }),
+            });
+            mutate();
+          } finally {
+            setLinking(false);
+            setActiveInvoiceItem(null);
+          }
+        }}
+      />
+      {linking && (
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg px-6 py-4 flex items-center gap-3 shadow-lg">
+            <Loader2 className="h-5 w-5 animate-spin text-teal-600" />
+            <span className="text-sm font-medium">Linking…</span>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }
