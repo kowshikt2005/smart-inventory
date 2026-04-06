@@ -29,9 +29,18 @@ import {
   X,
   PowerOff,
   Power,
-  Edit,
   Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ImportButton } from "@/components/import/ImportButton";
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -69,6 +78,8 @@ function CustomersContent() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteConfirmCustomer, setDeleteConfirmCustomer] = useState<Customer | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const itemsPerPage = 10;
 
   // Auto-open modal when redirected from a sales invoice
@@ -116,6 +127,7 @@ function CustomersContent() {
 
   const handleToggleStatus = async (customer: Customer) => {
     setTogglingId(customer.id);
+    setActionError(null);
     const newStatus = customer.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
     try {
       const res = await fetch(`/api/customers/${customer.id}`, {
@@ -126,26 +138,32 @@ function CustomersContent() {
       if (!res.ok) throw new Error("Failed to update status");
       mutate();
     } catch {
-      alert("Failed to update customer status. Please try again.");
+      setActionError("Failed to update customer status. Please try again.");
     } finally {
       setTogglingId(null);
     }
   };
 
-  const handleDeleteCustomer = async (customer: Customer) => {
-    if (!confirm(`Delete "${customer.name}"? This cannot be undone.`)) return;
-    setDeletingId(customer.id);
+  const handleDeleteCustomer = (customer: Customer) => {
+    setDeleteConfirmCustomer(customer);
+  };
+
+  const executeDeleteCustomer = async () => {
+    if (!deleteConfirmCustomer) return;
+    setDeletingId(deleteConfirmCustomer.id);
+    setActionError(null);
     try {
-      const res = await fetch(`/api/customers/${customer.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/customers/${deleteConfirmCustomer.id}`, { method: "DELETE" });
       if (!res.ok) {
         const d = await res.json();
         throw new Error(d.error || "Failed to delete");
       }
       mutate();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete customer");
+      setActionError(err instanceof Error ? err.message : "Failed to delete customer");
     } finally {
       setDeletingId(null);
+      setDeleteConfirmCustomer(null);
     }
   };
 
@@ -223,14 +241,20 @@ function CustomersContent() {
           </div>
         </div>
 
+        {actionError && (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span>{actionError}</span>
+            <button onClick={() => setActionError(null)} className="ml-4 text-red-400 hover:text-red-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         <div className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
           <Table aria-label="Customer list">
             <TableHeader>
               <TableRow className="bg-muted/30">
                 <TableHead className="font-semibold">Name</TableHead>
-                <TableHead className="font-semibold">GST No.</TableHead>
-                <TableHead className="font-semibold">State Code</TableHead>
-                <TableHead className="font-semibold">PAN</TableHead>
+                <TableHead className="font-semibold">GSTIN</TableHead>
                 <TableHead className="font-semibold">City</TableHead>
                 <TableHead className="font-semibold">State</TableHead>
                 <TableHead className="font-semibold">Credit Days</TableHead>
@@ -242,7 +266,7 @@ function CustomersContent() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Loading customers...</span>
@@ -251,7 +275,7 @@ function CustomersContent() {
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-red-600 py-8">
+                  <TableCell colSpan={8} className="text-center text-red-600 py-8">
                     <div className="space-y-2">
                       <p>Error: {error.message || "Failed to load customers"}</p>
                       <Button onClick={() => mutate()} variant="outline" size="sm">Try Again</Button>
@@ -260,7 +284,7 @@ function CustomersContent() {
                 </TableRow>
               ) : paginatedCustomers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     {searchQuery ? "No customers found matching your search" : "No customers yet."}
                   </TableCell>
                 </TableRow>
@@ -274,16 +298,10 @@ function CustomersContent() {
                     >
                       <TableCell className="font-medium">{customer.name}</TableCell>
                       <TableCell className="font-mono text-sm">{customer.gstin || "-"}</TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {customer.gstin && customer.gstin.length >= 2 ? customer.gstin.substring(0, 2) : "-"}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {customer.gstin && customer.gstin.length >= 12 ? customer.gstin.substring(2, 12) : "-"}
-                      </TableCell>
                       <TableCell>{customer.city || "-"}</TableCell>
                       <TableCell>{customer.state || "-"}</TableCell>
-                      <TableCell>{customer.creditDays}</TableCell>
-                      <TableCell>{Number(customer.creditLimit).toLocaleString("en-IN")}</TableCell>
+                      <TableCell>{customer.creditDays} days</TableCell>
+                      <TableCell>₹{Number(customer.creditLimit).toLocaleString("en-IN")}</TableCell>
                       <TableCell>
                         <Badge variant={inactive ? "secondary" : "default"} className={inactive ? "" : "bg-green-100 text-green-700 border-green-200"}>
                           {inactive ? "Inactive" : "Active"}
@@ -309,15 +327,11 @@ function CustomersContent() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => router.push(`/masters/customers/${customer.id}`)}>
                               <Eye className="h-4 w-4 mr-2" />
-                              View Details
+                              View / Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => router.push(`/ledger/customers?customerId=${customer.id}`)}>
                               <FileText className="h-4 w-4 mr-2" />
                               View Transactions
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => router.push(`/masters/customers/${customer.id}`)}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit Customer
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -367,6 +381,27 @@ function CustomersContent() {
             </div>
           </div>
         )}
+
+        <AlertDialog open={!!deleteConfirmCustomer} onOpenChange={(open) => { if (!open) setDeleteConfirmCustomer(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete customer?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <strong>&ldquo;{deleteConfirmCustomer?.name}&rdquo;</strong> will be permanently deleted. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={!!deletingId}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={executeDeleteCustomer}
+                disabled={!!deletingId}
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              >
+                {deletingId ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <AddCustomerModal
           isOpen={showAddModal}

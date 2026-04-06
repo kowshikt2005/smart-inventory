@@ -32,6 +32,16 @@ import {
   Edit,
   Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ImportButton } from "@/components/import/ImportButton";
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -71,6 +81,8 @@ function VendorsContent() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteConfirmVendor, setDeleteConfirmVendor] = useState<Vendor | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const itemsPerPage = 10;
 
   // Auto-open modal when redirected from an invoice page
@@ -143,25 +155,32 @@ function VendorsContent() {
     router.push(`/ledger/vendors?vendorId=${vendorId}`);
   };
 
-  const handleDeleteVendor = async (vendor: Vendor) => {
-    if (!confirm(`Delete "${vendor.name}"? This cannot be undone.`)) return;
-    setDeletingId(vendor.id);
+  const handleDeleteVendor = (vendor: Vendor) => {
+    setDeleteConfirmVendor(vendor);
+  };
+
+  const executeDeleteVendor = async () => {
+    if (!deleteConfirmVendor) return;
+    setDeletingId(deleteConfirmVendor.id);
+    setActionError(null);
     try {
-      const res = await fetch(`/api/vendors/${vendor.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/vendors/${deleteConfirmVendor.id}`, { method: "DELETE" });
       if (!res.ok) {
         const d = await res.json();
         throw new Error(d.error || "Failed to delete");
       }
       mutate();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete vendor");
+      setActionError(err instanceof Error ? err.message : "Failed to delete vendor");
     } finally {
       setDeletingId(null);
+      setDeleteConfirmVendor(null);
     }
   };
 
   const handleToggleStatus = async (vendor: Vendor) => {
     setTogglingId(vendor.id);
+    setActionError(null);
     try {
       const res = await fetch(`/api/vendors/${vendor.id}`, {
         method: "PUT",
@@ -171,7 +190,7 @@ function VendorsContent() {
       if (!res.ok) throw new Error();
       mutate();
     } catch {
-      alert("Failed to update vendor status.");
+      setActionError("Failed to update vendor status. Please try again.");
     } finally {
       setTogglingId(null);
     }
@@ -247,15 +266,21 @@ function VendorsContent() {
           </div>
         </div>
 
+        {actionError && (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span>{actionError}</span>
+            <button onClick={() => setActionError(null)} className="ml-4 text-red-400 hover:text-red-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         {/* Vendors Table */}
         <div className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
           <Table aria-label="Vendor list">
             <TableHeader>
               <TableRow className="bg-muted/30">
                 <TableHead className="font-semibold">Name</TableHead>
-                <TableHead className="font-semibold">GST No.</TableHead>
-                <TableHead className="font-semibold">State Code</TableHead>
-                <TableHead className="font-semibold">PAN</TableHead>
+                <TableHead className="font-semibold">GSTIN</TableHead>
                 <TableHead className="font-semibold">City</TableHead>
                 <TableHead className="font-semibold">State</TableHead>
                 <TableHead className="font-semibold">Credit Days</TableHead>
@@ -267,7 +292,7 @@ function VendorsContent() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Loading vendors...</span>
@@ -276,7 +301,7 @@ function VendorsContent() {
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-red-600 py-8">
+                  <TableCell colSpan={8} className="text-center text-red-600 py-8">
                     <div className="space-y-2">
                       <p>Error: {error.message || "Failed to load vendors"}</p>
                       <Button onClick={() => mutate()} variant="outline" size="sm">Try Again</Button>
@@ -285,7 +310,7 @@ function VendorsContent() {
                 </TableRow>
               ) : paginatedVendors.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     {searchQuery ? "No vendors found matching your search" : "No vendors yet. Click 'Add Vendor' to get started."}
                   </TableCell>
                 </TableRow>
@@ -297,16 +322,10 @@ function VendorsContent() {
                   >
                     <TableCell className="font-medium">{vendor.name}</TableCell>
                     <TableCell className="font-mono text-sm">{vendor.gstin || "-"}</TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {vendor.gstin && vendor.gstin.length >= 2 ? vendor.gstin.substring(0, 2) : "-"}
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {vendor.gstin && vendor.gstin.length >= 12 ? vendor.gstin.substring(2, 12) : "-"}
-                    </TableCell>
                     <TableCell>{vendor.city || "-"}</TableCell>
                     <TableCell>{vendor.state || "-"}</TableCell>
-                    <TableCell>{vendor.creditDays}</TableCell>
-                    <TableCell>{Number(vendor.openingBalance).toLocaleString("en-IN")}</TableCell>
+                    <TableCell>{vendor.creditDays} days</TableCell>
+                    <TableCell>₹{Number(vendor.openingBalance).toLocaleString("en-IN")}</TableCell>
                     <TableCell>
                       {vendor.isActive ? (
                         <Badge className="bg-green-100 text-green-700 border-green-200">
@@ -404,7 +423,7 @@ function VendorsContent() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-muted-foreground">
                 Page {currentPage} of {totalPages}
               </span>
               <Button
@@ -420,6 +439,27 @@ function VendorsContent() {
             </div>
           </div>
         )}
+
+        <AlertDialog open={!!deleteConfirmVendor} onOpenChange={(open) => { if (!open) setDeleteConfirmVendor(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete vendor?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <strong>&ldquo;{deleteConfirmVendor?.name}&rdquo;</strong> will be permanently deleted. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={!!deletingId}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={executeDeleteVendor}
+                disabled={!!deletingId}
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              >
+                {deletingId ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Add Vendor Modal */}
         <AddVendorModal

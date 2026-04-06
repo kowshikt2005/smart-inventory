@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { X, Plus, Trash2, User, DollarSign } from "lucide-react";
 import { getStateFromGSTIN } from "@/lib/gst-state-codes";
 import { normalizeGstin, validateGstin } from "@/lib/gst-validation";
@@ -368,8 +369,8 @@ export function AddCustomerModal({
               onClick={() => setActiveTab("customer")}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
                 activeTab === "customer"
-                  ? "bg-white text-teal-700 border-gray-200"
-                  : "bg-gray-50 text-gray-500 border-transparent hover:text-gray-700"
+                  ? "bg-white text-primary border-border"
+                  : "bg-muted/40 text-muted-foreground border-transparent hover:text-foreground"
               }`}
             >
               <User className="h-4 w-4" />
@@ -380,14 +381,14 @@ export function AddCustomerModal({
               onClick={() => setActiveTab("ratesheet")}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
                 activeTab === "ratesheet"
-                  ? "bg-white text-teal-700 border-gray-200"
-                  : "bg-gray-50 text-gray-500 border-transparent hover:text-gray-700"
+                  ? "bg-white text-primary border-border"
+                  : "bg-muted/40 text-muted-foreground border-transparent hover:text-foreground"
               }`}
             >
               <DollarSign className="h-4 w-4" />
               Rate Sheet
               {enableRateSheet && (
-                <span className="bg-teal-100 text-teal-700 text-[10px] px-1.5 py-0.5 rounded-full">
+                <span className="bg-primary/10 text-primary text-[10px] px-1.5 py-0.5 rounded-full">
                   ON
                 </span>
               )}
@@ -638,15 +639,11 @@ export function AddCustomerModal({
                     Shipping Addresses
                   </h3>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
+                    <Switch
                       checked={sameAsBilling}
-                      onChange={(e) =>
-                        handleSameAsBillingChange(e.target.checked)
-                      }
-                      className="h-4 w-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                      onCheckedChange={handleSameAsBillingChange}
                     />
-                    <span className="text-sm text-gray-700">
+                    <span className="text-sm text-foreground">
                       Same as billing
                     </span>
                   </label>
@@ -675,7 +672,7 @@ export function AddCustomerModal({
                               onClick={() =>
                                 updateAddress(idx, "isDefault", true)
                               }
-                              className="text-xs text-teal-600 hover:text-teal-700 font-medium"
+                              className="text-xs text-primary hover:text-primary/80 font-medium"
                             >
                               Set Default
                             </button>
@@ -821,7 +818,7 @@ export function AddCustomerModal({
                     <button
                       type="button"
                       onClick={addAddress}
-                      className="flex items-center gap-1.5 text-sm text-teal-600 hover:text-teal-700 font-medium py-1"
+                      className="flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 font-medium py-1"
                     >
                       <Plus className="h-4 w-4" />
                       Add Another Address
@@ -896,20 +893,18 @@ export function AddCustomerModal({
           {activeTab === "ratesheet" && (
             <>
               {/* Enable toggle */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 border rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-muted/30 border border-border rounded-lg">
                 <div>
-                  <p className="font-medium text-gray-900">
+                  <p className="font-medium text-foreground">
                     Enable Rate Sheet
                   </p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-muted-foreground">
                     Create a rate sheet with custom discounts for this customer
                   </p>
                 </div>
-                <input
-                  type="checkbox"
+                <Switch
                   checked={enableRateSheet}
-                  onChange={(e) => setEnableRateSheet(e.target.checked)}
-                  className="h-5 w-5 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                  onCheckedChange={setEnableRateSheet}
                 />
               </div>
 
@@ -956,7 +951,7 @@ export function AddCustomerModal({
             <Button
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="bg-teal-500 hover:bg-teal-600 text-white"
+              className="bg-primary hover:bg-primary/90 text-white"
             >
               {isSubmitting ? "Creating..." : "Create Customer"}
             </Button>

@@ -41,6 +41,16 @@ import {
   Trash2,
   Filter,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ImportButton } from "@/components/import/ImportButton";
 import { ExportButtons } from "@/components/ui/ExportButtons";
 import { exportToExcel, exportToPDF, fmtDateExport, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
@@ -104,6 +114,8 @@ export default function PaymentsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const itemsPerPage = 15;
 
   // Fetch customers for filters
@@ -141,31 +153,25 @@ export default function PaymentsPage() {
     setCurrentPage(1);
   };
 
-  // Handle delete/reverse payment
-  const handleDelete = async (paymentId: string) => {
-    if (
-      !confirm(
-        "Are you sure you want to reverse this payment? This will update invoice balances and ledger."
-      )
-    ) {
-      return;
-    }
+  const handleDelete = (paymentId: string) => {
+    setDeleteConfirmId(paymentId);
+  };
 
+  const executeDelete = async () => {
+    if (!deleteConfirmId) return;
+    setActionError(null);
     try {
-      const response = await fetch(`/api/payments/${paymentId}`, {
-        method: "DELETE",
-      });
-
+      const response = await fetch(`/api/payments/${deleteConfirmId}`, { method: "DELETE" });
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Failed to reverse payment");
       }
-
       setSelectedPayment(null);
       mutate();
     } catch (err) {
-      console.error("Error reversing payment:", err);
-      alert(err instanceof Error ? err.message : "Failed to reverse payment");
+      setActionError(err instanceof Error ? err.message : "Failed to reverse payment");
+    } finally {
+      setDeleteConfirmId(null);
     }
   };
 
@@ -194,13 +200,22 @@ export default function PaymentsPage() {
       <div className="p-6">
         {/* Header */}
         <div className="mb-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          <h1 className="text-2xl font-bold text-foreground mb-2">
             Payment Receipts
           </h1>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-muted-foreground">
             Record and manage customer payments
           </p>
         </div>
+
+        {actionError && (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span>{actionError}</span>
+            <button onClick={() => setActionError(null)} className="ml-4 text-red-400 hover:text-red-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {/* Filters and Search */}
         <div className="space-y-4 mb-6">
@@ -212,7 +227,7 @@ export default function PaymentsPage() {
                   variant={modeFilter === filter.value ? "default" : "outline"}
                   size="sm"
                   onClick={() => handleModeFilter(filter.value)}
-                  className={modeFilter === filter.value ? "bg-teal-500 hover:bg-teal-600" : ""}
+                  className={modeFilter === filter.value ? "bg-primary hover:bg-primary/90" : ""}
                 >
                   {filter.label}
                 </Button>
@@ -230,7 +245,7 @@ export default function PaymentsPage() {
                 {searchQuery && (
                   <button
                     onClick={handleClearSearch}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground"
                     aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
@@ -241,7 +256,7 @@ export default function PaymentsPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowFilters(!showFilters)}
-                className={activeFilterCount > 0 ? "border-teal-500 text-teal-600" : ""}
+                className={activeFilterCount > 0 ? "border-primary text-primary" : ""}
               >
                 <Filter className="h-4 w-4 mr-1" />
                 Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
@@ -279,7 +294,7 @@ export default function PaymentsPage() {
               <Button
                 size="sm"
                 onClick={() => router.push("/sales/receipts/new")}
-                className="bg-teal-500 hover:bg-teal-600 text-white"
+                className="bg-primary hover:bg-primary/90 text-white"
               >
                 <Plus className="h-4 w-4 mr-1.5" />
                 Record Payment
@@ -288,7 +303,7 @@ export default function PaymentsPage() {
           </div>
 
           {showFilters && (
-            <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex flex-wrap items-end gap-3 p-4 bg-muted/30 rounded-lg border border-border">
               <div className="min-w-[200px]">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Customer</label>
                 <Select value={customerFilter} onValueChange={(v) => { setCustomerFilter(v === "ALL" ? "" : v); setCurrentPage(1); }}>
@@ -331,7 +346,7 @@ export default function PaymentsPage() {
                     setDateTo("");
                     setCurrentPage(1);
                   }}
-                  className="text-gray-500 hover:text-gray-700 h-9"
+                  className="text-muted-foreground hover:text-foreground h-9"
                 >
                   <X className="h-3 w-3 mr-1" />
                   Clear
@@ -342,11 +357,11 @@ export default function PaymentsPage() {
         </div>
 
         {/* Payments Table */}
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <Table aria-label="Payments list">
               <TableHeader>
-                <TableRow className="bg-gray-50">
+                <TableRow className="bg-muted/30">
                   <TableHead scope="col" className="font-semibold w-[100px]">Date</TableHead>
                   <TableHead scope="col" className="font-semibold w-[120px]">Payment #</TableHead>
                   <TableHead scope="col" className="font-semibold">Customer</TableHead>
@@ -360,7 +375,7 @@ export default function PaymentsPage() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-gray-500 py-12">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="h-5 w-5 animate-spin" />
                         <span>Loading payments...</span>
@@ -380,7 +395,7 @@ export default function PaymentsPage() {
                   </TableRow>
                 ) : payments.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-gray-500 py-8">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                       {searchQuery || modeFilter !== "ALL"
                         ? "No payments found matching your filters"
                         : "No payments recorded yet. Click 'Record Payment' to add one."}
@@ -388,14 +403,14 @@ export default function PaymentsPage() {
                   </TableRow>
                 ) : (
                   payments.map((payment: Payment) => (
-                    <TableRow key={payment.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedPayment(payment)}>
+                    <TableRow key={payment.id} className="hover:bg-muted/20 cursor-pointer" onClick={() => setSelectedPayment(payment)}>
                       <TableCell className="text-sm">
                         {formatDate(payment.paymentDate)}
                       </TableCell>
                       <TableCell>
                         <button
                           onClick={(e) => { e.stopPropagation(); setSelectedPayment(payment); }}
-                          className="font-medium text-teal-600 hover:text-teal-800 hover:underline"
+                          className="font-medium text-primary hover:text-primary/80 hover:underline"
                         >
                           {payment.paymentNumber}
                         </button>
@@ -403,7 +418,7 @@ export default function PaymentsPage() {
                       <TableCell>
                         <div>
                           <p className="font-medium">{payment.customer.name}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-muted-foreground">
                             {payment.customer.customerNumber}
                           </p>
                         </div>
@@ -413,7 +428,7 @@ export default function PaymentsPage() {
                           {MODE_LABELS[payment.mode] || payment.mode}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm text-gray-600">
+                      <TableCell className="text-sm text-muted-foreground">
                         {payment.referenceNumber || "-"}
                       </TableCell>
                       <TableCell>
@@ -439,7 +454,7 @@ export default function PaymentsPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600"
+                              className="h-8 w-8 p-0 text-muted-foreground/60 hover:text-muted-foreground"
                               aria-label="Actions"
                               onClick={(e) => e.stopPropagation()}
                             >
@@ -450,7 +465,7 @@ export default function PaymentsPage() {
                             <DropdownMenuItem
                               onClick={() => router.push(`/sales/receipts/${payment.id}`)}
                             >
-                              <Eye className="h-4 w-4 mr-2 text-teal-600" />
+                              <Eye className="h-4 w-4 mr-2 text-primary" />
                               View Details
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
@@ -475,7 +490,7 @@ export default function PaymentsPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount}{" "}
               payments
@@ -489,7 +504,7 @@ export default function PaymentsPage() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-muted-foreground">
                 Page {currentPage} of {totalPages}
               </span>
               <Button
@@ -507,6 +522,23 @@ export default function PaymentsPage() {
         )}
       </div>
 
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reverse this payment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This payment will be reversed. Invoice balances and the customer ledger will be updated. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={executeDelete} className="bg-red-600 hover:bg-red-700 focus:ring-red-600">
+              Reverse Payment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Payment Detail Modal */}
       <Dialog open={!!selectedPayment} onOpenChange={(open) => { if (!open) setSelectedPayment(null); }}>
         <DialogContent className="max-w-md">
@@ -522,28 +554,28 @@ export default function PaymentsPage() {
           {selectedPayment && (
             <div className="space-y-4">
               <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Customer</p>
-                <p className="font-medium text-gray-900">{selectedPayment.customer.name}</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Customer</p>
+                <p className="font-medium text-foreground">{selectedPayment.customer.name}</p>
                 <p className="text-sm text-gray-500">{selectedPayment.customer.customerNumber}</p>
               </div>
 
               <div className="flex gap-6">
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Payment Mode</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Payment Mode</p>
                   <Badge variant="outline">
                     {MODE_LABELS[selectedPayment.mode] || selectedPayment.mode}
                   </Badge>
                 </div>
                 {selectedPayment.referenceNumber && (
                   <div>
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Reference</p>
-                    <p className="text-sm text-gray-700">{selectedPayment.referenceNumber}</p>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Reference</p>
+                    <p className="text-sm text-foreground">{selectedPayment.referenceNumber}</p>
                   </div>
                 )}
               </div>
 
               <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Amount</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Amount</p>
                 <p className="text-2xl font-bold text-green-600">
                   {formatCurrency(Number(selectedPayment.amount))}
                 </p>
@@ -551,12 +583,12 @@ export default function PaymentsPage() {
 
               {selectedPayment.allocations.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Invoice Allocations</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Invoice Allocations</p>
                   <div className="space-y-1.5">
                     {selectedPayment.allocations.map((alloc: PaymentAllocation) => (
-                      <div key={alloc.id} className="flex items-center justify-between py-1.5 px-3 bg-gray-50 rounded-md">
-                        <span className="text-sm font-medium text-gray-700">{alloc.invoice.invoiceNumber}</span>
-                        <span className="text-sm font-medium text-gray-900">{formatCurrency(Number(alloc.amount))}</span>
+                      <div key={alloc.id} className="flex items-center justify-between py-1.5 px-3 bg-muted/30 rounded-md">
+                        <span className="text-sm font-medium text-foreground">{alloc.invoice.invoiceNumber}</span>
+                        <span className="text-sm font-medium text-foreground">{formatCurrency(Number(alloc.amount))}</span>
                       </div>
                     ))}
                   </div>
@@ -564,7 +596,7 @@ export default function PaymentsPage() {
               )}
 
               <Button
-                className="w-full bg-teal-500 hover:bg-teal-600 text-white"
+                className="w-full bg-primary hover:bg-primary/90 text-white"
                 onClick={() => {
                   const id = selectedPayment.id;
                   setSelectedPayment(null);

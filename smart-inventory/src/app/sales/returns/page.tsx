@@ -43,6 +43,16 @@ import {
   Trash2,
   Filter,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -90,6 +100,8 @@ export default function SalesReturnsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedReturn, setSelectedReturn] = useState<SalesReturn | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ type: "complete" | "cancel" | "delete"; id: string; label?: string } | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const itemsPerPage = 15;
 
   // Fetch brands and customers for filters
@@ -129,51 +141,29 @@ export default function SalesReturnsPage() {
     setCurrentPage(1);
   };
 
-  const handleComplete = async (returnId: string) => {
-    if (!confirm("Complete this return? This will restore inventory and create a credit ledger entry.")) return;
-    try {
-      const response = await fetch(`/api/sales-returns/${returnId}/complete`, { method: "POST" });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to complete return");
-      }
-      setSelectedReturn(null);
-      mutate();
-    } catch (err) {
-      console.error("Error completing return:", err);
-      alert(err instanceof Error ? err.message : "Failed to complete return");
-    }
-  };
+  const handleComplete = (returnId: string) => setConfirmAction({ type: "complete", id: returnId });
+  const handleCancel = (returnId: string) => setConfirmAction({ type: "cancel", id: returnId });
+  const handleDelete = (returnId: string) => setConfirmAction({ type: "delete", id: returnId });
 
-  const handleCancel = async (returnId: string) => {
-    if (!confirm("Are you sure you want to cancel this return?")) return;
+  const executeConfirmAction = async () => {
+    if (!confirmAction) return;
+    setActionError(null);
+    const { type, id } = confirmAction;
+    setConfirmAction(null);
     try {
-      const response = await fetch(`/api/sales-returns/${returnId}/cancel`, { method: "POST" });
+      const url = type === "delete"
+        ? `/api/sales-returns/${id}`
+        : `/api/sales-returns/${id}/${type}`;
+      const method = type === "delete" ? "DELETE" : "POST";
+      const response = await fetch(url, { method });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || "Failed to cancel return");
+        throw new Error(data.error || `Failed to ${type} return`);
       }
       setSelectedReturn(null);
       mutate();
     } catch (err) {
-      console.error("Error cancelling return:", err);
-      alert(err instanceof Error ? err.message : "Failed to cancel return");
-    }
-  };
-
-  const handleDelete = async (returnId: string) => {
-    if (!confirm("Permanently delete this return? This cannot be undone.")) return;
-    try {
-      const response = await fetch(`/api/sales-returns/${returnId}`, { method: "DELETE" });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to delete return");
-      }
-      setSelectedReturn(null);
-      mutate();
-    } catch (err) {
-      console.error("Error deleting return:", err);
-      alert(err instanceof Error ? err.message : "Failed to delete return");
+      setActionError(err instanceof Error ? err.message : `Failed to ${type} return`);
     }
   };
 
@@ -200,9 +190,18 @@ export default function SalesReturnsPage() {
       <div className="p-6">
         {/* Header */}
         <div className="mb-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Sales Returns</h1>
-          <p className="text-sm text-gray-600">Manage goods returned by customers</p>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Sales Returns</h1>
+          <p className="text-sm text-muted-foreground">Manage goods returned by customers</p>
         </div>
+
+        {actionError && (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span>{actionError}</span>
+            <button onClick={() => setActionError(null)} className="ml-4 text-red-400 hover:text-red-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {/* Filters and Search */}
         <div className="space-y-4 mb-6">
@@ -214,7 +213,7 @@ export default function SalesReturnsPage() {
                   variant={statusFilter === filter.value ? "default" : "outline"}
                   size="sm"
                   onClick={() => handleStatusFilter(filter.value)}
-                  className={statusFilter === filter.value ? "bg-teal-500 hover:bg-teal-600" : ""}
+                  className={statusFilter === filter.value ? "bg-primary hover:bg-primary/90" : ""}
                 >
                   {filter.label}
                 </Button>
@@ -232,7 +231,7 @@ export default function SalesReturnsPage() {
                 {searchQuery && (
                   <button
                     onClick={handleClearSearch}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground"
                     aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
@@ -243,7 +242,7 @@ export default function SalesReturnsPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowFilters(!showFilters)}
-                className={activeFilterCount > 0 ? "border-teal-500 text-teal-600" : ""}
+                className={activeFilterCount > 0 ? "border-primary text-primary" : ""}
               >
                 <Filter className="h-4 w-4 mr-1" />
                 Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
@@ -251,7 +250,7 @@ export default function SalesReturnsPage() {
               <Button
                 size="sm"
                 onClick={() => router.push("/sales/returns/new")}
-                className="bg-teal-500 hover:bg-teal-600 text-white"
+                className="bg-primary hover:bg-primary/90 text-white"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 New Return
@@ -260,7 +259,7 @@ export default function SalesReturnsPage() {
           </div>
 
           {showFilters && (
-            <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex flex-wrap items-end gap-3 p-4 bg-muted/30 rounded-lg border border-border">
               <div className="min-w-[160px]">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Brand</label>
                 <Select value={brandFilter} onValueChange={(v) => { setBrandFilter(v === "ALL" ? "" : v); setCurrentPage(1); }}>
@@ -294,7 +293,7 @@ export default function SalesReturnsPage() {
                 <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} className="h-9 bg-white" />
               </div>
               {activeFilterCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={() => { setBrandFilter(""); setCustomerFilter(""); setDateFrom(""); setDateTo(""); setCurrentPage(1); }} className="text-gray-500 hover:text-gray-700 h-9">
+                <Button variant="ghost" size="sm" onClick={() => { setBrandFilter(""); setCustomerFilter(""); setDateFrom(""); setDateTo(""); setCurrentPage(1); }} className="text-muted-foreground hover:text-foreground h-9">
                   <X className="h-3 w-3 mr-1" /> Clear
                 </Button>
               )}
@@ -303,11 +302,11 @@ export default function SalesReturnsPage() {
         </div>
 
         {/* Returns Table */}
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <Table aria-label="Sales returns list">
               <TableHeader>
-                <TableRow className="bg-gray-50">
+                <TableRow className="bg-muted/30">
                   <TableHead scope="col" className="font-semibold w-[100px]">Date</TableHead>
                   <TableHead scope="col" className="font-semibold w-[110px]">Return #</TableHead>
                   <TableHead scope="col" className="font-semibold">Customer</TableHead>
@@ -321,7 +320,7 @@ export default function SalesReturnsPage() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-gray-500 py-12">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="h-5 w-5 animate-spin" />
                         <span>Loading returns...</span>
@@ -339,7 +338,7 @@ export default function SalesReturnsPage() {
                   </TableRow>
                 ) : (data?.salesReturns || []).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-gray-500 py-8">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                       {searchQuery || statusFilter !== "ALL"
                         ? "No returns found matching your filters"
                         : "No sales returns yet. Click 'New Return' to create one."}
@@ -347,12 +346,12 @@ export default function SalesReturnsPage() {
                   </TableRow>
                 ) : (
                   (data?.salesReturns || []).map((ret: SalesReturn) => (
-                    <TableRow key={ret.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedReturn(ret)}>
+                    <TableRow key={ret.id} className="hover:bg-muted/20 cursor-pointer" onClick={() => setSelectedReturn(ret)}>
                       <TableCell className="text-sm">{formatDate(ret.returnDate)}</TableCell>
                       <TableCell>
                         <button
                           onClick={(e) => { e.stopPropagation(); setSelectedReturn(ret); }}
-                          className="font-medium text-teal-600 hover:text-teal-800 hover:underline"
+                          className="font-medium text-primary hover:text-primary/80 hover:underline"
                         >
                           {ret.returnNumber}
                         </button>
@@ -360,20 +359,20 @@ export default function SalesReturnsPage() {
                       <TableCell>
                         <div>
                           <p className="font-medium">{ret.customer.name}</p>
-                          <p className="text-xs text-gray-500">{ret.customer.customerNumber}</p>
+                          <p className="text-xs text-muted-foreground">{ret.customer.customerNumber}</p>
                         </div>
                       </TableCell>
                       <TableCell className="text-sm">
                         {ret.invoice ? (
                           <button
                             onClick={(e) => { e.stopPropagation(); router.push(`/sales/invoices/${ret.invoice!.id}`); }}
-                            className="text-teal-600 hover:underline"
+                            className="text-primary hover:underline"
                           >
                             {ret.invoice.invoiceNumber}
                           </button>
                         ) : "-"}
                       </TableCell>
-                      <TableCell className="text-sm text-gray-600 max-w-[200px] truncate">
+                      <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
                         {ret.reason || "-"}
                       </TableCell>
                       <TableCell className="text-center">
@@ -385,13 +384,13 @@ export default function SalesReturnsPage() {
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600" aria-label="Actions" onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground/60 hover:text-muted-foreground" aria-label="Actions" onClick={(e) => e.stopPropagation()}>
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem onClick={() => router.push(`/sales/returns/${ret.id}`)}>
-                              <Eye className="h-4 w-4 mr-2 text-teal-600" /> View Details
+                              <Eye className="h-4 w-4 mr-2 text-primary" /> View Details
                             </DropdownMenuItem>
                             {ret.status === "OPEN" && (
                               <>
@@ -423,18 +422,50 @@ export default function SalesReturnsPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} returns
             </p>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={currentPage === 1}>Previous</Button>
-              <span className="text-sm text-gray-600">Page {currentPage} of {totalPages}</span>
+              <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
               <Button variant="outline" size="sm" onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages}>Next</Button>
             </div>
           </div>
         )}
       </div>
+
+      <AlertDialog open={!!confirmAction} onOpenChange={(open) => { if (!open) setConfirmAction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction?.type === "complete" && "Complete this return?"}
+              {confirmAction?.type === "cancel" && "Cancel this return?"}
+              {confirmAction?.type === "delete" && "Delete this return?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.type === "complete" && "This will restore inventory and create a credit ledger entry. This cannot be undone."}
+              {confirmAction?.type === "cancel" && "The return will be marked as cancelled. This cannot be undone."}
+              {confirmAction?.type === "delete" && "This return will be permanently deleted. This cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeConfirmAction}
+              className={
+                confirmAction?.type === "complete"
+                  ? "bg-green-600 hover:bg-green-700"
+                  : "bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              }
+            >
+              {confirmAction?.type === "complete" && "Complete"}
+              {confirmAction?.type === "cancel" && "Cancel Return"}
+              {confirmAction?.type === "delete" && "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Return Detail Modal */}
       <Dialog open={!!selectedReturn} onOpenChange={(open) => { if (!open) setSelectedReturn(null); }}>
@@ -450,17 +481,17 @@ export default function SalesReturnsPage() {
           {selectedReturn && (
             <div className="space-y-4">
               <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Customer</p>
-                <p className="font-medium text-gray-900">{selectedReturn.customer.name}</p>
-                <p className="text-sm text-gray-500">{selectedReturn.customer.customerNumber}</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Customer</p>
+                <p className="font-medium text-foreground">{selectedReturn.customer.name}</p>
+                <p className="text-sm text-muted-foreground">{selectedReturn.customer.customerNumber}</p>
               </div>
 
               {selectedReturn.invoice && (
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Invoice</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Invoice</p>
                   <button
                     onClick={() => { setSelectedReturn(null); router.push(`/sales/invoices/${selectedReturn.invoice!.id}`); }}
-                    className="text-sm font-medium text-teal-600 hover:underline"
+                    className="text-sm font-medium text-primary hover:underline"
                   >
                     {selectedReturn.invoice.invoiceNumber}
                   </button>
@@ -469,25 +500,25 @@ export default function SalesReturnsPage() {
 
               {selectedReturn.reason && (
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Reason</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Reason</p>
                   <p className="text-sm text-gray-700">{selectedReturn.reason}</p>
                 </div>
               )}
 
               <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Amount</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Amount</p>
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Subtotal</span>
-                    <span className="text-gray-700">{formatCurrency(Number(selectedReturn.subtotal))}</span>
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span className="text-foreground">{formatCurrency(Number(selectedReturn.subtotal))}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Tax</span>
-                    <span className="text-gray-700">{formatCurrency(Number(selectedReturn.taxAmount))}</span>
+                    <span className="text-muted-foreground">Tax</span>
+                    <span className="text-foreground">{formatCurrency(Number(selectedReturn.taxAmount))}</span>
                   </div>
                   <div className="flex justify-between font-medium border-t pt-1.5">
                     <span>Total</span>
-                    <span className="text-lg text-gray-900">{formatCurrency(Number(selectedReturn.totalAmount))}</span>
+                    <span className="text-lg text-foreground">{formatCurrency(Number(selectedReturn.totalAmount))}</span>
                   </div>
                 </div>
               </div>
@@ -510,7 +541,7 @@ export default function SalesReturnsPage() {
                 )}
                 <Button
                   size="sm"
-                  className="ml-auto bg-teal-500 hover:bg-teal-600 text-white"
+                  className="ml-auto bg-primary hover:bg-primary/90 text-white"
                   onClick={() => { const id = selectedReturn.id; setSelectedReturn(null); router.push(`/sales/returns/${id}`); }}
                 >
                   <Eye className="h-4 w-4 mr-1.5" /> View Full Details

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { PATH_TO_PERMISSION } from "@/types/permissions";
 import type { RolePermissions } from "@/types/permissions";
+import { verifyPortalToken, PORTAL_COOKIE_NAME } from "@/lib/portal-auth";
 
 const useSecureCookies = process.env.NEXTAUTH_URL?.startsWith("https://") ?? false;
 const cookieName = useSecureCookies
@@ -10,6 +11,33 @@ const cookieName = useSecureCookies
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // ── Portal routes ────────────────────────────────────────────────────────
+  if (pathname.startsWith("/portal")) {
+    // Always allow the login page and its API
+    if (pathname === "/portal/login" || pathname.startsWith("/api/portal/login") || pathname.startsWith("/api/portal/logout")) {
+      return NextResponse.next();
+    }
+
+    // All other portal pages: require valid portal-token cookie
+    const portalToken = request.cookies.get(PORTAL_COOKIE_NAME)?.value;
+    if (!portalToken) {
+      return NextResponse.redirect(new URL("/portal/login", request.url));
+    }
+    try {
+      await verifyPortalToken(portalToken);
+      return NextResponse.next();
+    } catch {
+      const res = NextResponse.redirect(new URL("/portal/login", request.url));
+      res.cookies.delete(PORTAL_COOKIE_NAME);
+      return res;
+    }
+  }
+
+  // Portal API routes (except login/logout already handled above)
+  if (pathname.startsWith("/api/portal/")) {
+    return NextResponse.next();
+  }
 
   // Allow access to login page and auth API routes
   if (pathname === "/login" || pathname.startsWith("/api/auth/")) {
@@ -83,6 +111,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public folder
      */
-    "/((?!_next/static|_next/image|favicon.ico|public).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)$).*)",
   ],
 };

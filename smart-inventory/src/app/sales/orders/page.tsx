@@ -42,6 +42,16 @@ import {
   Filter,
   Copy,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -124,6 +134,12 @@ export default function SalesOrdersPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  interface StockWarningItem { itemName: string; required: number; available: number; }
+  interface StockWarningState { orderId: string; newStatus: string; reason?: string; items: StockWarningItem[]; }
+  const [stockWarning, setStockWarning] = useState<StockWarningState | null>(null);
 
   // Clipboard copy/paste
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
@@ -217,27 +233,24 @@ export default function SalesOrdersPage() {
     setSearchQuery("");
   };
 
-  // Handle delete
-  const handleDelete = async (orderId: string) => {
-    if (!confirm("Are you sure you want to delete this order?")) {
-      return;
-    }
+  const handleDelete = (orderId: string) => {
+    setDeleteConfirmId(orderId);
+  };
 
+  const executeDelete = async () => {
+    if (!deleteConfirmId) return;
+    setActionError(null);
     try {
-      const response = await fetch(`/api/sales-orders/${orderId}`, {
-        method: "DELETE",
-      });
-
+      const response = await fetch(`/api/sales-orders/${deleteConfirmId}`, { method: "DELETE" });
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Failed to delete order");
       }
-
-      // Refresh data from cache after mutation
       mutate();
     } catch (err) {
-      console.error("Error deleting order:", err);
-      alert(err instanceof Error ? err.message : "Failed to delete order");
+      setActionError(err instanceof Error ? err.message : "Failed to delete order");
+    } finally {
+      setDeleteConfirmId(null);
     }
   };
 
@@ -246,12 +259,8 @@ export default function SalesOrdersPage() {
     router.push(`/sales/invoices/new?salesOrderId=${orderId}`);
   };
 
-  // Handle status change
-  const handleStatusChange = async (
-    orderId: string,
-    newStatus: string,
-    reason?: string
-  ) => {
+  const handleStatusChange = async (orderId: string, newStatus: string, reason?: string) => {
+    setActionError(null);
     try {
       const response = await fetch(`/api/sales-orders/${orderId}/status`, {
         method: "PATCH",
@@ -262,40 +271,32 @@ export default function SalesOrdersPage() {
       const data = await response.json();
 
       if (response.status === 409 && data.warning) {
-        // Stock warning
-        interface StockItem {
-          itemName: string;
-          required: number;
-          available: number;
-        }
-        const proceed = confirm(
-          `Warning: Some items have insufficient stock.\n\n${data.insufficientStock
-            .map(
-              (item: StockItem) =>
-                `${item.itemName}: Need ${item.required}, Available ${item.available}`
-            )
-            .join("\n")}\n\nDo you want to proceed anyway?`
-        );
-
-        if (proceed) {
-          // Force the status change
-          await fetch(`/api/sales-orders/${orderId}/status`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: newStatus, reason, force: true }),
-          });
-        }
+        setStockWarning({ orderId, newStatus, reason, items: data.insufficientStock });
+        return;
       }
 
       if (!response.ok && !data.warning) {
         throw new Error(data.error || "Failed to change status");
       }
 
-      // Refresh data from cache after mutation
       mutate();
     } catch (err) {
-      console.error("Error changing status:", err);
-      alert(err instanceof Error ? err.message : "Failed to change status");
+      setActionError(err instanceof Error ? err.message : "Failed to change status");
+    }
+  };
+
+  const executeForceStatusChange = async () => {
+    if (!stockWarning) return;
+    setStockWarning(null);
+    try {
+      await fetch(`/api/sales-orders/${stockWarning.orderId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: stockWarning.newStatus, reason: stockWarning.reason, force: true }),
+      });
+      mutate();
+    } catch {
+      setActionError("Failed to change order status.");
     }
   };
 
@@ -334,44 +335,53 @@ export default function SalesOrdersPage() {
       <div className="p-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Sales Orders</h1>
-          <p className="text-gray-600">
+          <h1 className="text-2xl font-bold text-foreground mb-2">Sales Orders</h1>
+          <p className="text-muted-foreground">
             Manage customer orders and track fulfillment status
           </p>
         </div>
 
+        {actionError && (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span>{actionError}</span>
+            <button onClick={() => setActionError(null)} className="ml-4 text-red-400 hover:text-red-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-border/60 p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-indigo-100 rounded-lg">
                 <ShoppingCart className="h-5 w-5 text-indigo-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Total Orders</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+                <p className="text-sm text-muted-foreground">Total Orders</p>
+                <p className="text-2xl font-bold text-foreground">{stats.total}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-border/60 p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-amber-100 rounded-lg">
                 <Clock className="h-5 w-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Open Orders</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.open}</p>
+                <p className="text-sm text-muted-foreground">Open Orders</p>
+                <p className="text-2xl font-bold text-foreground">{stats.open}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-border/60 p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-orange-100 rounded-lg">
                 <Clock className="h-5 w-5 text-orange-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">On Hold</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.hold}</p>
+                <p className="text-sm text-muted-foreground">On Hold</p>
+                <p className="text-2xl font-bold text-foreground">{stats.hold}</p>
               </div>
             </div>
           </div>
@@ -389,7 +399,7 @@ export default function SalesOrdersPage() {
                   onClick={() => handleStatusFilter(filter.value)}
                   className={
                     statusFilter === filter.value
-                      ? "bg-teal-500 hover:bg-teal-600"
+                      ? "bg-primary hover:bg-primary/90"
                       : ""
                   }
                 >
@@ -409,7 +419,7 @@ export default function SalesOrdersPage() {
                 {searchQuery && (
                   <button
                     onClick={handleClearSearch}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground"
                     aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
@@ -420,7 +430,7 @@ export default function SalesOrdersPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowFilters(!showFilters)}
-                className={activeFilterCount > 0 ? "border-teal-500 text-teal-600" : ""}
+                className={activeFilterCount > 0 ? "border-primary text-primary" : ""}
               >
                 <Filter className="h-4 w-4 mr-1" />
                 Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
@@ -436,7 +446,7 @@ export default function SalesOrdersPage() {
               <Button
                 size="sm"
                 onClick={() => router.push("/sales/orders/new")}
-                className="bg-teal-500 hover:bg-teal-600 text-white"
+                className="bg-primary hover:bg-primary/90 text-white"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 New Order
@@ -445,7 +455,7 @@ export default function SalesOrdersPage() {
           </div>
 
           {showFilters && (
-            <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex flex-wrap items-end gap-3 p-4 bg-muted/30 rounded-lg border border-border">
               <div className="min-w-[160px]">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Brand</label>
                 <Select value={brandFilter} onValueChange={(v) => { setBrandFilter(v === "ALL" ? "" : v); setCurrentPage(1); }}>
@@ -503,7 +513,7 @@ export default function SalesOrdersPage() {
                     setDateTo("");
                     setCurrentPage(1);
                   }}
-                  className="text-gray-500 hover:text-gray-700 h-9"
+                  className="text-muted-foreground hover:text-foreground h-9"
                 >
                   <X className="h-3 w-3 mr-1" />
                   Clear
@@ -527,12 +537,12 @@ export default function SalesOrdersPage() {
         {/* Context menu */}
         {contextMenu && (
           <div
-            className="fixed z-50 min-w-[140px] rounded-lg border border-gray-200 bg-white shadow-lg py-1 text-sm"
+            className="fixed z-50 min-w-[140px] rounded-lg border border-border bg-white shadow-lg py-1 text-sm"
             style={{ top: contextMenu.y, left: contextMenu.x }}
           >
             <button
               onClick={() => { router.push(`/sales/orders/new?copy=${copiedOrderId}`); setCopiedOrderId(null); setContextMenu(null); }}
-              className="flex w-full items-center gap-2 px-3 py-2 hover:bg-indigo-50 text-gray-700 hover:text-indigo-700"
+              className="flex w-full items-center gap-2 px-3 py-2 hover:bg-indigo-50 text-foreground hover:text-indigo-700"
             >
               <Copy className="h-4 w-4" />
               Paste Order
@@ -541,11 +551,11 @@ export default function SalesOrdersPage() {
         )}
 
         {/* Orders Table */}
-        <div ref={tableRef} onContextMenu={handleContextMenu} className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div ref={tableRef} onContextMenu={handleContextMenu} className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <Table aria-label="Sales orders list">
               <TableHeader>
-                <TableRow className="bg-gray-50">
+                <TableRow className="bg-muted/30">
                   <TableHead scope="col" className="font-semibold">
                     Date
                   </TableHead>
@@ -577,7 +587,7 @@ export default function SalesOrdersPage() {
                   <TableRow>
                     <TableCell
                       colSpan={8}
-                      className="text-center text-gray-500 py-12"
+                      className="text-center text-muted-foreground py-12"
                     >
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="h-5 w-5 animate-spin" />
@@ -607,7 +617,7 @@ export default function SalesOrdersPage() {
                   <TableRow>
                     <TableCell
                       colSpan={8}
-                      className="text-center text-gray-500 py-8"
+                      className="text-center text-muted-foreground py-8"
                     >
                       {searchQuery || statusFilter !== "ALL"
                         ? "No orders found matching your filters"
@@ -616,7 +626,7 @@ export default function SalesOrdersPage() {
                   </TableRow>
                 ) : (
                   (data?.salesOrders || []).map((order: SalesOrder) => (
-                    <TableRow key={order.id} className="hover:bg-gray-50">
+                    <TableRow key={order.id} className="hover:bg-muted/20">
                       <TableCell className="text-sm">
                         {formatDate(order.orderDate)}
                       </TableCell>
@@ -625,7 +635,7 @@ export default function SalesOrdersPage() {
                           onClick={() =>
                             router.push(`/sales/orders/${order.id}`)
                           }
-                          className="font-medium text-teal-600 hover:text-teal-800 hover:underline"
+                          className="font-medium text-primary hover:text-primary/80 hover:underline"
                         >
                           {order.orderNumber}
                         </button>
@@ -633,12 +643,12 @@ export default function SalesOrdersPage() {
                       <TableCell>
                         <div>
                           <p className="font-medium">{order.customer.name}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-muted-foreground">
                             {order.customer.customerNumber}
                           </p>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-gray-600">
+                      <TableCell className="text-sm text-muted-foreground">
                         {order.referenceNumber || "-"}
                       </TableCell>
                       <TableCell className="text-center">
@@ -667,7 +677,7 @@ export default function SalesOrdersPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600"
+                              className="h-8 w-8 p-0 text-muted-foreground/60 hover:text-muted-foreground"
                               aria-label="Actions"
                             >
                               <MoreVertical className="h-4 w-4" />
@@ -679,7 +689,7 @@ export default function SalesOrdersPage() {
                                 router.push(`/sales/orders/${order.id}`)
                               }
                             >
-                              <Eye className="h-4 w-4 mr-2 text-teal-600" />
+                              <Eye className="h-4 w-4 mr-2 text-primary" />
                               View Details
                             </DropdownMenuItem>
 
@@ -789,7 +799,7 @@ export default function SalesOrdersPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="mt-6 flex items-center justify-between">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount}{" "}
               orders
@@ -803,7 +813,7 @@ export default function SalesOrdersPage() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-muted-foreground">
                 Page {currentPage} of {totalPages}
               </span>
               <Button
@@ -820,6 +830,51 @@ export default function SalesOrdersPage() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete order?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This sales order will be permanently deleted. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={executeDelete} className="bg-red-600 hover:bg-red-700 focus:ring-red-600">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!stockWarning} onOpenChange={(open) => { if (!open) setStockWarning(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Insufficient Stock Warning</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <p className="mb-3">Some items have insufficient stock:</p>
+                <ul className="space-y-1.5 mb-3">
+                  {stockWarning?.items.map((item, i) => (
+                    <li key={i} className="flex justify-between text-sm bg-orange-50 rounded px-3 py-1.5">
+                      <span className="font-medium">{item.itemName}</span>
+                      <span className="text-muted-foreground">Need {item.required}, Available {item.available}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p>Do you want to proceed anyway?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={executeForceStatusChange} className="bg-orange-600 hover:bg-orange-700">
+              Proceed Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }

@@ -43,6 +43,17 @@ import {
   MoreVertical,
   Plus,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ImportButton } from "@/components/import/ImportButton";
 import { ExportButtons } from "@/components/ui/ExportButtons";
 import { exportToExcel, exportToPDF, fmtDateExport, fmtNum, fetchCompanySettings } from "@/lib/export-utils";
@@ -125,6 +136,8 @@ export default function SalesInvoicesPage() {
   const [bulkPdfLoading, setBulkPdfLoading] = useState(false);
   // Per-row PDF loading
   const [rowPdfLoading, setRowPdfLoading] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   // Clipboard-style copy/paste
   const [copiedInvoiceId, setCopiedInvoiceId] = useState<string | null>(null);
   const [isPasting, setIsPasting] = useState(false);
@@ -198,18 +211,24 @@ export default function SalesInvoicesPage() {
     setCurrentPage(1);
   };
 
-  const handleDelete = async (invoiceId: string) => {
-    if (!confirm("Are you sure you want to delete this invoice? This will restore stock and cannot be undone.")) return;
+  const handleDelete = (invoiceId: string) => {
+    setDeleteConfirmId(invoiceId);
+  };
+
+  const executeDelete = async () => {
+    if (!deleteConfirmId) return;
+    setActionError(null);
     try {
-      const response = await fetch(`/api/sales-invoices/${invoiceId}`, { method: "DELETE" });
+      const response = await fetch(`/api/sales-invoices/${deleteConfirmId}`, { method: "DELETE" });
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Failed to delete invoice");
       }
       fetchInvoices();
     } catch (err) {
-      console.error("Error deleting invoice:", err);
-      alert(err instanceof Error ? err.message : "Failed to delete invoice");
+      setActionError(err instanceof Error ? err.message : "Failed to delete invoice");
+    } finally {
+      setDeleteConfirmId(null);
     }
   };
 
@@ -226,7 +245,7 @@ export default function SalesInvoicesPage() {
       generateInvoicePDF(fullInvoice, deps.company, deps.bank);
     } catch (err) {
       console.error("Error generating PDF:", err);
-      alert("Failed to generate PDF.");
+      setActionError("Failed to generate PDF. Please try again.");
     } finally {
       setRowPdfLoading(null);
     }
@@ -250,7 +269,7 @@ export default function SalesInvoicesPage() {
       setSelectedIds(new Set());
     } catch (err) {
       console.error("Error in bulk PDF:", err);
-      alert("Some PDFs failed to generate.");
+      setActionError("Some PDFs failed to generate.");
     } finally {
       setBulkPdfLoading(false);
     }
@@ -278,7 +297,7 @@ export default function SalesInvoicesPage() {
       router.push(`/sales/invoices/${data.id}`);
     } catch (err) {
       console.error("Error pasting invoice:", err);
-      alert(err instanceof Error ? err.message : "Failed to create copy");
+      setActionError(err instanceof Error ? err.message : "Failed to create copy");
     } finally {
       setIsPasting(false);
     }
@@ -355,53 +374,62 @@ export default function SalesInvoicesPage() {
       <div className="p-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Sales Invoices</h1>
-          <p className="text-gray-600">Manage customer invoices and track payments</p>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Sales Invoices</h1>
+          <p className="text-muted-foreground">Manage customer invoices and track payments</p>
         </div>
+
+        {actionError && (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span>{actionError}</span>
+            <button onClick={() => setActionError(null)} className="ml-4 text-red-400 hover:text-red-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-border/60 p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-100 rounded-lg">
                 <FileText className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Total Invoices</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+                <p className="text-sm text-muted-foreground">Total Invoices</p>
+                <p className="text-2xl font-bold text-foreground">{stats.total}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-border/60 p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-yellow-100 rounded-lg">
                 <Clock className="h-5 w-5 text-yellow-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Pending</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.pending}</p>
+                <p className="text-sm text-muted-foreground">Pending</p>
+                <p className="text-2xl font-bold text-foreground">{stats.pending}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-border/60 p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-red-100 rounded-lg">
                 <AlertCircle className="h-5 w-5 text-red-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Overdue</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.overdue}</p>
+                <p className="text-sm text-muted-foreground">Overdue</p>
+                <p className="text-2xl font-bold text-foreground">{stats.overdue}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-border/60 p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-green-100 rounded-lg">
                 <CheckCircle2 className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Total Receivable</p>
-                <p className="text-xl font-bold text-gray-900">
+                <p className="text-sm text-muted-foreground">Total Receivable</p>
+                <p className="text-xl font-bold text-foreground">
                   {formatCurrency(stats.totalReceivable)}
                 </p>
               </div>
@@ -419,7 +447,7 @@ export default function SalesInvoicesPage() {
                   variant={statusFilter === filter.value ? "default" : "outline"}
                   size="sm"
                   onClick={() => handleStatusFilter(filter.value)}
-                  className={statusFilter === filter.value ? "bg-teal-500 hover:bg-teal-600" : ""}
+                  className={statusFilter === filter.value ? "bg-primary hover:bg-primary/90" : ""}
                 >
                   {filter.label}
                 </Button>
@@ -438,7 +466,7 @@ export default function SalesInvoicesPage() {
                 {searchQuery && (
                   <button
                     onClick={handleClearSearch}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground"
                     aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
@@ -449,7 +477,7 @@ export default function SalesInvoicesPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowFilters(!showFilters)}
-                className={activeFilterCount > 0 ? "border-teal-500 text-teal-600" : ""}
+                className={activeFilterCount > 0 ? "border-primary text-primary" : ""}
               >
                 <Filter className="h-4 w-4 mr-1" />
                 Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
@@ -491,7 +519,7 @@ export default function SalesInvoicesPage() {
               <ImportButton entityType="SALES_INVOICE" entityLabel="Sales Invoices" onSuccess={() => fetchInvoices()} />
               <Button
                 size="sm"
-                className="bg-teal-500 hover:bg-teal-600 text-white"
+                className="bg-primary hover:bg-primary/90 text-white"
                 onClick={() => window.location.href = "/sales/invoices/new"}
               >
                 <Plus className="h-4 w-4 mr-1.5" />
@@ -501,9 +529,9 @@ export default function SalesInvoicesPage() {
           </div>
 
           {showFilters && (
-            <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex flex-wrap items-end gap-3 p-4 bg-muted/30 rounded-lg border border-border">
               <div className="min-w-[160px]">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Brand</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Brand</label>
                 <Select value={brandFilter} onValueChange={(v) => { setBrandFilter(v === "ALL" ? "" : v); setCurrentPage(1); }}>
                   <SelectTrigger className="h-9 bg-white">
                     <SelectValue placeholder="All Brands" />
@@ -517,7 +545,7 @@ export default function SalesInvoicesPage() {
                 </Select>
               </div>
               <div className="min-w-[200px]">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Customer</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Customer</label>
                 <Select value={customerFilter} onValueChange={(v) => { setCustomerFilter(v === "ALL" ? "" : v); setCurrentPage(1); }}>
                   <SelectTrigger className="h-9 bg-white">
                     <SelectValue placeholder="All Customers" />
@@ -531,7 +559,7 @@ export default function SalesInvoicesPage() {
                 </Select>
               </div>
               <div className="min-w-[150px]">
-                <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">From Date</label>
                 <Input
                   type="date"
                   value={dateFrom}
@@ -540,7 +568,7 @@ export default function SalesInvoicesPage() {
                 />
               </div>
               <div className="min-w-[150px]">
-                <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">To Date</label>
                 <Input
                   type="date"
                   value={dateTo}
@@ -559,7 +587,7 @@ export default function SalesInvoicesPage() {
                     setDateTo("");
                     setCurrentPage(1);
                   }}
-                  className="text-gray-500 hover:text-gray-700 h-9"
+                  className="text-muted-foreground hover:text-foreground h-9"
                 >
                   <X className="h-3 w-3 mr-1" />
                   Clear
@@ -571,15 +599,15 @@ export default function SalesInvoicesPage() {
 
         {/* Bulk Action Bar */}
         {selectedIds.size > 0 && (
-          <div className="mb-4 flex items-center gap-4 px-4 py-3 bg-teal-50 border border-teal-200 rounded-lg">
-            <span className="text-sm font-medium text-teal-800">
+          <div className="mb-4 flex items-center gap-4 px-4 py-3 bg-primary/5 border border-primary/20 rounded-lg">
+            <span className="text-sm font-medium text-primary">
               {selectedIds.size} selected
             </span>
             <Button
               size="sm"
               onClick={handleBulkPDF}
               disabled={bulkPdfLoading}
-              className="bg-teal-600 hover:bg-teal-700 text-white"
+              className="bg-primary hover:bg-primary/90 text-white"
             >
               {bulkPdfLoading ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -592,7 +620,7 @@ export default function SalesInvoicesPage() {
               size="sm"
               variant="ghost"
               onClick={() => setSelectedIds(new Set())}
-              className="text-teal-700"
+              className="text-muted-foreground hover:text-foreground"
             >
               Clear selection
             </Button>
@@ -614,13 +642,13 @@ export default function SalesInvoicesPage() {
         {/* Context menu */}
         {contextMenu && (
           <div
-            className="fixed z-50 min-w-[140px] rounded-lg border border-gray-200 bg-white shadow-lg py-1 text-sm"
+            className="fixed z-50 min-w-[140px] rounded-lg border border-border bg-white shadow-lg py-1 text-sm"
             style={{ top: contextMenu.y, left: contextMenu.x }}
           >
             <button
               onClick={handlePasteInvoice}
               disabled={isPasting}
-              className="flex w-full items-center gap-2 px-3 py-2 hover:bg-indigo-50 text-gray-700 hover:text-indigo-700 disabled:opacity-50"
+              className="flex w-full items-center gap-2 px-3 py-2 hover:bg-indigo-50 text-foreground hover:text-indigo-700 disabled:opacity-50"
             >
               {isPasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
               Paste Invoice
@@ -629,17 +657,22 @@ export default function SalesInvoicesPage() {
         )}
 
         {/* Invoices Table */}
-        <div ref={tableRef} onContextMenu={handleContextMenu} className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div ref={tableRef} onContextMenu={handleContextMenu} className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <Table aria-label="Sales invoices list">
               <TableHeader>
-                <TableRow className="bg-gray-50">
+                <TableRow className="bg-muted/30">
                   <TableHead scope="col" className="w-10">
-                    <input
-                      type="checkbox"
-                      checked={invoices.length > 0 && selectedIds.size === invoices.length}
-                      onChange={toggleSelectAll}
-                      className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                    <Checkbox
+                      checked={
+                        invoices.length > 0 && selectedIds.size === invoices.length
+                          ? true
+                          : selectedIds.size > 0
+                            ? "indeterminate"
+                            : false
+                      }
+                      onCheckedChange={(checked) => { if (checked !== "indeterminate") toggleSelectAll(); }}
+                      aria-label="Select all"
                     />
                   </TableHead>
                   <TableHead scope="col" className="font-semibold">Invoice Date</TableHead>
@@ -656,7 +689,7 @@ export default function SalesInvoicesPage() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center text-gray-500 py-12">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="h-5 w-5 animate-spin" />
                         <span>Loading invoices...</span>
@@ -674,7 +707,7 @@ export default function SalesInvoicesPage() {
                   </TableRow>
                 ) : invoices.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center text-gray-500 py-8">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                       {searchQuery || statusFilter !== "ALL"
                         ? "No invoices found matching your filters"
                         : "No invoices yet. Create invoices from delivered sales orders."}
@@ -682,13 +715,12 @@ export default function SalesInvoicesPage() {
                   </TableRow>
                 ) : (
                   invoices.map((invoice) => (
-                    <TableRow key={invoice.id} className={invoice.isImported ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-gray-50"}>
+                    <TableRow key={invoice.id} className={invoice.isImported ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-muted/20"}>
                       <TableCell>
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={selectedIds.has(invoice.id)}
-                          onChange={() => toggleSelect(invoice.id)}
-                          className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                          onCheckedChange={() => toggleSelect(invoice.id)}
+                          aria-label={`Select invoice ${invoice.invoiceNumber}`}
                         />
                       </TableCell>
                       <TableCell className="text-sm">{formatDate(invoice.invoiceDate)}</TableCell>
@@ -696,7 +728,7 @@ export default function SalesInvoicesPage() {
                         <div className="flex items-center gap-1.5">
                           <button
                             onClick={() => router.push(`/sales/invoices/${invoice.id}`)}
-                            className="font-medium text-teal-600 hover:text-teal-800 hover:underline"
+                            className="font-medium text-primary hover:text-primary/80 hover:underline"
                           >
                             {invoice.invoiceNumber}
                           </button>
@@ -707,11 +739,11 @@ export default function SalesInvoicesPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-gray-600">{invoice.orderNumber || "-"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{invoice.orderNumber || "-"}</TableCell>
                       <TableCell>
                         <div>
                           <p className="font-medium">{invoice.customer?.name || invoice.customerName || '-'}</p>
-                          <p className="text-xs text-gray-500">{invoice.customer?.customerNumber || ''}</p>
+                          <p className="text-xs text-muted-foreground">{invoice.customer?.customerNumber || ''}</p>
                         </div>
                       </TableCell>
                       <TableCell className="text-sm">{formatDate(invoice.dueDate)}</TableCell>
@@ -732,14 +764,14 @@ export default function SalesInvoicesPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600"
+                              className="h-8 w-8 p-0 text-muted-foreground/60 hover:text-muted-foreground"
                             >
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem onClick={() => router.push(`/sales/invoices/${invoice.id}`)}>
-                              <Eye className="h-4 w-4 mr-2 text-teal-600" />
+                              <Eye className="h-4 w-4 mr-2 text-primary" />
                               View Details
                             </DropdownMenuItem>
                             {(invoice.effectiveStatus === "PENDING" || invoice.effectiveStatus === "OVERDUE" || invoice.effectiveStatus === "PARTIAL") && (
@@ -795,7 +827,7 @@ export default function SalesInvoicesPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="mt-6 flex items-center justify-between">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} invoices
             </p>
@@ -808,7 +840,7 @@ export default function SalesInvoicesPage() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-muted-foreground">
                 Page {currentPage} of {totalPages}
               </span>
               <Button
@@ -823,6 +855,23 @@ export default function SalesInvoicesPage() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete invoice?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This invoice will be permanently deleted. Stock will be restored. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={executeDelete} className="bg-red-600 hover:bg-red-700 focus:ring-red-600">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }
