@@ -142,6 +142,15 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate payment mode is valid enum value
+    const validModes = ['CASH', 'BANK_TRANSFER', 'CHEQUE', 'UPI', 'CARD', 'OTHER'];
+    if (!validModes.includes(body.mode)) {
+      return NextResponse.json(
+        { error: 'Invalid payment mode. Must be one of: CASH, BANK_TRANSFER, CHEQUE, UPI, CARD, OTHER' },
+        { status: 400 }
+      );
+    }
+
     if (!body.paidFrom) {
       return NextResponse.json(
         { error: 'Payment source (Cash/Bank) is required' },
@@ -292,9 +301,10 @@ export async function POST(request: Request) {
 
       // If invoice payment, update invoice paid amount and status
       if (purchaseInvoice) {
-        const newPaidAmount = Number(purchaseInvoice.paidAmount) + body.amount;
-        const newBalanceAmount = Number(purchaseInvoice.totalAmount) - newPaidAmount;
-        const newStatus = newBalanceAmount <= 0 ? 'PAID' : purchaseInvoice.status;
+        const newPaidAmount = Number(purchaseInvoice.paidAmount) + Number(body.amount);
+        const totalAmount = Number(purchaseInvoice.totalAmount);
+        const newBalanceAmount = Math.max(0, totalAmount - newPaidAmount);
+        const newStatus = newBalanceAmount <= 0.01 ? 'PAID' : purchaseInvoice.status; // Use small threshold for decimal precision
 
         await tx.purchaseInvoice.update({
           where: { id: body.purchaseInvoiceId },

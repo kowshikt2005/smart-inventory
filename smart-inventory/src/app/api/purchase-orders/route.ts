@@ -157,6 +157,17 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate expected delivery date is not before order date
+    if (body.expectedDelivery) {
+      const expectedDelivery = new Date(body.expectedDelivery);
+      if (expectedDelivery < orderDate) {
+        return NextResponse.json(
+          { error: 'Expected delivery date cannot be before order date' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Validate vendor exists and is active
     const vendor = await db.vendor.findUnique({
       where: { id: body.vendorId },

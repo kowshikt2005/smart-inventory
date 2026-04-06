@@ -129,6 +129,40 @@ export async function PUT(
       }
     }
 
+    // Validate dates if being updated
+    if (body.date) {
+      const orderDate = new Date(body.date);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      if (orderDate > today) {
+        return NextResponse.json(
+          { error: 'Order date cannot be in the future' },
+          { status: 400 }
+        );
+      }
+
+      // Validate expected delivery date is not before order date
+      if (body.expectedDelivery) {
+        const expectedDelivery = new Date(body.expectedDelivery);
+        if (expectedDelivery < orderDate) {
+          return NextResponse.json(
+            { error: 'Expected delivery date cannot be before order date' },
+            { status: 400 }
+          );
+        }
+      }
+    } else if (body.expectedDelivery) {
+      // If only expectedDelivery is being updated, compare with existing order date
+      const expectedDelivery = new Date(body.expectedDelivery);
+      const orderDate = new Date(existingOrder.date);
+      if (expectedDelivery < orderDate) {
+        return NextResponse.json(
+          { error: 'Expected delivery date cannot be before order date' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Validate items if being updated
     let orderItems: any[] = [];
     if (body.items && Array.isArray(body.items)) {
