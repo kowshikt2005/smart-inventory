@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { signPortalToken, PORTAL_COOKIE_NAME, useSecurePortalCookie } from "@/lib/portal-auth";
+import { signPortalToken, PORTAL_COOKIE_NAME, isSecureCookie } from "@/lib/portal-auth";
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set(PORTAL_COOKIE_NAME, token, {
       httpOnly: true,
-      secure: useSecurePortalCookie(),
+      secure: isSecureCookie(),
       sameSite: "lax",
       path: "/",
       maxAge: 7 * 24 * 60 * 60,

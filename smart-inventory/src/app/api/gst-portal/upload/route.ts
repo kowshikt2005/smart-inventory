@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkPermission } from "@/lib/api-auth";
-import { getSession, updateSession, deleteSession } from "@/lib/gst-portal-session";
+import { getSession, updateSession } from "@/lib/gst-portal-session";
 import { writeFileSync, unlinkSync, existsSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";

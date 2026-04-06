@@ -63,6 +63,6 @@ export async function getPortalCustomer(
   }
 }
 
-export function useSecurePortalCookie() {
+export function isSecureCookie() {
   return process.env.NEXTAUTH_URL?.startsWith("https://") ?? false;
 }

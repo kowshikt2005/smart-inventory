@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkPermission } from "@/lib/api-auth";
-import { getSession, updateSession, deleteSession } from "@/lib/gst-portal-session";
+import { getSession, updateSession } from "@/lib/gst-portal-session";
 
 /**
  * POST /api/gst-portal/login-otp
