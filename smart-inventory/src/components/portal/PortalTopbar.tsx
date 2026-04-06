@@ -6,7 +6,14 @@ import useSWR from "swr";
 import { ShoppingCart, LogOut, User } from "lucide-react";
 import { useCart } from "@/components/portal/CartContext";
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = async (url: string) => {
+  const r = await fetch(url);
+  if (r.status === 401) {
+    window.location.href = "/portal/login";
+    return null;
+  }
+  return r.json();
+};
 
 const PAGE_TITLES: Record<string, string> = {
   "/portal/shop": "Browse Catalog",
@@ -60,6 +67,7 @@ export function PortalTopbar() {
           {/* Cart */}
           <Link
             href="/portal/cart"
+            prefetch={false}
             className="relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-amber-50 transition-colors group"
             aria-label={`Cart (${totalItems} items)`}
           >

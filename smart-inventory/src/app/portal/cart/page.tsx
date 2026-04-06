@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Minus, Plus, Trash2, ShoppingBag, Loader2, CheckCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Minus, Plus, Trash2, ShoppingBag, Loader2 } from "lucide-react";
 import { useCart } from "@/components/portal/CartContext";
 
 export default function CartPage() {
+  const router = useRouter();
   const { items, totalAmount, updateQuantity, removeItem, clearCart } = useCart();
   const [placing, setPlacing] = useState(false);
-  const [successOrder, setSuccessOrder] = useState<{ orderNumber: string; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const subtotal = totalAmount;
@@ -38,35 +39,14 @@ export default function CartPage() {
         return;
       }
       clearCart();
-      setSuccessOrder({ orderNumber: data.order.orderNumber, total: Number(data.order.totalAmount) });
+      router.push(
+        `/portal/order-confirmed?orderNumber=${encodeURIComponent(data.order.orderNumber)}&total=${encodeURIComponent(data.order.totalAmount)}`
+      );
     } catch {
       setError("Connection error. Please try again.");
     } finally {
       setPlacing(false);
     }
-  }
-
-  // Success
-  if (successOrder) {
-    return (
-      <div className="max-w-lg mx-auto px-6 py-16 text-center">
-        <div className="w-16 h-16 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center mx-auto mb-6">
-          <CheckCircle className="h-8 w-8 text-amber-500" />
-        </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Order Placed!</h2>
-        <p className="text-gray-400 text-sm mb-1">Your order has been received.</p>
-        <p className="text-gray-400 text-xs mb-2 font-mono">{successOrder.orderNumber}</p>
-        <p className="text-lg font-bold text-gray-900 mb-8">₹{successOrder.total.toFixed(2)}</p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Link href="/portal/orders" className="px-6 py-2.5 bg-[#272462] hover:bg-[#1E1B4B] text-white font-medium rounded-xl text-sm transition-colors">
-            View My Orders
-          </Link>
-          <Link href="/portal/shop" className="px-6 py-2.5 border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium rounded-xl text-sm transition-colors">
-            Continue Shopping
-          </Link>
-        </div>
-      </div>
-    );
   }
 
   // Empty

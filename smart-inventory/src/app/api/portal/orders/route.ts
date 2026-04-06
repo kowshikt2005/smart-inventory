@@ -118,6 +118,7 @@ export async function POST(request: NextRequest) {
         taxAmount,
         totalAmount,
         notes: notes || "Placed via customer portal",
+        source: "CUSTOMER_PORTAL",
         createdBy: systemUser.id,
         items: {
           create: orderItems,

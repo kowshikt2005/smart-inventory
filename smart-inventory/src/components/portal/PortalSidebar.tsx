@@ -210,43 +210,50 @@ export function PortalSidebar() {
           );
         })}
 
-        {/* Divider */}
-        <div className="border-t border-white/[0.08] my-2" />
+        {/* Cart + Orders — only rendered after authentication to prevent pre-auth prefetch caching */}
+        {!isLoginPage && (
+          <>
+            {/* Divider */}
+            <div className="border-t border-white/[0.08] my-2" />
 
-        {/* Cart */}
-        <Link
-          href="/portal/cart"
-          className={cn(
-            "flex items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-all duration-150",
-            pathname === "/portal/cart"
-              ? "bg-white/[0.14] text-white font-medium border-l-2 border-amber-400 -ml-0.5 pl-[14px]"
-              : "text-white/80 hover:bg-white/[0.10] hover:text-white"
-          )}
-        >
-          <div className="flex items-center gap-2.5">
-            <ShoppingCart className="h-4 w-4" strokeWidth={1.5} />
-            <span>Cart</span>
-          </div>
-          {totalItems > 0 && (
-            <span className="min-w-[18px] h-[18px] bg-amber-400 text-[#1E1B4B] text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-              {totalItems > 99 ? "99+" : totalItems}
-            </span>
-          )}
-        </Link>
+            {/* Cart */}
+            <Link
+              href="/portal/cart"
+              prefetch={false}
+              className={cn(
+                "flex items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-all duration-150",
+                pathname === "/portal/cart"
+                  ? "bg-white/[0.14] text-white font-medium border-l-2 border-amber-400 -ml-0.5 pl-[14px]"
+                  : "text-white/80 hover:bg-white/[0.10] hover:text-white"
+              )}
+            >
+              <div className="flex items-center gap-2.5">
+                <ShoppingCart className="h-4 w-4" strokeWidth={1.5} />
+                <span>Cart</span>
+              </div>
+              {totalItems > 0 && (
+                <span className="min-w-[18px] h-[18px] bg-amber-400 text-[#1E1B4B] text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                  {totalItems > 99 ? "99+" : totalItems}
+                </span>
+              )}
+            </Link>
 
-        {/* Orders */}
-        <Link
-          href="/portal/orders"
-          className={cn(
-            "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-all duration-150",
-            pathname === "/portal/orders"
-              ? "bg-white/[0.14] text-white font-medium border-l-2 border-amber-400 -ml-0.5 pl-[14px]"
-              : "text-white/80 hover:bg-white/[0.10] hover:text-white"
-          )}
-        >
-          <Package className="h-4 w-4" strokeWidth={1.5} />
-          <span>My Orders</span>
-        </Link>
+            {/* Orders */}
+            <Link
+              href="/portal/orders"
+              prefetch={false}
+              className={cn(
+                "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-all duration-150",
+                pathname === "/portal/orders"
+                  ? "bg-white/[0.14] text-white font-medium border-l-2 border-amber-400 -ml-0.5 pl-[14px]"
+                  : "text-white/80 hover:bg-white/[0.10] hover:text-white"
+              )}
+            >
+              <Package className="h-4 w-4" strokeWidth={1.5} />
+              <span>My Orders</span>
+            </Link>
+          </>
+        )}
       </nav>
 
       <div className="h-3" />

@@ -85,6 +85,7 @@ interface SalesOrder {
   orderDate: string;
   expectedDelivery: string | null;
   referenceNumber: string | null;
+  source: string | null;
   status: string;
   stockStatus: "Available" | "Partial" | "Unavailable";
   subtotal: number;
@@ -367,6 +368,19 @@ export default function SalesOrderDetailPage() {
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">Order Information</h2>
             <div className="space-y-2 text-sm">
+              <div>
+                <p className="text-gray-600">Point of Origin</p>
+                {order.source === "CUSTOMER_PORTAL" ? (
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-100 text-indigo-700">
+                      Customer Portal
+                    </span>
+                    <p className="text-xs text-gray-500">Placed by {order.customer.name}</p>
+                  </div>
+                ) : (
+                  <p className="font-medium">Internal</p>
+                )}
+              </div>
               {order.referenceNumber && (
                 <div>
                   <p className="text-gray-600">Reference</p>

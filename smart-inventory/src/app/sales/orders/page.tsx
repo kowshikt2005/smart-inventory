@@ -100,6 +100,7 @@ interface SalesOrder {
   orderDate: string;
   customerId: string;
   referenceNumber: string | null;
+  source: string | null;
   status: string;
   subtotal: number;
   taxAmount: number;
@@ -631,14 +632,21 @@ export default function SalesOrdersPage() {
                         {formatDate(order.orderDate)}
                       </TableCell>
                       <TableCell>
-                        <button
-                          onClick={() =>
-                            router.push(`/sales/orders/${order.id}`)
-                          }
-                          className="font-medium text-primary hover:text-primary/80 hover:underline"
-                        >
-                          {order.orderNumber}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() =>
+                              router.push(`/sales/orders/${order.id}`)
+                            }
+                            className="font-medium text-primary hover:text-primary/80 hover:underline"
+                          >
+                            {order.orderNumber}
+                          </button>
+                          {order.source === "CUSTOMER_PORTAL" && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 text-indigo-700">
+                              Portal
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div>

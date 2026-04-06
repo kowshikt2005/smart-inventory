@@ -51,6 +51,7 @@ interface EditItem {
   imageUrl?: string | null;
   inventory?: {
     minStockLevel: string | number;
+    openingStock?: string | number;
   };
 }
 
@@ -169,7 +170,7 @@ export function AddItemModal({
         marginType: editItem.marginType || "PERCENTAGE",
         minStock: String(editItem.inventory?.minStockLevel ?? 0),
         unit: editItem.unit || "PCS",
-        openingStock: "0",
+        openingStock: String(editItem.inventory?.openingStock ?? 0),
       });
       setUomConversions(
         (editItem.uomConversions || []).map((c) => ({
@@ -854,27 +855,31 @@ export function AddItemModal({
                   placeholder="0"
                 />
               </div>
-              {!isEditing && (
-                <div>
-                  <label
-                    htmlFor="item-opening-stock"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Opening Stock
-                  </label>
-                  <Input
-                    id="item-opening-stock"
-                    type="number"
-                    name="openingStock"
-                    value={formData.openingStock}
-                    onChange={handleChange}
-                    step="0.001"
-                    min="0"
-                    placeholder="0"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Stock quantity on hand when adding this item</p>
-                </div>
-              )}
+              <div>
+                <label
+                  htmlFor="item-opening-stock"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Opening Stock
+                </label>
+                <Input
+                  id="item-opening-stock"
+                  type="number"
+                  name="openingStock"
+                  value={formData.openingStock}
+                  onChange={isEditing ? undefined : handleChange}
+                  readOnly={isEditing}
+                  step="0.001"
+                  min="0"
+                  placeholder="0"
+                  className={isEditing ? "bg-gray-50 text-gray-500" : ""}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {isEditing
+                    ? "Set when item was created. Use Stock Adjustments to change current stock."
+                    : "Stock quantity on hand when adding this item"}
+                </p>
+              </div>
             </div>
           </div>
 

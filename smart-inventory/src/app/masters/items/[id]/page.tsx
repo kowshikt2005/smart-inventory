@@ -33,6 +33,7 @@ interface Item {
   subBrand?: { id: string; name: string } | null;
   inventory?: {
     physicalStock: string | number;
+    openingStock: string | number;
     reservedQuantity: string | number;
     minStockLevel: string | number;
   } | null;
@@ -308,11 +309,17 @@ export default function ItemDetailPage() {
               Inventory
             </h2>
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-3 mb-1">
+                <div className="text-center p-3 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-gray-600">Opening Stock</p>
+                  <p className="text-xl font-bold text-blue-600">{Number(item.inventory?.openingStock || 0)}</p>
+                </div>
                 <div className="text-center p-3 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-600">Physical Stock</p>
                   <p className="text-xl font-bold text-gray-900">{physicalStock}</p>
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div className="text-center p-3 bg-yellow-50 rounded-lg">
                   <p className="text-sm text-gray-600">Reserved</p>
                   <p className="text-xl font-bold text-yellow-600">{reservedQty}</p>
