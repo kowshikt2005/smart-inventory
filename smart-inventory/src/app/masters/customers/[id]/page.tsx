@@ -16,6 +16,9 @@ import {
   MapPin,
   Star,
   DollarSign,
+  KeyRound,
+  ShieldCheck,
+  Tag,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
@@ -83,8 +86,16 @@ interface Customer {
   hasPriceList: boolean;
   rateSheetId: string | null;
   rateSheet?: { id: string; name: string } | null;
+  portalPassword: string | null;
+  preferredBrands: { brandId: string }[];
   createdAt: string;
   updatedAt: string;
+}
+
+interface Brand {
+  id: string;
+  name: string;
+  isActive: boolean;
 }
 
 export default function CustomerDetailPage() {
@@ -102,6 +113,16 @@ export default function CustomerDetailPage() {
   const [addressForm, setAddressForm] = useState(emptyAddressForm);
   const [isSavingAddress, setIsSavingAddress] = useState(false);
 
+  // Portal auth state
+  const [portalPassword, setPortalPassword] = useState("");
+  const [isSavingPortal, setIsSavingPortal] = useState(false);
+  const [portalSaveMsg, setPortalSaveMsg] = useState<string | null>(null);
+
+  // Preferred brands state
+  const [preferredBrandIds, setPreferredBrandIds] = useState<string[]>([]);
+  const [isSavingBrands, setIsSavingBrands] = useState(false);
+  const [brandsSaveMsg, setBrandsSaveMsg] = useState<string | null>(null);
+
   // Rate sheet state
   const [showRateSheetForm, setShowRateSheetForm] = useState(false);
   const [editingRateSheetId, setEditingRateSheetId] = useState<string | null>(null);
@@ -109,6 +130,7 @@ export default function CustomerDetailPage() {
   const [isSavingRateSheet, setIsSavingRateSheet] = useState(false);
 
   const { data: customer, error, isLoading, mutate } = useSWR<Customer>(`/api/customers/${id}`);
+  const { data: brandsData } = useSWR<{ brands: Brand[] }>("/api/brands?activeOnly=true");
   const { data: addressesData, mutate: mutateAddresses } = useSWR<{ addresses: ShippingAddress[] }>(
     id ? `/api/customers/${id}/shipping-addresses` : null
   );
@@ -121,6 +143,8 @@ export default function CustomerDetailPage() {
   useEffect(() => {
     if (customer) {
       setFormData(customer);
+      setPortalPassword(customer.portalPassword ?? "");
+      setPreferredBrandIds(customer.preferredBrands?.map((b) => b.brandId) ?? []);
     }
   }, [customer]);
 
@@ -181,6 +205,46 @@ export default function CustomerDetailPage() {
   const handleCancel = () => {
     setFormData(customer || {});
     setIsEditing(false);
+  };
+
+  const handleSavePortal = async () => {
+    setIsSavingPortal(true);
+    setPortalSaveMsg(null);
+    try {
+      const res = await fetch(`/api/customers/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ portalPassword: portalPassword || null }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      await mutate();
+      setPortalSaveMsg("Saved");
+      setTimeout(() => setPortalSaveMsg(null), 2000);
+    } catch {
+      setPortalSaveMsg("Failed to save");
+    } finally {
+      setIsSavingPortal(false);
+    }
+  };
+
+  const handleSavePreferredBrands = async () => {
+    setIsSavingBrands(true);
+    setBrandsSaveMsg(null);
+    try {
+      const res = await fetch(`/api/customers/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferredBrandIds }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      await mutate();
+      setBrandsSaveMsg("Saved");
+      setTimeout(() => setBrandsSaveMsg(null), 2000);
+    } catch {
+      setBrandsSaveMsg("Failed to save");
+    } finally {
+      setIsSavingBrands(false);
+    }
   };
 
   const openAddAddress = () => {
@@ -908,6 +972,105 @@ export default function CustomerDetailPage() {
             </div>
           )}
         </div>
+
+        {/* ── Portal Auth ─────────────────────────────────────────── */}
+        <div className="bg-white rounded-xl border border-border/60 shadow-sm p-6 mt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <KeyRound className="h-4 w-4 text-indigo-500" />
+            <h2 className="text-base font-semibold text-gray-900">Portal Auth</h2>
+            {customer.portalPassword ? (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 border border-green-200 px-2 py-0.5 rounded-full">
+                <ShieldCheck className="h-3 w-3" />
+                Access enabled
+              </span>
+            ) : (
+              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">No password set</span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 mb-3">
+            Set a password for <span className="font-medium text-gray-700">{customer.name}</span> to log in to the customer portal. Leave blank to remove portal access (falls back to shared env password if set).
+          </p>
+          <div className="flex items-center gap-3 max-w-sm">
+            <input
+              type="text"
+              value={portalPassword}
+              onChange={(e) => setPortalPassword(e.target.value)}
+              placeholder="Enter portal password…"
+              className="flex-1 h-9 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+            />
+            <Button
+              size="sm"
+              onClick={handleSavePortal}
+              disabled={isSavingPortal}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+            >
+              {isSavingPortal ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            </Button>
+            {portalSaveMsg && (
+              <span className={`text-xs font-medium ${portalSaveMsg === "Saved" ? "text-green-600" : "text-red-500"}`}>
+                {portalSaveMsg}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* ── Preferred Brands ───────────────────────────────────── */}
+        <div className="bg-white rounded-xl border border-border/60 shadow-sm p-6 mt-4">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <Tag className="h-4 w-4 text-amber-500" />
+              <h2 className="text-base font-semibold text-gray-900">Preferred Brands</h2>
+              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                {preferredBrandIds.length === 0 ? "All brands shown" : `${preferredBrandIds.length} selected`}
+              </span>
+            </div>
+            <Button
+              size="sm"
+              onClick={handleSavePreferredBrands}
+              disabled={isSavingBrands}
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              {isSavingBrands ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+              {brandsSaveMsg ?? "Save"}
+            </Button>
+          </div>
+          <p className="text-xs text-gray-500 mb-4">
+            Select which brands this customer sees in the portal. If none selected, all active brands are shown.
+          </p>
+          {!brandsData ? (
+            <div className="flex items-center gap-2 text-gray-400 text-sm py-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading brands…
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {brandsData.brands.map((brand) => {
+                const selected = preferredBrandIds.includes(brand.id);
+                return (
+                  <button
+                    key={brand.id}
+                    type="button"
+                    onClick={() =>
+                      setPreferredBrandIds((prev) =>
+                        selected ? prev.filter((id) => id !== brand.id) : [...prev, brand.id]
+                      )
+                    }
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      selected
+                        ? "border-amber-400 bg-amber-50 text-amber-800"
+                        : "border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    <span className={`w-3.5 h-3.5 rounded flex-shrink-0 border-2 flex items-center justify-center ${selected ? "border-amber-500 bg-amber-500" : "border-gray-300"}`}>
+                      {selected && <span className="w-1.5 h-1.5 bg-white rounded-sm" />}
+                    </span>
+                    <span className="truncate">{brand.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
       </div>
     </DashboardLayout>
   );

@@ -5,33 +5,30 @@ import { signPortalToken, PORTAL_COOKIE_NAME, isSecureCookie } from "@/lib/porta
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { customerNumber, password } = body as { customerNumber: string; password: string };
+    const { customerName, password } = body as { customerName: string; password: string };
 
-    if (!customerNumber?.trim() || !password) {
+    if (!customerName?.trim() || !password) {
       return NextResponse.json(
-        { error: "Customer number and password are required" },
+        { error: "Business name and password are required" },
         { status: 400 }
       );
     }
 
-    const sharedPassword = process.env.CUSTOMER_PORTAL_PASSWORD;
-    if (!sharedPassword) {
-      return NextResponse.json({ error: "Portal not configured" }, { status: 503 });
-    }
-
-    if (password !== sharedPassword) {
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
-    }
-
     const customer = await db.customer.findFirst({
       where: {
-        customerNumber: customerNumber.trim().toUpperCase(),
+        name: customerName.trim(),
         status: "ACTIVE",
       },
-      select: { id: true, customerNumber: true, name: true },
+      select: { id: true, customerNumber: true, name: true, portalPassword: true },
     });
 
     if (!customer) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    // Per-customer password takes priority; fall back to shared env password
+    const expectedPassword = customer.portalPassword ?? process.env.CUSTOMER_PORTAL_PASSWORD;
+    if (!expectedPassword || password !== expectedPassword) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 

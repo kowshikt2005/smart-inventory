@@ -8,7 +8,7 @@ import { AnimatedGridBackground } from "@/components/ui/aceternity/animated-back
 
 export default function PortalLoginPage() {
   const router = useRouter();
-  const [customerNumber, setCustomerNumber] = useState("");
+  const [customerName, setCustomerName] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,14 +16,14 @@ export default function PortalLoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!customerNumber.trim() || !password) return;
+    if (!customerName.trim() || !password) return;
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/portal/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerNumber: customerNumber.trim(), password }),
+        body: JSON.stringify({ customerName: customerName.trim(), password }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -113,18 +113,18 @@ export default function PortalLoginPage() {
                     </div>
                   )}
 
-                  {/* Customer Number */}
+                  {/* Customer Name */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-white/60 uppercase tracking-wider">
-                      Customer Number
+                      Business Name
                     </label>
                     <input
                       type="text"
                       autoComplete="username"
-                      placeholder="e.g. CUST-0001"
-                      value={customerNumber}
-                      onChange={(e) => setCustomerNumber(e.target.value.toUpperCase())}
-                      className="w-full bg-white/[0.07] border border-white/[0.12] rounded-xl px-4 py-3 text-white placeholder-white/30 text-sm font-mono tracking-wide focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400/50 transition-all"
+                      placeholder="e.g. Smart World"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      className="w-full bg-white/[0.07] border border-white/[0.12] rounded-xl px-4 py-3 text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400/50 transition-all"
                       required
                     />
                   </div>
@@ -158,7 +158,7 @@ export default function PortalLoginPage() {
                   {/* Submit */}
                   <button
                     type="submit"
-                    disabled={loading || !customerNumber.trim() || !password}
+                    disabled={loading || !customerName.trim() || !password}
                     className="w-full mt-2 bg-amber-400 hover:bg-amber-300 disabled:bg-white/10 disabled:text-white/30 text-[#1E1B4B] font-bold py-3 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 text-sm"
                   >
                     {loading ? (

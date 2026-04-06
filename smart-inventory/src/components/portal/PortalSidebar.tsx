@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ShoppingCart, Package, ChevronDown, Layers, LogOut } from "lucide-react";
+import { ShoppingCart, Package, ChevronDown, Layers } from "lucide-react";
 import { useCart } from "@/components/portal/CartContext";
 import { cn } from "@/lib/utils";
 
@@ -249,19 +249,7 @@ export function PortalSidebar() {
         </Link>
       </nav>
 
-      {/* Footer — logout */}
-      <div className="px-2 py-3 border-t border-white/[0.08]">
-        <button
-          onClick={async () => {
-            await fetch("/api/portal/logout", { method: "POST" });
-            window.location.href = "/portal/login";
-          }}
-          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-white/70 hover:bg-red-500/15 hover:text-red-300 transition-colors"
-        >
-          <LogOut className="h-4 w-4" strokeWidth={1.5} />
-          <span>Sign out</span>
-        </button>
-      </div>
+      <div className="h-3" />
     </aside>
   );
 }

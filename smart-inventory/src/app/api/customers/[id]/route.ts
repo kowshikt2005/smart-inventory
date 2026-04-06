@@ -16,11 +16,8 @@ export async function GET(
     const customer = await db.customer.findUnique({
       where: { id },
       include: {
-        rateSheets: {
-          include: {
-            rateSheet: true,
-          },
-        },
+        rateSheets: { include: { rateSheet: true } },
+        preferredBrands: { select: { brandId: true } },
       },
     });
 
@@ -109,11 +106,31 @@ export async function PUT(
       }
       updateData.status = body.status;
     }
+    if (body.portalPassword !== undefined) {
+      updateData.portalPassword = body.portalPassword || null;
+    }
+
+    // Handle preferred brands update (array of brand IDs)
+    if (Array.isArray(body.preferredBrandIds)) {
+      await db.$transaction([
+        db.customerPreferredBrand.deleteMany({ where: { customerId: id } }),
+        ...(body.preferredBrandIds.length > 0
+          ? [db.customerPreferredBrand.createMany({
+              data: body.preferredBrandIds.map((brandId: string) => ({ customerId: id, brandId })),
+              skipDuplicates: true,
+            })]
+          : []),
+      ]);
+    }
 
     // Update customer
     const customer = await db.customer.update({
       where: { id },
       data: updateData,
+      include: {
+        rateSheets: { include: { rateSheet: true } },
+        preferredBrands: { select: { brandId: true } },
+      },
     });
 
     return NextResponse.json(customer);

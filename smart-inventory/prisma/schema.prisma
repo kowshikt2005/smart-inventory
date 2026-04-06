@@ -47,6 +47,7 @@ model Customer {
   creditDays        Int                       @default(0)
   openingBalance    Decimal                   @default(0.00) @db.Decimal(15, 3)
   status            CustomerStatus            @default(ACTIVE)
+  portalPassword    String?
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   ledgerEntries     CustomerLedger[]
@@ -54,6 +55,7 @@ model Customer {
   payments          Payment[]
   rateSheets        RateSheetCustomer[]
   salesOrders       SalesOrder[]
+  preferredBrands   CustomerPreferredBrand[]
   salesReturns      SalesReturn[]
   shippingAddresses CustomerShippingAddress[]
 
@@ -145,9 +147,23 @@ model Brand {
   items             Item[]
   subBrands         SubBrand[]
   preferredVendor   Vendor?    @relation(fields: [preferredVendorId], references: [id])
+  preferredByCustomers CustomerPreferredBrand[]
 
   @@index([preferredVendorId])
   @@map("brands")
+}
+
+model CustomerPreferredBrand {
+  id         String   @id @default(uuid())
+  customerId String
+  brandId    String
+  createdAt  DateTime @default(now())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  brand      Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, brandId])
+  @@index([customerId])
+  @@map("customer_preferred_brands")
 }
 
 model SubBrand {
