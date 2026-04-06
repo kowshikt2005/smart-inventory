@@ -236,6 +236,15 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate due date is not before invoice date
+    const dueDate = new Date(body.dueDate);
+    if (dueDate < invoiceDate) {
+      return NextResponse.json(
+        { error: 'Due date cannot be before invoice date' },
+        { status: 400 }
+      );
+    }
+
     // Validate vendor exists and is active
     const vendor = await db.vendor.findUnique({
       where: { id: body.vendorId },

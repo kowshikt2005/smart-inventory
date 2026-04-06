@@ -374,9 +374,15 @@ function NewPurchaseOrderPageContent() {
       return;
     }
 
+    if (expectedDelivery && new Date(expectedDelivery) < new Date(orderDate)) {
+      setError("Expected delivery date cannot be before order date");
+      return;
+    }
+
     const validItems = orderItems.filter(
       (item) => item.itemId && item.quantity > 0 && item.rate > 0
     );
+
 
     if (validItems.length === 0) {
       setError("Please add at least one item with valid quantity and rate");
