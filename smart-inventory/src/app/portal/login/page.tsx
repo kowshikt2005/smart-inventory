@@ -175,6 +175,15 @@ export default function PortalLoginPage() {
                 <p className="mt-6 text-center text-xs text-white/25">
                   Contact your sales representative for access credentials
                 </p>
+
+                <div className="mt-4 text-center">
+                  <a
+                    href="/login"
+                    className="text-xs text-white/30 hover:text-white/60 transition-colors"
+                  >
+                    Staff / Admin Login →
+                  </a>
+                </div>
               </div>
             </div>
           </div>

@@ -448,10 +448,16 @@ function LoginPageContent() {
             </div>
 
             {/* Card Footer */}
-            <div className="border-t border-white/[0.06] bg-indigo-950/40 px-10 py-4">
-              <p className="text-center text-xs text-white/30">
+            <div className="border-t border-white/[0.06] bg-indigo-950/40 px-10 py-4 flex items-center justify-between">
+              <p className="text-xs text-white/30">
                 powered by <span className="text-white/50 font-medium">ksolutions</span>
               </p>
+              <a
+                href="/portal/login"
+                className="text-xs text-amber-400/60 hover:text-amber-400 transition-colors font-medium"
+              >
+                Customer Portal →
+              </a>
             </div>
           </div>
 
