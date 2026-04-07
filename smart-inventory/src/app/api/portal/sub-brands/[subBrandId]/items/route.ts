@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getPortalCustomer } from "@/lib/portal-auth";
+import { getEffectiveRateV2 } from "@/lib/order-utils";
 
 export async function GET(
   request: NextRequest,
@@ -20,24 +21,82 @@ export async function GET(
     return NextResponse.json({ error: "Sub-brand not found" }, { status: 404 });
   }
 
-  const items = await db.item.findMany({
-    where: { subBrandId, isActive: true },
-    select: {
-      id: true,
-      name: true,
-      itemCode: true,
-      mrp: true,
-      sellingPrice: true,
-      unit: true,
-      imageUrl: true,
-      description: true,
-      gstRate: true,
-      inventory: {
-        select: { physicalStock: true },
+  // Fetch items and customer's rate sheet in parallel
+  const [items, rateSheetJoin] = await Promise.all([
+    db.item.findMany({
+      where: { subBrandId, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        itemCode: true,
+        mrp: true,
+        sellingPrice: true,
+        unit: true,
+        imageUrl: true,
+        description: true,
+        gstRate: true,
+        brandId: true,
+        subBrandId: true,
+        inventory: {
+          select: { physicalStock: true },
+        },
       },
-    },
-    orderBy: { name: "asc" },
+      orderBy: { name: "asc" },
+    }),
+    db.rateSheetCustomer.findFirst({
+      where: { customerId: auth.customerId },
+      include: { rateSheet: true },
+      orderBy: { rateSheet: { createdAt: "desc" } },
+    }),
+  ]);
+
+  const rateSheet = rateSheetJoin?.rateSheet ?? null;
+  const now = new Date();
+  const isEffective =
+    rateSheet &&
+    rateSheet.isActive &&
+    rateSheet.validFrom <= now &&
+    (!rateSheet.validTo || rateSheet.validTo >= now);
+
+  // Apply rate sheet pricing to each item
+  const pricedItems = items.map((item) => {
+    const { rate, discountPercent } = isEffective
+      ? getEffectiveRateV2(
+          {
+            id: item.id,
+            mrp: item.mrp,
+            sellingPrice: item.sellingPrice,
+            gstRate: item.gstRate,
+            brandId: item.brandId,
+            subBrandId: item.subBrandId,
+          },
+          {
+            isActive: rateSheet!.isActive,
+            useInclusionModel: rateSheet!.useInclusionModel,
+            discountPercent: rateSheet!.discountPercent,
+            inclusionDiscounts: rateSheet!.inclusionDiscounts as Parameters<typeof getEffectiveRateV2>[1] extends { inclusionDiscounts?: infer T } ? T : never,
+            excludedItemIds: (rateSheet!.excludedItemIds as string[]) ?? [],
+            excludedBrandIds: (rateSheet!.excludedBrandIds as string[]) ?? [],
+            excludedSubBrandIds: (rateSheet!.excludedSubBrandIds as string[]) ?? [],
+          }
+        )
+      : { rate: Number(item.sellingPrice), discountPercent: 0 };
+
+    return {
+      id: item.id,
+      name: item.name,
+      itemCode: item.itemCode,
+      mrp: item.mrp,
+      sellingPrice: rate,
+      originalSellingPrice: Number(item.sellingPrice),
+      discountPercent,
+      unit: item.unit,
+      imageUrl: item.imageUrl,
+      description: item.description,
+      gstRate: item.gstRate,
+      inventory: item.inventory,
+    };
   });
 
-  return NextResponse.json({ subBrand, items });
+  return NextResponse.json({ subBrand, items: pricedItems });
 }

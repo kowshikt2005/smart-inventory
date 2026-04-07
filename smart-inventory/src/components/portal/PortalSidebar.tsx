@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ShoppingCart, Package, ChevronDown, Layers } from "lucide-react";
+import { ShoppingCart, Package, ChevronDown, Layers, Search, ArrowUpDown } from "lucide-react";
 import { useCart } from "@/components/portal/CartContext";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +56,8 @@ export function PortalSidebar() {
   })();
 
   const [openBrandId, setOpenBrandId] = useState<string | null>(activeBrandId);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortAsc, setSortAsc] = useState(true);
 
   useEffect(() => {
     if (activeBrandId) setOpenBrandId(activeBrandId);
@@ -86,9 +88,35 @@ export function PortalSidebar() {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-        <p className="px-3 pt-1 pb-2 text-[10px] uppercase tracking-widest text-white/30 font-semibold">
-          Browse
-        </p>
+        <div className="flex items-center justify-between px-3 pt-1 pb-1">
+          <p className="text-[10px] uppercase tracking-widest text-white/30 font-semibold">
+            Browse
+          </p>
+          {!isLoginPage && brands.length > 1 && (
+            <button
+              onClick={() => setSortAsc((v) => !v)}
+              className="flex items-center gap-1 text-[10px] text-white/40 hover:text-amber-400 transition-colors"
+              title={sortAsc ? "Sort Z → A" : "Sort A → Z"}
+            >
+              <ArrowUpDown className="h-3 w-3" />
+              {sortAsc ? "A-Z" : "Z-A"}
+            </button>
+          )}
+        </div>
+
+        {/* Search */}
+        {!isLoginPage && brands.length > 0 && (
+          <div className="relative px-2 pb-2">
+            <Search className="absolute left-4.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/30 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search brands…"
+              className="w-full bg-white/[0.08] text-white text-xs placeholder:text-white/30 rounded-lg pl-8 pr-3 py-2 border border-white/[0.06] focus:border-amber-400/40 focus:bg-white/[0.12] outline-none transition-all"
+            />
+          </div>
+        )}
 
         {/* Loading state */}
         {isLoading && (
@@ -113,8 +141,20 @@ export function PortalSidebar() {
           </div>
         )}
 
+        {/* No search results */}
+        {!isLoading && !error && brands.length > 0 && searchQuery.trim() && !brands.some((b) => b.name.toLowerCase().includes(searchQuery.toLowerCase().trim())) && (
+          <div className="px-3 py-3 text-center">
+            <p className="text-[11px] text-white/30 italic">No brands match &ldquo;{searchQuery.trim()}&rdquo;</p>
+          </div>
+        )}
+
         {/* Brand list */}
-        {brands.map((brand) => {
+        {(() => {
+          const q = searchQuery.toLowerCase().trim();
+          let filtered = q ? brands.filter((b) => b.name.toLowerCase().includes(q)) : brands;
+          if (!sortAsc) filtered = [...filtered].reverse();
+          return filtered;
+        })().map((brand) => {
           const isOpen = openBrandId === brand.id;
           const initials = brand.name
             .split(" ")

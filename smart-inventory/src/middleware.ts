@@ -12,6 +12,12 @@ const cookieName = useSecureCookies
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // ── Root URL → Portal ───────────────────────────────────────────────────
+  // Default landing page is the customer portal (mysbe.in → portal)
+  if (pathname === "/") {
+    return NextResponse.redirect(new URL("/portal/login", request.url));
+  }
+
   // ── Portal routes ────────────────────────────────────────────────────────
   if (pathname.startsWith("/portal")) {
     // Always allow the login page and its API

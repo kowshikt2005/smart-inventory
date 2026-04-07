@@ -210,10 +210,10 @@ export const Sidebar = memo(function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-[230px] bg-gradient-to-b from-[#2D2A5E] via-[#272462] to-[#1A1740] flex flex-col shadow-xl">
       {/* Logo */}
-      <div className="flex items-center justify-center px-3 py-4 border-b border-white/[0.12]">
-        <div className="w-full rounded-lg bg-white p-2">
+      <div className="flex items-center justify-center px-3 py-2 border-b border-white/[0.12]">
+        <div className="w-full rounded-lg bg-white px-2 py-1.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-sbe.jpg" alt="Sri Balaji Enterprises" width={200} height={48} className="w-full h-auto object-contain" />
+          <img src="/logo-sbe.jpg" alt="Sri Balaji Enterprises" width={180} height={36} className="w-full h-auto object-contain max-h-8" />
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getPortalCustomer } from "@/lib/portal-auth";
+import { getEffectiveRateV2, calculateLineItemV2, calculateOrderTotals } from "@/lib/order-utils";
 
 export async function GET(request: NextRequest) {
   const auth = await getPortalCustomer(request);
@@ -52,39 +53,81 @@ export async function POST(request: NextRequest) {
     }
 
     const itemIds = items.map((i) => i.itemId);
-    const dbItems = await db.item.findMany({
-      where: { id: { in: itemIds }, isActive: true },
-      select: { id: true, sellingPrice: true, gstRate: true },
-    });
+
+    // Fetch items and customer's rate sheet in parallel
+    const [dbItems, rateSheetJoin] = await Promise.all([
+      db.item.findMany({
+        where: { id: { in: itemIds }, isActive: true },
+        select: {
+          id: true,
+          mrp: true,
+          sellingPrice: true,
+          gstRate: true,
+          brandId: true,
+          subBrandId: true,
+        },
+      }),
+      db.rateSheetCustomer.findFirst({
+        where: { customerId: auth.customerId },
+        include: { rateSheet: true },
+        orderBy: { rateSheet: { createdAt: "desc" } },
+      }),
+    ]);
 
     if (dbItems.length !== itemIds.length) {
       return NextResponse.json({ error: "One or more items are unavailable" }, { status: 400 });
     }
 
-    const itemMap = new Map(dbItems.map((i) => [i.id, i]));
+    const rateSheet = rateSheetJoin?.rateSheet ?? null;
+    const now = new Date();
+    const isEffective =
+      rateSheet &&
+      rateSheet.isActive &&
+      rateSheet.validFrom <= now &&
+      (!rateSheet.validTo || rateSheet.validTo >= now);
 
-    let subtotal = 0;
-    let taxAmount = 0;
+    const rateSheetParam = isEffective
+      ? {
+          isActive: rateSheet!.isActive,
+          useInclusionModel: rateSheet!.useInclusionModel,
+          discountPercent: rateSheet!.discountPercent,
+          inclusionDiscounts: rateSheet!.inclusionDiscounts as Parameters<typeof getEffectiveRateV2>[1] extends { inclusionDiscounts?: infer T } ? T : never,
+          excludedItemIds: (rateSheet!.excludedItemIds as string[]) ?? [],
+          excludedBrandIds: (rateSheet!.excludedBrandIds as string[]) ?? [],
+          excludedSubBrandIds: (rateSheet!.excludedSubBrandIds as string[]) ?? [],
+        }
+      : null;
+
+    const itemMap = new Map(dbItems.map((i) => [i.id, i]));
 
     const orderItems = items.map((cartItem) => {
       const dbItem = itemMap.get(cartItem.itemId)!;
-      const rate = Number(dbItem.sellingPrice);
-      const amount = rate * cartItem.quantity;
-      const lineTax = (amount * Number(dbItem.gstRate)) / 100;
-      subtotal += amount;
-      taxAmount += lineTax;
+      const { rate, discountPercent } = getEffectiveRateV2(
+        {
+          id: dbItem.id,
+          mrp: dbItem.mrp,
+          sellingPrice: dbItem.sellingPrice,
+          gstRate: dbItem.gstRate,
+          brandId: dbItem.brandId,
+          subBrandId: dbItem.subBrandId,
+        },
+        rateSheetParam
+      );
+      const taxRate = Number(dbItem.gstRate);
+      const line = calculateLineItemV2(cartItem.quantity, rate, taxRate, discountPercent);
       return {
         itemId: cartItem.itemId,
         quantity: cartItem.quantity,
-        rate: dbItem.sellingPrice,
-        discountPercent: 0,
-        taxRate: Number(dbItem.gstRate),
-        taxAmount: lineTax,
-        amount,
+        rate,
+        discountPercent,
+        taxRate,
+        taxAmount: line.taxAmount,
+        amount: line.amount,
       };
     });
 
-    const totalAmount = subtotal + taxAmount;
+    const totals = calculateOrderTotals(orderItems);
+    const totalAmount = totals.totalAmount;
 
     // Generate unique order number
     const lastOrder = await db.salesOrder.findFirst({
@@ -113,9 +156,9 @@ export async function POST(request: NextRequest) {
         orderDate: new Date(),
         customerId: auth.customerId,
         status: "OPEN",
-        subtotal,
+        subtotal: totals.subtotal,
         discountAmount: 0,
-        taxAmount,
+        taxAmount: totals.totalTax,
         totalAmount,
         notes: notes || "Placed via customer portal",
         source: "CUSTOMER_PORTAL",

@@ -151,9 +151,11 @@ export function AddItemModal({
     }
   }, [editItem, isOpen, prefillData]);
 
-  // Populate form when editing (wait for brands/sub-brands data to load first to avoid race condition)
+  // Populate form when editing — populate immediately so the user sees existing data.
+  // Brand/sub-brand dropdowns will catch up once SWR loads (the brands memo ensures
+  // the current brand is always in the list even if it hasn't loaded yet).
   useEffect(() => {
-    if (editItem && isOpen && brandsData && subBrandsData) {
+    if (editItem && isOpen) {
       setFormData({
         name: editItem.name || "",
         userCode: editItem.userCode || "",
@@ -162,7 +164,7 @@ export function AddItemModal({
         brandId: editItem.brand?.id || "",
         subBrandId: editItem.subBrand?.id || "",
         hsnCode: editItem.hsnCode || "",
-        gstRate: editItem.gstRate !== undefined && editItem.gstRate !== null ? String(editItem.gstRate) : "18",
+        gstRate: editItem.gstRate !== undefined && editItem.gstRate !== null ? String(Number(editItem.gstRate)) : "18",
         purchasePrice: editItem.purchasePrice !== undefined && editItem.purchasePrice !== null ? String(editItem.purchasePrice) : "0",
         mrp: editItem.mrp !== undefined && editItem.mrp !== null ? String(editItem.mrp) : "0",
         sellingPrice: editItem.sellingPrice !== undefined && editItem.sellingPrice !== null ? String(editItem.sellingPrice) : "0",
@@ -180,7 +182,7 @@ export function AddItemModal({
       );
       setImageUrl(editItem.imageUrl || null);
     }
-  }, [editItem, isOpen, brandsData, subBrandsData]);
+  }, [editItem, isOpen]);
 
   // Filter sub-brands based on selected brand (ensure current sub-brand is in the list)
   const filteredSubBrands = useMemo(() => {
