@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
           subBrandId: true,
         },
       }),
-      db.rateSheetCustomer.findFirst({
+      db.rateSheetCustomer.findMany({
         where: { customerId: auth.customerId },
         include: { rateSheet: true },
         orderBy: { rateSheet: { createdAt: "desc" } },
@@ -78,7 +78,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "One or more items are unavailable" }, { status: 400 });
     }
 
-    const rateSheet = rateSheetJoin?.rateSheet ?? null;
+    // Pick the most recent rate sheet (matches admin API pattern)
+    const rateSheet = rateSheetJoin.length > 0 ? rateSheetJoin[0].rateSheet : null;
     const now = new Date();
     const isEffective =
       rateSheet &&

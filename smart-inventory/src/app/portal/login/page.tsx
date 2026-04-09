@@ -2,28 +2,28 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Phone, KeyRound } from "lucide-react";
 
 import { AnimatedGridBackground } from "@/components/ui/aceternity/animated-background";
 
 export default function PortalLoginPage() {
   const router = useRouter();
-  const [customerName, setCustomerName] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [pin, setPin] = useState("");
+  const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!customerName.trim() || !password) return;
+    if (!phone.trim() || !pin) return;
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/portal/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerName: customerName.trim(), password }),
+        body: JSON.stringify({ phone: phone.trim(), pin }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -99,7 +99,7 @@ export default function PortalLoginPage() {
                   Welcome Back
                 </h1>
                 <p className="text-sm text-white/50 text-center mt-1">
-                  Sign in to browse and place orders
+                  Sign in with your phone number &amp; PIN
                 </p>
               </div>
 
@@ -113,44 +113,58 @@ export default function PortalLoginPage() {
                     </div>
                   )}
 
-                  {/* Customer Name */}
+                  {/* Phone Number */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-white/60 uppercase tracking-wider">
-                      Business Name
-                    </label>
-                    <input
-                      type="text"
-                      autoComplete="username"
-                      placeholder="e.g. Smart World"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full bg-white/[0.07] border border-white/[0.12] rounded-xl px-4 py-3 text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400/50 transition-all"
-                      required
-                    />
-                  </div>
-
-                  {/* Password */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-white/60 uppercase tracking-wider">
-                      Password
+                      Phone Number
                     </label>
                     <div className="relative">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-300/60">
+                        <Phone className="h-4 w-4" />
+                      </div>
                       <input
-                        type={showPassword ? "text" : "password"}
+                        type="tel"
+                        autoComplete="tel"
+                        placeholder="e.g. 9876543210"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="w-full bg-white/[0.07] border border-white/[0.12] rounded-xl pl-12 pr-4 py-3 text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400/50 transition-all"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* 6-Digit PIN */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-white/60 uppercase tracking-wider">
+                      6-Digit PIN
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-300/60">
+                        <KeyRound className="h-4 w-4" />
+                      </div>
+                      <input
+                        type={showPin ? "text" : "password"}
                         autoComplete="current-password"
-                        placeholder="Enter your password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-white/[0.07] border border-white/[0.12] rounded-xl px-4 py-3 pr-12 text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400/50 transition-all"
+                        placeholder="Enter your 6-digit PIN"
+                        value={pin}
+                        onChange={(e) => {
+                          // Only allow digits, max 6
+                          const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                          setPin(val);
+                        }}
+                        inputMode="numeric"
+                        maxLength={6}
+                        className="w-full bg-white/[0.07] border border-white/[0.12] rounded-xl pl-12 pr-12 py-3 text-white placeholder-white/30 text-sm tracking-[0.2em] focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400/50 transition-all"
                         required
                       />
                       <button
                         type="button"
-                        onClick={() => setShowPassword((v) => !v)}
+                        onClick={() => setShowPin((v) => !v)}
                         className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
-                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        aria-label={showPin ? "Hide PIN" : "Show PIN"}
                       >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        {showPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
                   </div>
@@ -158,7 +172,7 @@ export default function PortalLoginPage() {
                   {/* Submit */}
                   <button
                     type="submit"
-                    disabled={loading || !customerName.trim() || !password}
+                    disabled={loading || !phone.trim() || pin.length !== 6}
                     className="w-full mt-2 bg-amber-400 hover:bg-amber-300 disabled:bg-white/10 disabled:text-white/30 text-[#1E1B4B] font-bold py-3 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 text-sm"
                   >
                     {loading ? (
@@ -176,12 +190,13 @@ export default function PortalLoginPage() {
                   Contact your sales representative for access credentials
                 </p>
 
-                <div className="mt-4 text-center">
+                <div className="mt-5 pt-4 border-t border-white/[0.08] text-center">
                   <a
                     href="/login"
-                    className="text-xs text-white/30 hover:text-white/60 transition-colors"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/[0.15] text-sm text-white/60 hover:text-white hover:border-amber-400/40 hover:bg-white/[0.05] transition-all"
                   >
-                    Staff / Admin Login →
+                    Staff / Admin Login
+                    <span className="text-amber-400/70">&rarr;</span>
                   </a>
                 </div>
               </div>

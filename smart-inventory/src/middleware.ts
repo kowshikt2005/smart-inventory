@@ -12,10 +12,19 @@ const cookieName = useSecureCookies
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // ── Root URL → Portal ───────────────────────────────────────────────────
-  // Default landing page is the customer portal (mysbe.in → portal)
+  // ── Root URL ─────────────────────────────────────────────────────────────
+  // If an admin/staff is logged in (NextAuth token), let them through to the
+  // dashboard at "/".  Otherwise send visitors to the customer portal.
   if (pathname === "/") {
-    return NextResponse.redirect(new URL("/portal/login", request.url));
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+      cookieName,
+    });
+    if (!token) {
+      return NextResponse.redirect(new URL("/portal/login", request.url));
+    }
+    // Authenticated admin — fall through to dashboard
   }
 
   // ── Portal routes ────────────────────────────────────────────────────────

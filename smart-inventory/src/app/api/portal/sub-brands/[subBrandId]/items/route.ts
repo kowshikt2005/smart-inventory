@@ -43,14 +43,15 @@ export async function GET(
       },
       orderBy: { name: "asc" },
     }),
-    db.rateSheetCustomer.findFirst({
+    db.rateSheetCustomer.findMany({
       where: { customerId: auth.customerId },
       include: { rateSheet: true },
       orderBy: { rateSheet: { createdAt: "desc" } },
     }),
   ]);
 
-  const rateSheet = rateSheetJoin?.rateSheet ?? null;
+  // Pick the most recent rate sheet (matches admin API pattern)
+  const rateSheet = rateSheetJoin.length > 0 ? rateSheetJoin[0].rateSheet : null;
   const now = new Date();
   const isEffective =
     rateSheet &&

@@ -107,6 +107,10 @@ export async function PUT(
       updateData.status = body.status;
     }
     if (body.portalPassword !== undefined) {
+      // Allow null/empty (clears PIN) or exactly 6 digits
+      if (body.portalPassword && !/^\d{6}$/.test(body.portalPassword)) {
+        return NextResponse.json({ error: "Portal PIN must be exactly 6 digits" }, { status: 400 });
+      }
       updateData.portalPassword = body.portalPassword || null;
     }
 

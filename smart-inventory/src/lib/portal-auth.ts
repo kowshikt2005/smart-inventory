@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
 
 export const PORTAL_COOKIE_NAME = "portal-token";
 
@@ -52,6 +53,24 @@ export async function getPortalCustomer(
   }
   try {
     const payload = await verifyPortalToken(token);
+
+    // Verify the customer is still active in the DB
+    const customer = await db.customer.findUnique({
+      where: { id: payload.customerId },
+      select: { status: true },
+    });
+    if (!customer || customer.status !== "ACTIVE") {
+      return {
+        customerId: null,
+        customerNumber: null,
+        name: null,
+        error: NextResponse.json(
+          { error: "Account deactivated. Please contact your sales representative." },
+          { status: 403 }
+        ),
+      };
+    }
+
     return { ...payload, error: null };
   } catch {
     return {

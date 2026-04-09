@@ -86,6 +86,7 @@ export function WelcomeModal({ customerName, onClose }: WelcomeModalProps) {
                 <div className="rounded-xl overflow-hidden bg-black">
                   <video
                     src="/sbe-customer.mp4"
+                    preload="metadata"
                     controls
                     autoPlay
                     className="w-full aspect-video"

@@ -208,6 +208,11 @@ export default function CustomerDetailPage() {
   };
 
   const handleSavePortal = async () => {
+    // Validate: must be empty (clear) or exactly 6 digits
+    if (portalPassword && !/^\d{6}$/.test(portalPassword)) {
+      setPortalSaveMsg("PIN must be exactly 6 digits");
+      return;
+    }
     setIsSavingPortal(true);
     setPortalSaveMsg(null);
     try {
@@ -977,31 +982,36 @@ export default function CustomerDetailPage() {
         <div className="bg-white rounded-xl border border-border/60 shadow-sm p-6 mt-6">
           <div className="flex items-center gap-2 mb-4">
             <KeyRound className="h-4 w-4 text-indigo-500" />
-            <h2 className="text-base font-semibold text-gray-900">Portal Auth</h2>
+            <h2 className="text-base font-semibold text-gray-900">Portal PIN</h2>
             {customer.portalPassword ? (
               <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 border border-green-200 px-2 py-0.5 rounded-full">
                 <ShieldCheck className="h-3 w-3" />
-                Access enabled
+                Custom PIN set
               </span>
             ) : (
-              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">No password set</span>
+              <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">Using default (123456)</span>
             )}
           </div>
           <p className="text-xs text-gray-500 mb-3">
-            Set a password for <span className="font-medium text-gray-700">{customer.name}</span> to log in to the customer portal. Leave blank to remove portal access (falls back to shared env password if set).
+            Set a 6-digit PIN for <span className="font-medium text-gray-700">{customer.name}</span> to log in to the B2B portal using their phone number. Leave blank to use the default PIN (123456).
           </p>
           <div className="flex items-center gap-3 max-w-sm">
             <input
               type="text"
               value={portalPassword}
-              onChange={(e) => setPortalPassword(e.target.value)}
-              placeholder="Enter portal password…"
-              className="flex-1 h-9 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                setPortalPassword(val);
+              }}
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="6-digit PIN"
+              className="flex-1 h-9 px-3 rounded-lg border border-gray-200 text-sm tracking-[0.15em] font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
             />
             <Button
               size="sm"
               onClick={handleSavePortal}
-              disabled={isSavingPortal}
+              disabled={isSavingPortal || (portalPassword !== "" && !/^\d{6}$/.test(portalPassword))}
               className="bg-indigo-600 hover:bg-indigo-700 text-white"
             >
               {isSavingPortal ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
@@ -1012,6 +1022,9 @@ export default function CustomerDetailPage() {
               </span>
             )}
           </div>
+          {portalPassword !== "" && !/^\d{6}$/.test(portalPassword) && (
+            <p className="text-xs text-red-500 mt-2">PIN must be exactly 6 digits</p>
+          )}
         </div>
 
         {/* ── Preferred Brands ───────────────────────────────────── */}
