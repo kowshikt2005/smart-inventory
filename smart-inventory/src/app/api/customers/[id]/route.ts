@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { checkPermission } from '@/lib/api-auth';
 import { normalizeGstin, validateGstin } from '@/lib/gst-validation';
+import { hashPassword } from '@/lib/auth-utils';
 
 // GET /api/customers/[id] - Get a single customer by ID
 export async function GET(
@@ -28,7 +29,9 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(customer);
+    // Never expose the hashed PIN — replace with a boolean for the UI
+    const { portalPassword, ...customerData } = customer;
+    return NextResponse.json({ ...customerData, hasPortalPin: portalPassword !== null });
   } catch (error) {
     console.error('Error fetching customer:', error);
     return NextResponse.json(
@@ -111,7 +114,10 @@ export async function PUT(
       if (body.portalPassword && !/^\d{6}$/.test(body.portalPassword)) {
         return NextResponse.json({ error: "Portal PIN must be exactly 6 digits" }, { status: 400 });
       }
-      updateData.portalPassword = body.portalPassword || null;
+      // Hash before storing; null clears portal access
+      updateData.portalPassword = body.portalPassword
+        ? await hashPassword(body.portalPassword)
+        : null;
     }
 
     // Handle preferred brands update (array of brand IDs)
@@ -128,7 +134,7 @@ export async function PUT(
     }
 
     // Update customer
-    const customer = await db.customer.update({
+    const updated = await db.customer.update({
       where: { id },
       data: updateData,
       include: {
@@ -137,7 +143,8 @@ export async function PUT(
       },
     });
 
-    return NextResponse.json(customer);
+    const { portalPassword, ...updatedData } = updated;
+    return NextResponse.json({ ...updatedData, hasPortalPin: portalPassword !== null });
   } catch (error: any) {
     console.error('Error updating customer:', error);
 

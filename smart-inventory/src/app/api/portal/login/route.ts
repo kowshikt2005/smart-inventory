@@ -1,14 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { signPortalToken, PORTAL_COOKIE_NAME, isSecureCookie } from "@/lib/portal-auth";
+import { signPortalToken, PORTAL_COOKIE_NAME, portalCookieOptions } from "@/lib/portal-auth";
+import { verifyPassword } from "@/lib/auth-utils";
+import { cache } from "@/lib/cache";
 
-const DEFAULT_PIN = "123456";
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_SECONDS = 900; // 15 minutes
+const PORTAL_LOGIN_PREFIX = "portal_login:";
 
-/** Extract the last 10 digits from any phone format */
-function extractDigits(phone: string): string {
+/** Extract last 10 digits — strips country codes (+91, 91, etc.) */
+function extractLast10(phone: string): string {
   const digits = phone.replace(/\D/g, "");
-  // Indian numbers: take last 10 digits (strips country code 91)
   return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
+/** Normalize phone for exact DB lookup: +91XXXXXXXXXX */
+function normalizePhone(phone: string): string {
+  const last10 = extractLast10(phone);
+  return `+91${last10}`;
+}
+
+function getRateLimitKey(phone: string): string {
+  return `${PORTAL_LOGIN_PREFIX}${extractLast10(phone)}`;
+}
+
+function checkRateLimit(key: string): string | null {
+  const attempts = cache.get<number>(key) ?? 0;
+  if (attempts >= MAX_LOGIN_ATTEMPTS) {
+    return "Too many login attempts. Please try again in 15 minutes.";
+  }
+  return null;
+}
+
+function recordFailedAttempt(key: string): void {
+  const attempts = (cache.get<number>(key) ?? 0) + 1;
+  cache.set(key, attempts, LOGIN_LOCKOUT_SECONDS);
+}
+
+function clearAttempts(key: string): void {
+  cache.delete(key);
 }
 
 export async function POST(request: NextRequest) {
@@ -30,7 +60,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const last10 = extractDigits(phone);
+    const last10 = extractLast10(phone.trim());
     if (last10.length < 10) {
       return NextResponse.json(
         { error: "Please enter a valid 10-digit phone number" },
@@ -38,10 +68,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Search by the last 10 digits so it works regardless of how the
-    // phone was stored (9876543210, +919876543210, +91 9876543210, etc.)
-    const customer = await db.customer.findFirst({
-      where: { phone: { endsWith: last10 } },
+    const rateLimitKey = getRateLimitKey(phone.trim());
+    const rateLimitError = checkRateLimit(rateLimitKey);
+    if (rateLimitError) {
+      return NextResponse.json({ error: rateLimitError }, { status: 429 });
+    }
+
+    // Try exact normalized match first (+91XXXXXXXXXX), then plain 10-digit fallback.
+    // This avoids LIKE '%...' which could match multiple rows.
+    const normalized = normalizePhone(phone.trim());
+    let customer = await db.customer.findFirst({
+      where: { phone: normalized },
       select: {
         id: true,
         customerNumber: true,
@@ -51,7 +88,22 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Fallback: stored as plain 10 digits (no country code)
     if (!customer) {
+      customer = await db.customer.findFirst({
+        where: { phone: last10 },
+        select: {
+          id: true,
+          customerNumber: true,
+          name: true,
+          portalPassword: true,
+          status: true,
+        },
+      });
+    }
+
+    if (!customer) {
+      recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
@@ -62,10 +114,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const expectedPin = customer.portalPassword || DEFAULT_PIN;
-    if (pin !== expectedPin) {
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    // No PIN set — allow first-time default "123456"
+    if (!customer.portalPassword) {
+      if (pin !== "123456") {
+        recordFailedAttempt(rateLimitKey);
+        return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+      }
+    } else {
+      // Verify bcrypt hash
+      const isValid = await verifyPassword(pin, customer.portalPassword);
+      if (!isValid) {
+        recordFailedAttempt(rateLimitKey);
+        return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+      }
     }
+
+    clearAttempts(rateLimitKey);
 
     const token = await signPortalToken({
       customerId: customer.id,
@@ -78,13 +142,7 @@ export async function POST(request: NextRequest) {
       customer: { name: customer.name, customerNumber: customer.customerNumber },
     });
 
-    response.cookies.set(PORTAL_COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: isSecureCookie(),
-      sameSite: "lax",
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60,
-    });
+    response.cookies.set(PORTAL_COOKIE_NAME, token, portalCookieOptions(request));
 
     return response;
   } catch {

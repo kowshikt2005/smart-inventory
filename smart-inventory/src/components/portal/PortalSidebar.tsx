@@ -8,12 +8,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { ShoppingCart, Package, ChevronDown, Layers, Search, ArrowUpDown } from "lucide-react";
 import { useCart } from "@/components/portal/CartContext";
 import { cn } from "@/lib/utils";
-
-const fetcher = (url: string) =>
-  fetch(url).then((r) => {
-    if (!r.ok) throw new Error(String(r.status));
-    return r.json();
-  });
+import { portalFetcher } from "@/lib/portal-fetcher";
 
 interface SubBrandNav {
   id: string;
@@ -37,7 +32,7 @@ export function PortalSidebar() {
   // Skip API call entirely on login page — user isn't authenticated yet
   const { data, error } = useSWR<{ brands: BrandNav[] }>(
     isLoginPage ? null : "/api/portal/nav",
-    fetcher,
+    portalFetcher,
     {
       revalidateOnFocus: false,
       shouldRetryOnError: false,

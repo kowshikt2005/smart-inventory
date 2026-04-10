@@ -6,15 +6,7 @@ import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { ShoppingCart, LogOut, User, KeyRound, X, Loader2, Eye, EyeOff } from "lucide-react";
 import { useCart } from "@/components/portal/CartContext";
-
-const fetcher = async (url: string) => {
-  const r = await fetch(url);
-  if (r.status === 401 || r.status === 403) {
-    window.location.href = "/portal/login";
-    return null;
-  }
-  return r.json();
-};
+import { portalFetcher } from "@/lib/portal-fetcher";
 
 const PAGE_TITLES: Record<string, string> = {
   "/portal/shop": "Browse Catalog",
@@ -186,12 +178,24 @@ export function PortalTopbar() {
 
   const { data } = useSWR<{ customer: { name: string; customerNumber: string } }>(
     isLoginPage ? null : "/api/portal/me",
-    fetcher,
+    portalFetcher,
     { shouldRetryOnError: false }
   );
   const { totalItems } = useCart();
 
+  const { clearCart } = useCart();
+
   async function handleLogout() {
+    clearCart();
+    // Remove all namespaced cart keys so a new customer on this device
+    // starts with a clean cart rather than finding the previous customer's items.
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("portal-cart"))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
     await fetch("/api/portal/logout", { method: "POST" });
     window.location.href = "/portal/login";
   }

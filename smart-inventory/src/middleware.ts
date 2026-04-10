@@ -27,14 +27,34 @@ export async function middleware(request: NextRequest) {
     // Authenticated admin — fall through to dashboard
   }
 
-  // ── Portal routes ────────────────────────────────────────────────────────
-  if (pathname.startsWith("/portal")) {
-    // Always allow the login page and its API
-    if (pathname === "/portal/login" || pathname.startsWith("/api/portal/login") || pathname.startsWith("/api/portal/logout")) {
+  // ── Portal API routes ───────────────────────────────────────────────────
+  // Defense-in-depth: verify the portal JWT in middleware so unauthenticated
+  // requests never reach route handlers. Route handlers still call
+  // getPortalCustomer() which also verifies the DB status.
+  if (pathname.startsWith("/api/portal/")) {
+    if (
+      pathname.startsWith("/api/portal/login") ||
+      pathname.startsWith("/api/portal/logout")
+    ) {
       return NextResponse.next();
     }
+    const portalToken = request.cookies.get(PORTAL_COOKIE_NAME)?.value;
+    if (!portalToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    try {
+      await verifyPortalToken(portalToken);
+      return NextResponse.next();
+    } catch {
+      return NextResponse.json({ error: "Invalid or expired session" }, { status: 401 });
+    }
+  }
 
-    // All other portal pages: require valid portal-token cookie
+  // ── Portal page routes ───────────────────────────────────────────────────
+  if (pathname.startsWith("/portal")) {
+    if (pathname === "/portal/login") {
+      return NextResponse.next();
+    }
     const portalToken = request.cookies.get(PORTAL_COOKIE_NAME)?.value;
     if (!portalToken) {
       return NextResponse.redirect(new URL("/portal/login", request.url));
@@ -47,11 +67,6 @@ export async function middleware(request: NextRequest) {
       res.cookies.delete(PORTAL_COOKIE_NAME);
       return res;
     }
-  }
-
-  // Portal API routes (except login/logout already handled above)
-  if (pathname.startsWith("/api/portal/")) {
-    return NextResponse.next();
   }
 
   // Allow access to login page and auth API routes

@@ -37,9 +37,6 @@ export async function GET(
         gstRate: true,
         brandId: true,
         subBrandId: true,
-        inventory: {
-          select: { physicalStock: true },
-        },
       },
       orderBy: { name: "asc" },
     }),
@@ -61,7 +58,7 @@ export async function GET(
 
   // Apply rate sheet pricing to each item
   const pricedItems = items.map((item) => {
-    const { rate, discountPercent } = isEffective
+    const { rate } = isEffective
       ? getEffectiveRateV2(
           {
             id: item.id,
@@ -81,7 +78,7 @@ export async function GET(
             excludedSubBrandIds: (rateSheet!.excludedSubBrandIds as string[]) ?? [],
           }
         )
-      : { rate: Number(item.sellingPrice), discountPercent: 0 };
+      : { rate: Number(item.sellingPrice) };
 
     return {
       id: item.id,
@@ -89,13 +86,10 @@ export async function GET(
       itemCode: item.itemCode,
       mrp: item.mrp,
       sellingPrice: rate,
-      originalSellingPrice: Number(item.sellingPrice),
-      discountPercent,
       unit: item.unit,
       imageUrl: item.imageUrl,
       description: item.description,
       gstRate: item.gstRate,
-      inventory: item.inventory,
     };
   });
 

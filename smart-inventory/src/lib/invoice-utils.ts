@@ -9,7 +9,7 @@ type TxClient = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transa
  * all execute on the SAME pooled connection. Without this, Prisma's pool
  * may assign different connections to each query, leaving stale locks.
  */
-async function withNumberLock<T>(
+export async function withNumberLock<T>(
   db: PrismaClient,
   lockName: string,
   fn: (tx: TxClient) => Promise<T>

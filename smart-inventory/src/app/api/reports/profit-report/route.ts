@@ -72,7 +72,7 @@ export async function GET(request: Request) {
         const purchasePriceInclGST = purchasePriceExclGST * (1 + itemGstRate / 100);
         const purchaseAmountInclGST = purchasePriceInclGST * qty;
 
-        const grossMargin = soldAmountInclGST - purchaseAmountInclGST;
+        const grossMargin = purchaseAmountInclGST - soldAmountInclGST;
         const marginPct = soldAmountInclGST > 0 ? (grossMargin / soldAmountInclGST) * 100 : 0;
 
         records.push({
@@ -103,7 +103,7 @@ export async function GET(request: Request) {
 
     const totalSold = records.reduce((s, r) => s + r.soldAmountInclGST, 0);
     const totalPurchase = records.reduce((s, r) => s + r.purchaseAmountInclGST, 0);
-    const totalMargin = totalSold - totalPurchase;
+    const totalMargin = totalPurchase - totalSold;
 
     return NextResponse.json({
       records,

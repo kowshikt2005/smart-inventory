@@ -4,10 +4,23 @@ import { db } from "@/lib/db";
 
 export const PORTAL_COOKIE_NAME = "portal-token";
 
-const getSecret = () =>
-  new TextEncoder().encode(
-    process.env.PORTAL_JWT_SECRET ?? process.env.NEXTAUTH_SECRET ?? "portal-fallback-secret"
-  );
+// Portal JWT lifetime — kept short so that a stolen token has a tight replay window.
+// If you lengthen this, consider adding server-side revocation.
+export const PORTAL_JWT_MAX_AGE_SECONDS = 24 * 60 * 60; // 1 day
+
+let cachedSecret: Uint8Array | null = null;
+
+function getSecret(): Uint8Array {
+  if (cachedSecret) return cachedSecret;
+  const secret = process.env.PORTAL_JWT_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (!secret || secret.trim().length < 16) {
+    throw new Error(
+      "PORTAL_JWT_SECRET (or NEXTAUTH_SECRET fallback) must be set to a strong random value (>=16 chars)"
+    );
+  }
+  cachedSecret = new TextEncoder().encode(secret);
+  return cachedSecret;
+}
 
 export async function signPortalToken(payload: {
   customerId: string;
@@ -17,7 +30,7 @@ export async function signPortalToken(payload: {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
+    .setExpirationTime(`${PORTAL_JWT_MAX_AGE_SECONDS}s`)
     .sign(getSecret());
 }
 
@@ -82,6 +95,35 @@ export async function getPortalCustomer(
   }
 }
 
-export function isSecureCookie() {
+/**
+ * Determine whether the current request is being served over HTTPS.
+ *
+ * Behind a TLS-terminating proxy (nginx, CloudFront, ALB) the request reaches
+ * the app over plain HTTP but the original client-facing leg is HTTPS. We
+ * trust `x-forwarded-proto` set by the proxy. Falls back to the raw URL and
+ * finally the NEXTAUTH_URL env var.
+ */
+export function isRequestSecure(request: NextRequest): boolean {
+  const proto = request.headers.get("x-forwarded-proto");
+  if (proto) return proto.split(",")[0].trim() === "https";
+  try {
+    if (request.nextUrl.protocol === "https:") return true;
+  } catch {
+    // ignore
+  }
   return process.env.NEXTAUTH_URL?.startsWith("https://") ?? false;
+}
+
+/**
+ * Standard cookie options for the portal session cookie.
+ * Use on both set (login) and delete (logout) so flags match.
+ */
+export function portalCookieOptions(request: NextRequest) {
+  return {
+    httpOnly: true,
+    secure: isRequestSecure(request),
+    sameSite: "strict" as const,
+    path: "/",
+    maxAge: PORTAL_JWT_MAX_AGE_SECONDS,
+  };
 }

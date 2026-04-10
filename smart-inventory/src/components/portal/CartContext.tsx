@@ -26,32 +26,63 @@ interface CartContextValue {
 
 const CartContext = createContext<CartContextValue | null>(null);
 
-const CART_STORAGE_KEY = "portal-cart";
+const CART_KEY_PREFIX = "portal-cart-";
+const ANONYMOUS_CART_KEY = "portal-cart";
+
+function getCartKey(customerId: string | null): string {
+  return customerId ? `${CART_KEY_PREFIX}${customerId}` : ANONYMOUS_CART_KEY;
+}
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
+  const [customerId, setCustomerId] = useState<string | null>(null);
   const [items, setItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
-  // Load from localStorage on mount
+  // Resolve the current customer ID from /api/portal/me.
+  // If the token is missing or invalid the request returns 401 — we leave
+  // customerId null (anonymous cart that gets cleared on next login).
   useEffect(() => {
+    fetch("/api/portal/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.customer?.id) {
+          setCustomerId(data.customer.id);
+        } else {
+          setCustomerId(null);
+        }
+      })
+      .catch(() => setCustomerId(null));
+  }, []);
+
+  // Load cart from localStorage once we know the customerId
+  useEffect(() => {
+    if (!hydrated || customerId === undefined) return;
     try {
-      const stored = localStorage.getItem(CART_STORAGE_KEY);
+      const key = getCartKey(customerId);
+      const stored = localStorage.getItem(key);
       if (stored) setItems(JSON.parse(stored));
+      else setItems([]);
     } catch {
-      // ignore
+      setItems([]);
     }
+    setHydrated(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
+
+  // Initial hydration — wait for customerId to settle
+  useEffect(() => {
     setHydrated(true);
   }, []);
 
   // Persist to localStorage whenever items change
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || customerId === undefined) return;
     try {
-      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+      localStorage.setItem(getCartKey(customerId), JSON.stringify(items));
     } catch {
       // ignore
     }
-  }, [items, hydrated]);
+  }, [items, hydrated, customerId]);
 
   const addItem = useCallback((newItem: Omit<CartItem, "quantity">) => {
     setItems((prev) => {

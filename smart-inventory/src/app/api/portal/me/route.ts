@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   const customer = await db.customer.findUnique({
     where: { id: auth.customerId },
     select: {
-      id: true,
+      id: true,           // used by CartContext for per-customer localStorage key
       customerNumber: true,
       name: true,
       email: true,

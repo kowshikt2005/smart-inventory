@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getPortalCustomer } from "@/lib/portal-auth";
-import { getEffectiveRateV2, calculateLineItemV2, calculateOrderTotals } from "@/lib/order-utils";
+import { getEffectiveRateV2, calculateLineItemV2, calculateOrderTotals, generateOrderNumber } from "@/lib/order-utils";
 
 export async function GET(request: NextRequest) {
   const auth = await getPortalCustomer(request);
@@ -45,11 +45,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
     }
 
-    // Validate quantities
+    if (items.length > 100) {
+      return NextResponse.json({ error: "Order cannot exceed 100 line items" }, { status: 400 });
+    }
+
+    if (notes && notes.length > 500) {
+      return NextResponse.json({ error: "Notes must be 500 characters or fewer" }, { status: 400 });
+    }
+
+    // Validate items
     for (const item of items) {
-      if (!item.itemId || item.quantity <= 0) {
-        return NextResponse.json({ error: "Invalid cart items" }, { status: 400 });
+      if (!item.itemId || typeof item.itemId !== "string") {
+        return NextResponse.json({ error: "Invalid item ID" }, { status: 400 });
       }
+      const qty = Number(item.quantity);
+      if (!Number.isInteger(qty) || qty < 1 || qty > 10000) {
+        return NextResponse.json(
+          { error: "Quantity must be a whole number between 1 and 10,000" },
+          { status: 400 }
+        );
+      }
+      item.quantity = qty; // normalise to integer
     }
 
     const itemIds = items.map((i) => i.itemId);
@@ -130,15 +146,8 @@ export async function POST(request: NextRequest) {
     const totals = calculateOrderTotals(orderItems);
     const totalAmount = totals.totalAmount;
 
-    // Generate unique order number
-    const lastOrder = await db.salesOrder.findFirst({
-      orderBy: { createdAt: "desc" },
-      select: { orderNumber: true },
-    });
-    const lastNum = lastOrder?.orderNumber
-      ? parseInt(lastOrder.orderNumber.replace(/\D/g, ""), 10) || 0
-      : 0;
-    const orderNumber = `SO-${String(lastNum + 1).padStart(5, "0")}`;
+    // Generate unique order number (uses MySQL GET_LOCK to prevent duplicates)
+    const orderNumber = await generateOrderNumber(db);
 
     // Use first active user as portal system user
     const systemUser = await db.user.findFirst({

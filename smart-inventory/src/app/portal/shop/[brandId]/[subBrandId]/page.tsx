@@ -5,8 +5,7 @@ import useSWR from "swr";
 import { useParams, useSearchParams } from "next/navigation";
 import { Loader2, Package, Plus, Minus, ShoppingCart, RefreshCw, ChevronRight } from "lucide-react";
 import { useCart } from "@/components/portal/CartContext";
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { portalFetcher } from "@/lib/portal-fetcher";
 
 interface Item {
   id: string;
@@ -18,14 +17,12 @@ interface Item {
   imageUrl: string | null;
   description: string | null;
   gstRate: string;
-  inventory: { physicalStock: string } | null;
 }
 
 interface SubBrandDetail {
   id: string;
   name: string;
   brandId: string;
-  discountPercent: string | null;
 }
 
 function ImageWithFallback({ src, alt }: { src: string | null; alt: string }) {
@@ -131,7 +128,7 @@ function ItemsContent() {
 
   const { data, error, isLoading, mutate } = useSWR<{ subBrand: SubBrandDetail; items: Item[] }>(
     subBrandId ? `/api/portal/sub-brands/${subBrandId}/items` : null,
-    fetcher,
+    portalFetcher,
     { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
 

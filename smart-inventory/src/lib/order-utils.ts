@@ -1,46 +1,37 @@
 import { PrismaClient } from '@/generated/prisma';
 import type { Decimal } from '@prisma/client/runtime/library';
+import { withNumberLock } from '@/lib/invoice-utils';
 
 // System user ID for operations before auth is implemented
 export const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 /**
  * Generate the next order number in sequence (SO-0001, SO-0002, etc.)
- * Checks both SalesOrder table AND Invoice table (which stores orderNumber from deleted orders)
+ * Uses MySQL GET_LOCK so concurrent requests (admin + portal) can't produce
+ * duplicates. Checks both SalesOrder and Invoice tables to handle deleted orders.
  */
 export async function generateOrderNumber(db: PrismaClient): Promise<string> {
-  // Check both tables to find the highest SO number ever used
-  const [lastSalesOrder, lastInvoice] = await Promise.all([
-    db.salesOrder.findFirst({
-      orderBy: { orderNumber: 'desc' },
-      select: { orderNumber: true },
-    }),
-    db.invoice.findFirst({
-      where: { orderNumber: { startsWith: 'SO-' } },
-      orderBy: { orderNumber: 'desc' },
-      select: { orderNumber: true },
-    }),
-  ]);
+  return withNumberLock(db, 'so_number_lock', async (tx) => {
+    const [lastSalesOrder, lastInvoice] = await Promise.all([
+      tx.salesOrder.findFirst({
+        orderBy: { orderNumber: 'desc' },
+        select: { orderNumber: true },
+      }),
+      tx.invoice.findFirst({
+        where: { orderNumber: { startsWith: 'SO-' } },
+        orderBy: { orderNumber: 'desc' },
+        select: { orderNumber: true },
+      }),
+    ]);
 
-  let maxNum = 0;
+    let maxNum = 0;
+    const soMatch = lastSalesOrder?.orderNumber.match(/SO-(\d+)/);
+    if (soMatch) maxNum = Math.max(maxNum, parseInt(soMatch[1], 10));
+    const invMatch = lastInvoice?.orderNumber?.match(/SO-(\d+)/);
+    if (invMatch) maxNum = Math.max(maxNum, parseInt(invMatch[1], 10));
 
-  // Extract number from sales order
-  if (lastSalesOrder) {
-    const match = lastSalesOrder.orderNumber.match(/SO-(\d+)/);
-    if (match) {
-      maxNum = Math.max(maxNum, parseInt(match[1], 10));
-    }
-  }
-
-  // Extract number from invoice (deleted orders end up here)
-  if (lastInvoice?.orderNumber) {
-    const match = lastInvoice.orderNumber.match(/SO-(\d+)/);
-    if (match) {
-      maxNum = Math.max(maxNum, parseInt(match[1], 10));
-    }
-  }
-
-  return `SO-${String(maxNum + 1).padStart(4, '0')}`;
+    return `SO-${String(maxNum + 1).padStart(4, '0')}`;
+  });
 }
 
 /**

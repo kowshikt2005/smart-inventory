@@ -24,6 +24,7 @@ import {
   Plus,
   MoreHorizontal,
   Eye,
+  Edit,
   FileText,
   Loader2,
   X,
@@ -327,7 +328,11 @@ function CustomersContent() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => router.push(`/masters/customers/${customer.id}`)}>
                               <Eye className="h-4 w-4 mr-2" />
-                              View / Edit
+                              View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => router.push(`/masters/customers/${customer.id}?mode=edit&tab=settings`)}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => router.push(`/ledger/customers?customerId=${customer.id}`)}>
                               <FileText className="h-4 w-4 mr-2" />

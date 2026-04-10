@@ -2,18 +2,16 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AddItemModal } from "@/components/items/AddItemModal";
 import {
   ArrowLeft,
   Loader2,
   Edit,
-  Save,
-  X,
   Trash2,
   Package,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import useSWR from "swr";
 
@@ -24,13 +22,24 @@ interface Item {
   description: string | null;
   standardPrice: string | number;
   purchasePrice: string | number;
+  mrp: string | number;
+  sellingPrice: string | number;
+  margin?: string | number;
+  marginType?: string;
+  userCode?: string | null;
+  barcode?: string | null;
   unit: string;
+  uomConversions?: Array<{ name: string; factor: number }> | null;
   hsnCode: string | null;
   gstRate: string | number;
   minStock: number;
   isActive: boolean;
   brand?: { id: string; name: string } | null;
   subBrand?: { id: string; name: string } | null;
+  isImported?: boolean;
+  importedBrandName?: string | null;
+  importedSubBrandName?: string | null;
+  imageUrl?: string | null;
   inventory?: {
     physicalStock: string | number;
     openingStock: string | number;
@@ -46,46 +55,9 @@ export default function ItemDetailPage() {
   const params = useParams();
   const id = params.id as string;
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [formData, setFormData] = useState<Partial<Item>>({});
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const { data: item, error, isLoading, mutate } = useSWR<Item>(`/api/items/${id}`);
-
-  useEffect(() => {
-    if (item) {
-      setFormData(item);
-    }
-  }, [item]);
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const response = await fetch(`/api/items/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          standardPrice: Number(formData.standardPrice),
-          purchasePrice: Number(formData.purchasePrice),
-          gstRate: Number(formData.gstRate),
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to update item");
-      }
-
-      await mutate();
-      setIsEditing(false);
-    } catch (err) {
-      console.error("Error updating item:", err);
-      alert(err instanceof Error ? err.message : "Failed to update item");
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this item?")) return;
@@ -105,11 +77,6 @@ export default function ItemDetailPage() {
       console.error("Error deleting item:", err);
       alert(err instanceof Error ? err.message : "Failed to delete item");
     }
-  };
-
-  const handleCancel = () => {
-    setFormData(item || {});
-    setIsEditing(false);
   };
 
   const formatDate = (dateStr: string | null) => {
@@ -175,29 +142,14 @@ export default function ItemDetailPage() {
               <p className="text-gray-600 font-mono">{item.itemCode}</p>
             </div>
             <div className="flex items-center gap-2">
-              {isEditing ? (
-                <>
-                  <Button variant="outline" onClick={handleCancel} disabled={isSaving}>
-                    <X className="h-4 w-4 mr-2" />
-                    Cancel
-                  </Button>
-                  <Button onClick={handleSave} disabled={isSaving} className="bg-teal-500 hover:bg-teal-600">
-                    {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                    Save Changes
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button variant="outline" onClick={() => setIsEditing(true)}>
-                    <Edit className="h-4 w-4 mr-2" />
-                    Edit
-                  </Button>
-                  <Button variant="outline" onClick={handleDelete} className="text-red-600 hover:text-red-700">
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </Button>
-                </>
-              )}
+              <Button variant="outline" onClick={() => setShowEditModal(true)}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+              <Button variant="outline" onClick={handleDelete} className="text-red-600 hover:text-red-700">
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
             </div>
           </div>
         </div>
@@ -210,36 +162,24 @@ export default function ItemDetailPage() {
             <div className="space-y-4">
               <div>
                 <Label>Item Code</Label>
-                {isEditing ? (
-                  <Input value={formData.itemCode || ""} onChange={(e) => setFormData({ ...formData, itemCode: e.target.value })} />
-                ) : (
-                  <p className="mt-1 font-mono font-medium">{item.itemCode}</p>
-                )}
+                <p className="mt-1 font-mono font-medium">{item.itemCode}</p>
               </div>
               <div>
                 <Label>Name</Label>
-                {isEditing ? (
-                  <Input value={formData.name || ""} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
-                ) : (
-                  <p className="mt-1 font-medium">{item.name}</p>
-                )}
+                <p className="mt-1 font-medium">{item.name}</p>
               </div>
               <div>
                 <Label>Description</Label>
-                {isEditing ? (
-                  <Input value={formData.description || ""} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
-                ) : (
-                  <p className="mt-1">{item.description || "-"}</p>
-                )}
+                <p className="mt-1">{item.description || "-"}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Brand</Label>
-                  <p className="mt-1">{item.brand?.name || "-"}</p>
+                  <p className="mt-1">{item.brand?.name || item.importedBrandName || "-"}</p>
                 </div>
                 <div>
                   <Label>Sub-brand</Label>
-                  <p className="mt-1">{item.subBrand?.name || "-"}</p>
+                  <p className="mt-1">{item.subBrand?.name || item.importedSubBrandName || "-"}</p>
                 </div>
               </div>
               <div>
@@ -258,46 +198,30 @@ export default function ItemDetailPage() {
             <h2 className="text-lg font-semibold mb-4">Pricing & Tax</h2>
             <div className="space-y-4">
               <div>
-                <Label>Sales Price</Label>
-                {isEditing ? (
-                  <Input type="number" step="0.01" value={formData.standardPrice || ""} onChange={(e) => setFormData({ ...formData, standardPrice: e.target.value })} />
-                ) : (
-                  <p className="mt-1 font-medium">₹{Number(item.standardPrice).toFixed(2)}</p>
-                )}
+                <Label>Purchase Price</Label>
+                <p className="mt-1 font-medium">₹{Number(item.purchasePrice).toFixed(2)}</p>
               </div>
               <div>
-                <Label>Purchase Price (MRP)</Label>
-                {isEditing ? (
-                  <Input type="number" step="0.01" value={formData.purchasePrice || ""} onChange={(e) => setFormData({ ...formData, purchasePrice: e.target.value })} />
-                ) : (
-                  <p className="mt-1 font-medium">₹{Number(item.purchasePrice).toFixed(2)}</p>
-                )}
+                <Label>MRP</Label>
+                <p className="mt-1 font-medium">₹{Number(item.mrp).toFixed(2)}</p>
+              </div>
+              <div>
+                <Label>Selling Price</Label>
+                <p className="mt-1 font-medium">₹{Number(item.sellingPrice).toFixed(2)}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>HSN Code</Label>
-                  {isEditing ? (
-                    <Input value={formData.hsnCode || ""} onChange={(e) => setFormData({ ...formData, hsnCode: e.target.value })} />
-                  ) : (
-                    <p className="mt-1 font-mono">{item.hsnCode || "-"}</p>
-                  )}
+                  <p className="mt-1 font-mono">{item.hsnCode || "-"}</p>
                 </div>
                 <div>
                   <Label>GST Rate</Label>
-                  {isEditing ? (
-                    <Input type="number" step="0.01" value={formData.gstRate || ""} onChange={(e) => setFormData({ ...formData, gstRate: e.target.value })} />
-                  ) : (
-                    <p className="mt-1 font-medium">{Number(item.gstRate)}%</p>
-                  )}
+                  <p className="mt-1 font-medium">{Number(item.gstRate)}%</p>
                 </div>
               </div>
               <div>
                 <Label>Unit of Measure</Label>
-                {isEditing ? (
-                  <Input value={formData.unit || ""} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} />
-                ) : (
-                  <p className="mt-1">{item.unit}</p>
-                )}
+                <p className="mt-1">{item.unit}</p>
               </div>
             </div>
           </div>
@@ -331,11 +255,7 @@ export default function ItemDetailPage() {
               </div>
               <div>
                 <Label>Minimum Stock Level</Label>
-                {isEditing ? (
-                  <Input type="number" value={formData.minStock || 0} onChange={(e) => setFormData({ ...formData, minStock: parseInt(e.target.value) || 0 })} />
-                ) : (
-                  <p className="mt-1">{item.minStock} {item.unit}</p>
-                )}
+                <p className="mt-1">{item.minStock} {item.unit}</p>
               </div>
               {physicalStock <= item.minStock && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -361,6 +281,16 @@ export default function ItemDetailPage() {
           </div>
         </div>
       </div>
+
+      <AddItemModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSuccess={() => {
+          mutate();
+          setShowEditModal(false);
+        }}
+        editItem={item}
+      />
     </DashboardLayout>
   );
 }

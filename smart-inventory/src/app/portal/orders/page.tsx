@@ -4,8 +4,7 @@ import useSWR from "swr";
 import Link from "next/link";
 import { ShoppingBag, ChevronDown, RefreshCw, Package, ArrowRight } from "lucide-react";
 import { useState } from "react";
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { portalFetcher } from "@/lib/portal-fetcher";
 
 interface OrderItem {
   quantity: string;
@@ -22,16 +21,13 @@ interface Order {
   items: OrderItem[];
 }
 
-/* Customer-friendly status labels + styling */
+/* Customer-friendly status labels — matches SalesOrderStatus enum exactly */
 const STATUS_MAP: Record<string, { label: string; dot: string; badge: string }> = {
-  OPEN:        { label: "Confirmed",   dot: "bg-emerald-400",  badge: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
-  CONFIRMED:   { label: "Confirmed",   dot: "bg-emerald-400",  badge: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
-  IN_PROGRESS: { label: "Processing",  dot: "bg-amber-400 animate-pulse", badge: "bg-amber-50 text-amber-700 border border-amber-200" },
-  HOLD:        { label: "On Hold",     dot: "bg-orange-400",   badge: "bg-orange-50 text-orange-700 border border-orange-200" },
-  COMPLETED:   { label: "Delivered",   dot: "bg-blue-400",     badge: "bg-blue-50 text-blue-700 border border-blue-200" },
-  CLOSED:      { label: "Delivered",   dot: "bg-blue-400",     badge: "bg-blue-50 text-blue-700 border border-blue-200" },
-  REJECTED:    { label: "Cancelled",   dot: "bg-red-400",      badge: "bg-red-50 text-red-600 border border-red-200" },
-  CANCELLED:   { label: "Cancelled",   dot: "bg-red-400",      badge: "bg-red-50 text-red-600 border border-red-200" },
+  OPEN:               { label: "Order Placed",     dot: "bg-emerald-400",             badge: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
+  HOLD:               { label: "On Hold",           dot: "bg-orange-400",              badge: "bg-orange-50 text-orange-700 border border-orange-200" },
+  REJECTED:           { label: "Rejected",          dot: "bg-red-400",                 badge: "bg-red-50 text-red-600 border border-red-200" },
+  PARTIALLY_INVOICED: { label: "Partially Billed",  dot: "bg-amber-400 animate-pulse", badge: "bg-amber-50 text-amber-700 border border-amber-200" },
+  FULLY_INVOICED:     { label: "Fully Billed",      dot: "bg-blue-400",                badge: "bg-blue-50 text-blue-700 border border-blue-200" },
 };
 
 function fmt(date: string) {
@@ -144,7 +140,7 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
 }
 
 export default function OrdersPage() {
-  const { data, error, isLoading, mutate } = useSWR<{ orders: Order[] }>("/api/portal/orders", fetcher, {
+  const { data, error, isLoading, mutate } = useSWR<{ orders: Order[] }>("/api/portal/orders", portalFetcher, {
     revalidateOnFocus: false,
   });
   const orders = data?.orders ?? [];

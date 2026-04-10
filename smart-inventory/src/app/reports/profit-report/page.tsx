@@ -105,8 +105,8 @@ export default function ProfitReportPage() {
         ...e,
         productCount: e.products.size,
         invoiceCount: e.invoices.size,
-        grossMargin: e.soldAmount - e.purchaseAmount,
-        marginPct: e.soldAmount > 0 ? ((e.soldAmount - e.purchaseAmount) / e.soldAmount) * 100 : 0,
+        grossMargin: e.purchaseAmount - e.soldAmount,
+        marginPct: e.soldAmount > 0 ? ((e.purchaseAmount - e.soldAmount) / e.soldAmount) * 100 : 0,
       }))
       .sort((a, b) => b.grossMargin - a.grossMargin);
   }, [records]);
@@ -133,8 +133,8 @@ export default function ProfitReportPage() {
         ...e,
         invoiceCount: e.invoices.size,
         avgSoldRateInclGST: e.totalQty > 0 ? e.soldAmount / e.totalQty : 0,
-        grossMargin: e.soldAmount - e.purchaseAmount,
-        marginPct: e.soldAmount > 0 ? ((e.soldAmount - e.purchaseAmount) / e.soldAmount) * 100 : 0,
+        grossMargin: e.purchaseAmount - e.soldAmount,
+        marginPct: e.soldAmount > 0 ? ((e.purchaseAmount - e.soldAmount) / e.soldAmount) * 100 : 0,
       }))
       .sort((a, b) => b.grossMargin - a.grossMargin);
   }, [records]);
@@ -234,7 +234,7 @@ export default function ProfitReportPage() {
             </div>
           </div>
           <p className="text-gray-600 text-sm">
-            Gross margin = Sold Amount (incl. GST) − Purchase Amount (incl. GST)
+            Gross margin = Purchase Amount (incl. GST) − Sold Amount (incl. GST)
           </p>
         </div>
 
