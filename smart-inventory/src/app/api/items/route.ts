@@ -94,6 +94,17 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate financial fields
+    if (body.mrp !== undefined && Number(body.mrp) < 0) {
+      return NextResponse.json({ error: 'MRP cannot be negative' }, { status: 400 });
+    }
+    if (body.sellingPrice !== undefined && Number(body.sellingPrice) < 0) {
+      return NextResponse.json({ error: 'Selling price cannot be negative' }, { status: 400 });
+    }
+    if (body.purchasePrice !== undefined && Number(body.purchasePrice) < 0) {
+      return NextResponse.json({ error: 'Purchase price cannot be negative' }, { status: 400 });
+    }
+
     // Generate sequential item code (item-1, item-2, ...)
     const lastItem = await db.item.findFirst({
       where: { itemCode: { startsWith: 'item-' } },

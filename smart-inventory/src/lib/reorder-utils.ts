@@ -13,25 +13,44 @@ export interface ScanResult {
   message: string;
 }
 
+type RawQueryClient = {
+  $queryRawUnsafe: <T = unknown>(query: string, ...values: unknown[]) => Promise<T>;
+};
+
+function parseMaxSequence(rows: Array<{ max_num: bigint | number | null }>): number {
+  const raw = rows?.[0]?.max_num;
+  if (typeof raw === 'bigint') return Number(raw);
+  const parsed = Number(raw ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function getMaxReorderSequence(client: RawQueryClient): Promise<number> {
+  const rows = await client.$queryRawUnsafe<Array<{ max_num: bigint | number | null }>>(
+    `
+      SELECT MAX(CAST(SUBSTRING(reorderNumber, 4) AS UNSIGNED)) AS max_num
+      FROM stock_reorders
+      WHERE reorderNumber REGEXP '^RO-[0-9]+$'
+    `
+  );
+  return parseMaxSequence(rows);
+}
+
 /**
  * Generate the next reorder number in sequence (RO-0001, RO-0002, etc.)
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export async function generateReorderNumber(db: any): Promise<string> {
-  return withNumberLock(db, 'reorder_number_lock', async (tx) => {
-    const last = await tx.stockReorder.findFirst({
-      orderBy: { reorderNumber: 'desc' },
-      select: { reorderNumber: true },
+  const format = (num: number) => `RO-${String(num + 1).padStart(4, '0')}`;
+  try {
+    return await withNumberLock(db, 'reorder_number_lock', async (tx) => {
+      const maxNum = await getMaxReorderSequence(tx as RawQueryClient);
+      return format(maxNum);
     });
-
-    let nextNum = 1;
-    if (last) {
-      const match = last.reorderNumber.match(/RO-(\d+)/);
-      if (match) nextNum = parseInt(match[1], 10) + 1;
-    }
-
-    return `RO-${String(nextNum).padStart(4, '0')}`;
-  });
+  } catch (error) {
+    console.error('RO number lock path failed, using unlocked fallback:', error);
+    const maxNum = await getMaxReorderSequence(db as RawQueryClient);
+    return format(maxNum);
+  }
 }
 
 /**
@@ -40,7 +59,7 @@ export async function generateReorderNumber(db: any): Promise<string> {
  * - Consolidates shortfall quantities across all Partial/Unavailable orders per item.
  */
 export async function runStockScan(db: any): Promise<ScanResult> {
-  return withNumberLock(db, 'stock_scan_lock', async (tx: any) => {
+  const runCore = async (tx: any): Promise<ScanResult> => {
     // Idempotency: only one scan per calendar day
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -163,5 +182,13 @@ export async function runStockScan(db: any): Promise<ScanResult> {
       affectedOrderIds,
       message: `Reorder ${created.reorderNumber} created with ${shortfallMap.size} item(s) across ${affectedOrderIds.length} order(s).`,
     } satisfies ScanResult;
-  });
+  };
+
+  try {
+    return await withNumberLock(db, 'stock_scan_lock', runCore);
+  } catch (error) {
+    // Keep the feature available even if GET_LOCK is unavailable/contended.
+    console.error('Stock scan lock path failed, using unlocked fallback:', error);
+    return runCore(db);
+  }
 }

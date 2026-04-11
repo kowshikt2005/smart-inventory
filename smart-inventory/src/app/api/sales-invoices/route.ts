@@ -386,6 +386,15 @@ export async function POST(request: Request) {
         where: { itemId: { in: itemIds } },
       });
       const inventoryMap = new Map(inventories.map((inv) => [inv.itemId, inv]));
+      const inventoryLevels = new Map(
+        inventories.map((inv) => [
+          inv.itemId,
+          {
+            physicalStock: Number(inv.physicalStock),
+            reservedQuantity: Number(inv.reservedQuantity || 0),
+          },
+        ])
+      );
 
       const stockMovements: any[] = [];
 
@@ -421,23 +430,30 @@ export async function POST(request: Request) {
         }
 
         if (!negativeBillingEnabled) {
+          const levels = inventoryLevels.get(orderItem.itemId);
+          const releasableReserved = Math.min(levels?.reservedQuantity ?? 0, quantity);
           const updated = await tx.inventory.updateMany({
             where: {
               itemId: orderItem.itemId,
               physicalStock: { gte: quantity },
-              reservedQuantity: { gte: quantity },
             },
             data: {
               physicalStock: { decrement: quantity },
-              reservedQuantity: { decrement: quantity },
+              reservedQuantity: { decrement: releasableReserved },
             },
           });
 
           if (updated.count !== 1) {
             throw new Error(`Insufficient stock for item ${orderItem.itemId} during invoice creation. Please retry.`);
           }
+
+          if (levels) {
+            levels.physicalStock -= quantity;
+            levels.reservedQuantity = Math.max(0, levels.reservedQuantity - releasableReserved);
+          }
         } else {
-          const releasableReserved = Math.min(Number(inventory.reservedQuantity || 0), quantity);
+          const levels = inventoryLevels.get(orderItem.itemId);
+          const releasableReserved = Math.min(levels?.reservedQuantity ?? 0, quantity);
           await tx.inventory.update({
             where: { itemId: orderItem.itemId },
             data: {
@@ -445,6 +461,11 @@ export async function POST(request: Request) {
               reservedQuantity: { decrement: releasableReserved },
             },
           });
+
+          if (levels) {
+            levels.physicalStock -= quantity;
+            levels.reservedQuantity = Math.max(0, levels.reservedQuantity - releasableReserved);
+          }
         }
 
         // Record stock movement

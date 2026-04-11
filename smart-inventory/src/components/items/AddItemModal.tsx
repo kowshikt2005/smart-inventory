@@ -85,6 +85,7 @@ export function AddItemModal({
   const isEditing = !!editItem;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadDebugLog, setUploadDebugLog] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -148,6 +149,7 @@ export function AddItemModal({
       });
       setUomConversions([]);
       setImageUrl(null);
+      setUploadDebugLog(null);
     }
   }, [editItem, isOpen, prefillData]);
 
@@ -181,6 +183,7 @@ export function AddItemModal({
         }))
       );
       setImageUrl(editItem.imageUrl || null);
+      setUploadDebugLog(null);
     }
   }, [editItem, isOpen]);
 
@@ -231,12 +234,55 @@ export function AddItemModal({
 
   const hasMargin = formData.margin !== "" && parseFloat(formData.margin) > 0;
 
+  const buildUploadDebugLog = ({
+    stage,
+    file,
+    status,
+    payload,
+    rawResponse,
+    clientError,
+  }: {
+    stage: string;
+    file: File;
+    status?: number;
+    payload?: Record<string, unknown>;
+    rawResponse?: string;
+    clientError?: unknown;
+  }) => {
+    const errorMessage =
+      typeof payload?.error === "string"
+        ? payload.error
+        : clientError instanceof Error
+          ? clientError.message
+          : "Failed to upload image";
+
+    const responsePreview = rawResponse
+      ? rawResponse.replace(/\s+/g, " ").trim().slice(0, 800)
+      : "n/a";
+
+    return [
+      "ITEM_IMAGE_UPLOAD_DIAGNOSTIC",
+      `stage=${stage}`,
+      `time=${new Date().toISOString()}`,
+      `status=${status ?? "n/a"}`,
+      `requestId=${typeof payload?.requestId === "string" ? payload.requestId : "n/a"}`,
+      `code=${typeof payload?.code === "string" ? payload.code : "n/a"}`,
+      `message=${errorMessage}`,
+      `fileName=${file.name || "n/a"}`,
+      `fileType=${file.type || "n/a"}`,
+      `fileSize=${file.size}`,
+      `response=${responsePreview}`,
+    ].join("\n");
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
     setError(null);
+    setUploadDebugLog(null);
+    let generatedDiagnostic: string | null = null;
 
     try {
       const formDataUpload = new FormData();
@@ -247,14 +293,55 @@ export function AddItemModal({
         body: formDataUpload,
       });
 
-      const data = await res.json();
+      const rawResponse = await res.text();
+      let data: Record<string, unknown> = {};
+      try {
+        data = rawResponse ? JSON.parse(rawResponse) : {};
+      } catch {
+        data = {};
+      }
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to upload image");
+        const diagnostic = buildUploadDebugLog({
+          stage: "server_error",
+          file,
+          status: res.status,
+          payload: data,
+          rawResponse,
+        });
+        generatedDiagnostic = diagnostic;
+        setUploadDebugLog(diagnostic);
+
+        const message =
+          typeof data.error === "string" ? data.error : "Failed to upload image";
+        const ref = typeof data.requestId === "string" ? ` (Ref: ${data.requestId})` : "";
+        throw new Error(`${message}${ref}`);
+      }
+
+      if (typeof data.url !== "string" || !data.url) {
+        const diagnostic = buildUploadDebugLog({
+          stage: "invalid_success_payload",
+          file,
+          status: res.status,
+          payload: data,
+          rawResponse,
+        });
+        generatedDiagnostic = diagnostic;
+        setUploadDebugLog(diagnostic);
+        throw new Error("Upload succeeded but response payload is invalid");
       }
 
       setImageUrl(data.url);
     } catch (err) {
+      if (!generatedDiagnostic) {
+        const diagnostic = buildUploadDebugLog({
+          stage: "client_exception",
+          file,
+          clientError: err,
+        });
+        generatedDiagnostic = diagnostic;
+        setUploadDebugLog(diagnostic);
+      }
       setError(err instanceof Error ? err.message : "Failed to upload image");
     } finally {
       setIsUploading(false);
@@ -345,6 +432,7 @@ export function AddItemModal({
       });
       setUomConversions([]);
       setImageUrl(null);
+      setUploadDebugLog(null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       setError(errorMessage);
@@ -412,6 +500,34 @@ export function AddItemModal({
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
               {error}
+            </div>
+          )}
+
+          {uploadDebugLog && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium">Upload diagnostics (copy and share)</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(uploadDebugLog);
+                    } catch {
+                      // no-op: users can still select and copy manually
+                    }
+                  }}
+                >
+                  Copy log
+                </Button>
+              </div>
+              <textarea
+                readOnly
+                value={uploadDebugLog}
+                rows={8}
+                className="w-full rounded border border-amber-300 bg-white p-2 text-xs font-mono"
+              />
             </div>
           )}
 

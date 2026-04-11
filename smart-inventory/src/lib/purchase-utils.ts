@@ -2,9 +2,63 @@ import { PrismaClient } from '@/generated/prisma';
 
 type TxClient = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
 type DbOrTxClient = PrismaClient | TxClient;
+type RawNumberClient = {
+  $queryRawUnsafe: <T = unknown>(query: string, ...values: unknown[]) => Promise<T>;
+};
 
 // System user ID for operations before auth is implemented
 export const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
+
+function parseMaxSequence(rows: Array<{ max_num: bigint | number | null }>): number {
+  const raw = rows?.[0]?.max_num;
+  if (typeof raw === 'bigint') return Number(raw);
+  const parsed = Number(raw ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function getMaxPurchaseOrderSequence(client: RawNumberClient): Promise<number> {
+  const rows = await client.$queryRawUnsafe<Array<{ max_num: bigint | number | null }>>(
+    `
+      SELECT MAX(CAST(SUBSTRING(orderNumber, 4) AS UNSIGNED)) AS max_num
+      FROM purchase_orders
+      WHERE orderNumber REGEXP '^PO-[0-9]+$'
+    `
+  );
+  return parseMaxSequence(rows);
+}
+
+async function getMaxPurchaseInvoiceSequence(client: RawNumberClient): Promise<number> {
+  const rows = await client.$queryRawUnsafe<Array<{ max_num: bigint | number | null }>>(
+    `
+      SELECT MAX(CAST(SUBSTRING(invoiceNumber, 4) AS UNSIGNED)) AS max_num
+      FROM purchase_invoices
+      WHERE invoiceNumber REGEXP '^PI-[0-9]+$'
+    `
+  );
+  return parseMaxSequence(rows);
+}
+
+async function getMaxVendorPaymentSequence(client: RawNumberClient): Promise<number> {
+  const rows = await client.$queryRawUnsafe<Array<{ max_num: bigint | number | null }>>(
+    `
+      SELECT MAX(CAST(SUBSTRING(paymentNumber, 4) AS UNSIGNED)) AS max_num
+      FROM vendor_payments
+      WHERE paymentNumber REGEXP '^VP-[0-9]+$'
+    `
+  );
+  return parseMaxSequence(rows);
+}
+
+async function getMaxPurchaseReturnSequence(client: RawNumberClient): Promise<number> {
+  const rows = await client.$queryRawUnsafe<Array<{ max_num: bigint | number | null }>>(
+    `
+      SELECT MAX(CAST(SUBSTRING(returnNumber, 4) AS UNSIGNED)) AS max_num
+      FROM purchase_returns
+      WHERE returnNumber REGEXP '^PR-[0-9]+$'
+    `
+  );
+  return parseMaxSequence(rows);
+}
 
 /**
  * Run number generation while holding a named MySQL lock.
@@ -43,88 +97,68 @@ async function withPurchaseNumberLock<T>(
  * Generate the next purchase order number in sequence (PO-0001, PO-0002, etc.)
  */
 export async function generatePurchaseOrderNumber(db: DbOrTxClient): Promise<string> {
-  return withPurchaseNumberLock(db, 'po_number_lock', async (conn) => {
-    const lastOrder = await conn.purchaseOrder.findFirst({
-      orderBy: { orderNumber: 'desc' },
-      select: { orderNumber: true },
+  const format = (num: number) => `PO-${String(num + 1).padStart(4, '0')}`;
+  try {
+    return await withPurchaseNumberLock(db, 'po_number_lock', async (conn) => {
+      const maxNum = await getMaxPurchaseOrderSequence(conn as unknown as RawNumberClient);
+      return format(maxNum);
     });
-
-    let nextNum = 1;
-    if (lastOrder) {
-      const match = lastOrder.orderNumber.match(/PO-(\d+)/);
-      if (match) {
-        nextNum = parseInt(match[1], 10) + 1;
-      }
-    }
-
-    return `PO-${String(nextNum).padStart(4, '0')}`;
-  });
+  } catch (error) {
+    console.error('PO number lock path failed, using unlocked fallback:', error);
+    const maxNum = await getMaxPurchaseOrderSequence(db as unknown as RawNumberClient);
+    return format(maxNum);
+  }
 }
 
 /**
  * Generate the next purchase invoice number in sequence (PI-0001, PI-0002, etc.)
  */
 export async function generatePurchaseInvoiceNumber(db: DbOrTxClient): Promise<string> {
-  return withPurchaseNumberLock(db, 'pi_number_lock', async (conn) => {
-    const lastInvoice = await conn.purchaseInvoice.findFirst({
-      orderBy: { invoiceNumber: 'desc' },
-      select: { invoiceNumber: true },
+  const format = (num: number) => `PI-${String(num + 1).padStart(4, '0')}`;
+  try {
+    return await withPurchaseNumberLock(db, 'pi_number_lock', async (conn) => {
+      const maxNum = await getMaxPurchaseInvoiceSequence(conn as unknown as RawNumberClient);
+      return format(maxNum);
     });
-
-    let nextNum = 1;
-    if (lastInvoice) {
-      const match = lastInvoice.invoiceNumber.match(/PI-(\d+)/);
-      if (match) {
-        nextNum = parseInt(match[1], 10) + 1;
-      }
-    }
-
-    return `PI-${String(nextNum).padStart(4, '0')}`;
-  });
+  } catch (error) {
+    console.error('PI number lock path failed, using unlocked fallback:', error);
+    const maxNum = await getMaxPurchaseInvoiceSequence(db as unknown as RawNumberClient);
+    return format(maxNum);
+  }
 }
 
 /**
  * Generate the next vendor payment number in sequence (VP-0001, VP-0002, etc.)
  */
 export async function generateVendorPaymentNumber(db: DbOrTxClient): Promise<string> {
-  return withPurchaseNumberLock(db, 'vp_number_lock', async (conn) => {
-    const lastPayment = await conn.vendorPayment.findFirst({
-      orderBy: { paymentNumber: 'desc' },
-      select: { paymentNumber: true },
+  const format = (num: number) => `VP-${String(num + 1).padStart(4, '0')}`;
+  try {
+    return await withPurchaseNumberLock(db, 'vp_number_lock', async (conn) => {
+      const maxNum = await getMaxVendorPaymentSequence(conn as unknown as RawNumberClient);
+      return format(maxNum);
     });
-
-    let nextNum = 1;
-    if (lastPayment) {
-      const match = lastPayment.paymentNumber.match(/VP-(\d+)/);
-      if (match) {
-        nextNum = parseInt(match[1], 10) + 1;
-      }
-    }
-
-    return `VP-${String(nextNum).padStart(4, '0')}`;
-  });
+  } catch (error) {
+    console.error('VP number lock path failed, using unlocked fallback:', error);
+    const maxNum = await getMaxVendorPaymentSequence(db as unknown as RawNumberClient);
+    return format(maxNum);
+  }
 }
 
 /**
  * Generate the next purchase return number in sequence (PR-0001, PR-0002, etc.)
  */
 export async function generatePurchaseReturnNumber(db: DbOrTxClient): Promise<string> {
-  return withPurchaseNumberLock(db, 'pr_number_lock', async (conn) => {
-    const lastReturn = await conn.purchaseReturn.findFirst({
-      orderBy: { returnNumber: 'desc' },
-      select: { returnNumber: true },
+  const format = (num: number) => `PR-${String(num + 1).padStart(4, '0')}`;
+  try {
+    return await withPurchaseNumberLock(db, 'pr_number_lock', async (conn) => {
+      const maxNum = await getMaxPurchaseReturnSequence(conn as unknown as RawNumberClient);
+      return format(maxNum);
     });
-
-    let nextNum = 1;
-    if (lastReturn) {
-      const match = lastReturn.returnNumber.match(/PR-(\d+)/);
-      if (match) {
-        nextNum = parseInt(match[1], 10) + 1;
-      }
-    }
-
-    return `PR-${String(nextNum).padStart(4, '0')}`;
-  });
+  } catch (error) {
+    console.error('PR number lock path failed, using unlocked fallback:', error);
+    const maxNum = await getMaxPurchaseReturnSequence(db as unknown as RawNumberClient);
+    return format(maxNum);
+  }
 }
 
 /**

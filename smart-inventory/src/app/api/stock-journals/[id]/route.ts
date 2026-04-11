@@ -77,21 +77,53 @@ export async function DELETE(
 
       const qty = Number(journal.quantity);
 
+      const linkedMovement = await tx.stockMovement.findFirst({
+        where: {
+          referenceType: 'STOCK_JOURNAL',
+          referenceId: id,
+        },
+        select: { notes: true },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const notesText = (linkedMovement?.notes || '').toUpperCase();
+      const reasonText = (journal.reason || '').toUpperCase();
+      const hasLegacyReservedMarker = /\bRESERVED\b/.test(notesText) ||
+        (!linkedMovement && /\bRESERVED\b/.test(reasonText));
+      const hasLegacyUnreservedMarker = /\bUNRESERVED\b/.test(notesText) ||
+        (!linkedMovement && /\bUNRESERVED\b/.test(reasonText));
+
       switch (journal.type) {
         case 'ADJUSTMENT_IN': {
-          const updated = await tx.inventory.updateMany({
-            where: { id: inventory.id, physicalStock: { gte: qty } },
-            data: { physicalStock: { decrement: qty } },
-          });
-          if (updated.count !== 1) throw new Error('INSUFFICIENT_PHYSICAL_FOR_REVERSE');
+          if (hasLegacyUnreservedMarker) {
+            await tx.inventory.update({
+              where: { id: inventory.id },
+              data: { reservedQuantity: { increment: qty } },
+            });
+          } else {
+            const updated = await tx.inventory.updateMany({
+              where: { id: inventory.id, physicalStock: { gte: qty } },
+              data: { physicalStock: { decrement: qty } },
+            });
+            if (updated.count !== 1) throw new Error('INSUFFICIENT_PHYSICAL_FOR_REVERSE');
+          }
           break;
         }
-        case 'ADJUSTMENT_OUT':
-          await tx.inventory.update({
-            where: { id: inventory.id },
-            data: { physicalStock: { increment: qty } },
-          });
+        case 'ADJUSTMENT_OUT': {
+          if (hasLegacyReservedMarker) {
+            const updated = await tx.inventory.updateMany({
+              where: { id: inventory.id, reservedQuantity: { gte: qty } },
+              data: { reservedQuantity: { decrement: qty } },
+            });
+            if (updated.count !== 1) throw new Error('INSUFFICIENT_RESERVED_FOR_REVERSE');
+          } else {
+            await tx.inventory.update({
+              where: { id: inventory.id },
+              data: { physicalStock: { increment: qty } },
+            });
+          }
           break;
+        }
         case 'TRANSFER': {
           const updated = await tx.inventory.updateMany({
             where: { id: inventory.id, reservedQuantity: { gte: qty } },
