@@ -1,17 +1,41 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { checkAuth } from '@/lib/api-auth';
+import { checkPermission } from '@/lib/api-auth';
+import type { EntityType } from '@/lib/import-utils';
+import type { PermissionKey } from '@/types/permissions';
+
+const IMPORT_ENTITY_PERMISSION: Record<EntityType, PermissionKey> = {
+  CUSTOMER: 'masters_customers',
+  VENDOR: 'masters_vendors',
+  ITEM: 'masters_items',
+  EMPLOYEE: 'masters_employees',
+  STOCK_JOURNAL: 'ledger_stock_journal',
+  PAYMENT: 'sales_receipts',
+  VENDOR_PAYMENT: 'purchases_payments',
+  SALES_INVOICE: 'sales_invoices',
+  PURCHASE_INVOICE: 'purchases_invoices',
+};
+
+function getPermissionKeyForEntityType(entityType: string): PermissionKey | null {
+  return IMPORT_ENTITY_PERMISSION[entityType as EntityType] ?? null;
+}
 
 export async function GET(request: Request) {
   try {
-    const { error } = await checkAuth();
-    if (error) return error;
     const { searchParams } = new URL(request.url);
     const entityType = searchParams.get('entityType');
 
     if (!entityType) {
       return NextResponse.json({ error: 'entityType is required' }, { status: 400 });
     }
+
+    const permissionKey = getPermissionKeyForEntityType(entityType);
+    if (!permissionKey) {
+      return NextResponse.json({ error: `Invalid entity type: ${entityType}` }, { status: 400 });
+    }
+
+    const { error } = await checkPermission(permissionKey, 'view');
+    if (error) return error;
 
     const mappings = await db.importMapping.findMany({
       where: { entityType },
@@ -27,15 +51,20 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { error: postErr } = await checkAuth();
-    if (postErr) return postErr;
-
     const body = await request.json();
     const { entityType, name, mapping } = body;
 
     if (!entityType || !name || !mapping) {
       return NextResponse.json({ error: 'entityType, name, and mapping are required' }, { status: 400 });
     }
+
+    const permissionKey = getPermissionKeyForEntityType(entityType);
+    if (!permissionKey) {
+      return NextResponse.json({ error: `Invalid entity type: ${entityType}` }, { status: 400 });
+    }
+
+    const { error: postErr } = await checkPermission(permissionKey, 'edit');
+    if (postErr) return postErr;
 
     const created = await db.importMapping.create({
       data: { entityType, name, mapping },
@@ -53,15 +82,29 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { error: putErr } = await checkAuth();
-    if (putErr) return putErr;
-
     const body = await request.json();
     const { id, name, mapping } = body;
 
     if (!id || !mapping) {
       return NextResponse.json({ error: 'id and mapping are required' }, { status: 400 });
     }
+
+    const existingMapping = await db.importMapping.findUnique({
+      where: { id },
+      select: { entityType: true },
+    });
+
+    if (!existingMapping) {
+      return NextResponse.json({ error: 'Mapping not found' }, { status: 404 });
+    }
+
+    const permissionKey = getPermissionKeyForEntityType(existingMapping.entityType);
+    if (!permissionKey) {
+      return NextResponse.json({ error: `Invalid entity type: ${existingMapping.entityType}` }, { status: 400 });
+    }
+
+    const { error: putErr } = await checkPermission(permissionKey, 'edit');
+    if (putErr) return putErr;
 
     const updated = await db.importMapping.update({
       where: { id },

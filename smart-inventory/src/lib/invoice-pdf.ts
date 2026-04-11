@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { getStateCode, splitGST } from "./gst-report-utils";
 
 // ── Types ────────────────────────────────────────────────────────
 export interface CompanySettings {
@@ -434,16 +435,22 @@ export function generateInvoicePDF(
   let ry2 = footerStartY;
   const taxRightEdge = pw - mr;
 
-  // Group items by tax rate
-  const taxGroups: Record<number, { taxable: number; cgst: number; sgst: number }> = {};
+  // Group items by tax rate and split tax based on intra/inter-state rules.
+  const companyStateCode = getStateCode(company.company_gstin, company.company_state);
+  const customerStateCode = getStateCode(invoice.customer.gstin, invoice.customer.state);
+  const effectiveCompanyStateCode = companyStateCode ?? "";
+
+  const taxGroups: Record<number, { taxable: number; igst: number; cgst: number; sgst: number }> = {};
   for (const item of invoice.items) {
     const rate = Number(item.taxRate);
-    if (!taxGroups[rate]) taxGroups[rate] = { taxable: 0, cgst: 0, sgst: 0 };
+    if (!taxGroups[rate]) taxGroups[rate] = { taxable: 0, igst: 0, cgst: 0, sgst: 0 };
     const taxable = Number(item.quantity) * Number(item.rate);
     const tax = Number(item.taxAmount);
+    const split = splitGST(tax, effectiveCompanyStateCode, customerStateCode);
     taxGroups[rate].taxable += taxable;
-    taxGroups[rate].cgst += tax / 2;
-    taxGroups[rate].sgst += tax / 2;
+    taxGroups[rate].igst += split.igst;
+    taxGroups[rate].cgst += split.cgst;
+    taxGroups[rate].sgst += split.sgst;
   }
 
   doc.setFontSize(7.5);
@@ -454,13 +461,19 @@ export function generateInvoicePDF(
 
     const halfRate = (Number(rate) / 2).toFixed(1);
 
-    doc.text(`CGST @ ${halfRate}%`, footerRightX, ry2);
-    doc.text(fmtINR(group.cgst), taxRightEdge, ry2, { align: "right" });
-    ry2 += 3.5;
+    if (group.igst > 0) {
+      doc.text(`IGST @ ${Number(rate).toFixed(1)}%`, footerRightX, ry2);
+      doc.text(fmtINR(group.igst), taxRightEdge, ry2, { align: "right" });
+      ry2 += 3.5;
+    } else {
+      doc.text(`CGST @ ${halfRate}%`, footerRightX, ry2);
+      doc.text(fmtINR(group.cgst), taxRightEdge, ry2, { align: "right" });
+      ry2 += 3.5;
 
-    doc.text(`SGST @ ${halfRate}%`, footerRightX, ry2);
-    doc.text(fmtINR(group.sgst), taxRightEdge, ry2, { align: "right" });
-    ry2 += 3.5;
+      doc.text(`SGST @ ${halfRate}%`, footerRightX, ry2);
+      doc.text(fmtINR(group.sgst), taxRightEdge, ry2, { align: "right" });
+      ry2 += 3.5;
+    }
   }
 
   if (Number(invoice.roundOff) !== 0) {

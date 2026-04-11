@@ -1,15 +1,12 @@
 import { NextResponse } from 'next/server';
 import { transaction } from '@/lib/db';
-import { checkAuth } from '@/lib/api-auth';
+import { checkPermission } from '@/lib/api-auth';
 
 // POST /api/import/link-invoice-item
 // Links an existing master item to an unlinked imported invoice item.
 // Stock is applied for the entire invoice only once all items are resolved.
 export async function POST(request: Request) {
   try {
-    const { error } = await checkAuth();
-    if (error) return error;
-
     const body = await request.json();
     const { itemId, invoiceItemId, invoiceType } = body;
 
@@ -22,6 +19,10 @@ export async function POST(request: Request) {
     if (invoiceType !== 'SALES' && invoiceType !== 'PURCHASE') {
       return NextResponse.json({ error: 'invoiceType must be SALES or PURCHASE' }, { status: 400 });
     }
+
+    const permissionKey = invoiceType === 'SALES' ? 'sales_invoices' : 'purchases_invoices';
+    const { error } = await checkPermission(permissionKey, 'edit');
+    if (error) return error;
 
     await transaction(async (tx) => {
       if (invoiceType === 'SALES') {

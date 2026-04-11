@@ -1,15 +1,12 @@
 import { NextResponse } from 'next/server';
 import { transaction } from '@/lib/db';
-import { checkAuth } from '@/lib/api-auth';
+import { checkPermission } from '@/lib/api-auth';
 
 // POST /api/import/resolve-invoice-item
 // Creates a master item from an unlinked imported invoice item, links it,
 // then applies stock for the entire invoice once all items are resolved.
 export async function POST(request: Request) {
   try {
-    const { error } = await checkAuth();
-    if (error) return error;
-
     const body = await request.json();
     const { invoiceItemId, invoiceType, itemData } = body;
 
@@ -28,6 +25,13 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const invoicePermissionKey = invoiceType === 'SALES' ? 'sales_invoices' : 'purchases_invoices';
+    const { error: invoicePermissionError } = await checkPermission(invoicePermissionKey, 'edit');
+    if (invoicePermissionError) return invoicePermissionError;
+
+    const { error: itemPermissionError } = await checkPermission('masters_items', 'edit');
+    if (itemPermissionError) return itemPermissionError;
 
     await transaction(async (tx) => {
       // 1. Generate item code

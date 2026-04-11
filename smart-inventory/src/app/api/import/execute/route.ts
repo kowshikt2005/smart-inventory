@@ -4,7 +4,20 @@ import { ENTITY_FIELDS, type EntityType } from '@/lib/import-utils';
 import { generateJournalNumber, generatePaymentNumber } from '@/lib/invoice-utils';
 import { generateVendorPaymentNumber } from '@/lib/purchase-utils';
 import { SYSTEM_USER_ID } from '@/lib/order-utils';
-import { checkAuth } from '@/lib/api-auth';
+import { checkAuth, checkPermission } from '@/lib/api-auth';
+import type { PermissionKey } from '@/types/permissions';
+
+const IMPORT_ENTITY_PERMISSION: Record<EntityType, PermissionKey> = {
+  CUSTOMER: 'masters_customers',
+  VENDOR: 'masters_vendors',
+  ITEM: 'masters_items',
+  EMPLOYEE: 'masters_employees',
+  STOCK_JOURNAL: 'ledger_stock_journal',
+  PAYMENT: 'sales_receipts',
+  VENDOR_PAYMENT: 'purchases_payments',
+  SALES_INVOICE: 'sales_invoices',
+  PURCHASE_INVOICE: 'purchases_invoices',
+};
 // ── helpers ──────────────────────────────────────────────
 
 function str(v: unknown): string {
@@ -1064,13 +1077,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Invalid entity type: ${entityType}` }, { status: 400 });
     }
 
+    const parsedEntityType = entityType as EntityType;
+    const permissionLevel = action === 'import' ? 'edit' : 'view';
+    const permissionKey = IMPORT_ENTITY_PERMISSION[parsedEntityType];
+    const { error: permissionError } = await checkPermission(permissionKey, permissionLevel);
+    if (permissionError) return permissionError;
+
     if (action === 'validate') {
-      const results = await validateRows(entityType as EntityType, rows);
+      const results = await validateRows(parsedEntityType, rows);
       return NextResponse.json({ results });
     }
 
     if (action === 'import') {
-      const results = await importRows(entityType as EntityType, rows);
+      const results = await importRows(parsedEntityType, rows);
       return NextResponse.json(results);
     }
 

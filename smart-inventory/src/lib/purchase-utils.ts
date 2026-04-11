@@ -1,106 +1,130 @@
 import { PrismaClient } from '@/generated/prisma';
 
+type TxClient = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
+type DbOrTxClient = PrismaClient | TxClient;
+
 // System user ID for operations before auth is implemented
 export const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 /**
- * Acquire a named MySQL lock to prevent race conditions in number generation.
+ * Run number generation while holding a named MySQL lock.
+ * For pooled clients we wrap in $transaction to keep lock + read + release
+ * on the same physical connection. For tx clients, queries are already pinned.
  */
-async function acquireNumberLock(db: PrismaClient, lockName: string): Promise<void> {
-  const result = await db.$queryRawUnsafe<{ lock_result: number }[]>(
-    `SELECT GET_LOCK(?, 10) as lock_result`, lockName
-  );
-  if (!result[0] || result[0].lock_result !== 1) {
-    throw new Error(`Failed to acquire lock for ${lockName} generation`);
+async function withPurchaseNumberLock<T>(
+  db: DbOrTxClient,
+  lockName: string,
+  fn: (conn: DbOrTxClient) => Promise<T>
+): Promise<T> {
+  const runWithConnection = async (conn: DbOrTxClient): Promise<T> => {
+    const result = await conn.$queryRawUnsafe<{ lock_result: number }[]>(
+      `SELECT GET_LOCK(?, 10) as lock_result`,
+      lockName
+    );
+    if (!result[0] || result[0].lock_result !== 1) {
+      throw new Error(`Failed to acquire lock for ${lockName} generation`);
+    }
+
+    try {
+      return await fn(conn);
+    } finally {
+      await conn.$queryRawUnsafe(`SELECT RELEASE_LOCK(?)`, lockName);
+    }
+  };
+
+  if ('$transaction' in db && typeof db.$transaction === 'function') {
+    return db.$transaction(async (tx) => runWithConnection(tx as DbOrTxClient), { timeout: 15000 });
   }
+
+  return runWithConnection(db);
 }
 
 /**
  * Generate the next purchase order number in sequence (PO-0001, PO-0002, etc.)
  */
-export async function generatePurchaseOrderNumber(db: PrismaClient): Promise<string> {
-  await acquireNumberLock(db, 'po_number_lock');
+export async function generatePurchaseOrderNumber(db: DbOrTxClient): Promise<string> {
+  return withPurchaseNumberLock(db, 'po_number_lock', async (conn) => {
+    const lastOrder = await conn.purchaseOrder.findFirst({
+      orderBy: { orderNumber: 'desc' },
+      select: { orderNumber: true },
+    });
 
-  const lastOrder = await db.purchaseOrder.findFirst({
-    orderBy: { orderNumber: 'desc' },
-    select: { orderNumber: true },
-  });
-
-  let nextNum = 1;
-  if (lastOrder) {
-    const match = lastOrder.orderNumber.match(/PO-(\d+)/);
-    if (match) {
-      nextNum = parseInt(match[1], 10) + 1;
+    let nextNum = 1;
+    if (lastOrder) {
+      const match = lastOrder.orderNumber.match(/PO-(\d+)/);
+      if (match) {
+        nextNum = parseInt(match[1], 10) + 1;
+      }
     }
-  }
 
-  return `PO-${String(nextNum).padStart(4, '0')}`;
+    return `PO-${String(nextNum).padStart(4, '0')}`;
+  });
 }
 
 /**
  * Generate the next purchase invoice number in sequence (PI-0001, PI-0002, etc.)
  */
-export async function generatePurchaseInvoiceNumber(db: PrismaClient): Promise<string> {
-  await acquireNumberLock(db, 'pi_number_lock');
+export async function generatePurchaseInvoiceNumber(db: DbOrTxClient): Promise<string> {
+  return withPurchaseNumberLock(db, 'pi_number_lock', async (conn) => {
+    const lastInvoice = await conn.purchaseInvoice.findFirst({
+      orderBy: { invoiceNumber: 'desc' },
+      select: { invoiceNumber: true },
+    });
 
-  const lastInvoice = await db.purchaseInvoice.findFirst({
-    orderBy: { invoiceNumber: 'desc' },
-    select: { invoiceNumber: true },
-  });
-
-  let nextNum = 1;
-  if (lastInvoice) {
-    const match = lastInvoice.invoiceNumber.match(/PI-(\d+)/);
-    if (match) {
-      nextNum = parseInt(match[1], 10) + 1;
+    let nextNum = 1;
+    if (lastInvoice) {
+      const match = lastInvoice.invoiceNumber.match(/PI-(\d+)/);
+      if (match) {
+        nextNum = parseInt(match[1], 10) + 1;
+      }
     }
-  }
 
-  return `PI-${String(nextNum).padStart(4, '0')}`;
+    return `PI-${String(nextNum).padStart(4, '0')}`;
+  });
 }
 
 /**
  * Generate the next vendor payment number in sequence (VP-0001, VP-0002, etc.)
  */
-export async function generateVendorPaymentNumber(db: PrismaClient): Promise<string> {
-  await acquireNumberLock(db, 'vp_number_lock');
+export async function generateVendorPaymentNumber(db: DbOrTxClient): Promise<string> {
+  return withPurchaseNumberLock(db, 'vp_number_lock', async (conn) => {
+    const lastPayment = await conn.vendorPayment.findFirst({
+      orderBy: { paymentNumber: 'desc' },
+      select: { paymentNumber: true },
+    });
 
-  const lastPayment = await db.vendorPayment.findFirst({
-    orderBy: { paymentNumber: 'desc' },
-    select: { paymentNumber: true },
-  });
-
-  let nextNum = 1;
-  if (lastPayment) {
-    const match = lastPayment.paymentNumber.match(/VP-(\d+)/);
-    if (match) {
-      nextNum = parseInt(match[1], 10) + 1;
+    let nextNum = 1;
+    if (lastPayment) {
+      const match = lastPayment.paymentNumber.match(/VP-(\d+)/);
+      if (match) {
+        nextNum = parseInt(match[1], 10) + 1;
+      }
     }
-  }
 
-  return `VP-${String(nextNum).padStart(4, '0')}`;
+    return `VP-${String(nextNum).padStart(4, '0')}`;
+  });
 }
 
 /**
  * Generate the next purchase return number in sequence (PR-0001, PR-0002, etc.)
  */
-export async function generatePurchaseReturnNumber(db: PrismaClient): Promise<string> {
-  await acquireNumberLock(db, 'pr_number_lock');
+export async function generatePurchaseReturnNumber(db: DbOrTxClient): Promise<string> {
+  return withPurchaseNumberLock(db, 'pr_number_lock', async (conn) => {
+    const lastReturn = await conn.purchaseReturn.findFirst({
+      orderBy: { returnNumber: 'desc' },
+      select: { returnNumber: true },
+    });
 
-  const lastReturn = await db.purchaseReturn.findFirst({
-    orderBy: { returnNumber: 'desc' },
-    select: { returnNumber: true },
-  });
-
-  let nextNum = 1;
-  if (lastReturn) {
-    const match = lastReturn.returnNumber.match(/PR-(\d+)/);
-    if (match) {
-      nextNum = parseInt(match[1], 10) + 1;
+    let nextNum = 1;
+    if (lastReturn) {
+      const match = lastReturn.returnNumber.match(/PR-(\d+)/);
+      if (match) {
+        nextNum = parseInt(match[1], 10) + 1;
+      }
     }
-  }
 
-  return `PR-${String(nextNum).padStart(4, '0')}`;
+    return `PR-${String(nextNum).padStart(4, '0')}`;
+  });
 }
 
 /**

@@ -170,6 +170,21 @@ export async function PUT(
       }
 
       const updatedInvoice = await transaction(async (tx) => {
+        // Optimistic concurrency claim: abort if another request already changed this invoice.
+        const claim = await tx.invoice.updateMany({
+          where: {
+            id,
+            updatedAt: invoice.updatedAt,
+          },
+          data: {
+            updatedAt: new Date(),
+          },
+        });
+
+        if (claim.count !== 1) {
+          throw new Error('INVOICE_CONCURRENT_UPDATE');
+        }
+
         // Check if negative billing is enabled
         const negativeBillingSetting = await tx.appSetting.findUnique({ where: { key: 'negative_billing' } });
         const negativeBillingEnabled = negativeBillingSetting?.value === 'true';
@@ -342,6 +357,13 @@ export async function PUT(
 
     return NextResponse.json(updatedInvoice);
   } catch (error) {
+    if (error instanceof Error && error.message === 'INVOICE_CONCURRENT_UPDATE') {
+      return NextResponse.json(
+        { error: 'Invoice was modified by another request. Refresh and retry.' },
+        { status: 409 }
+      );
+    }
+
     console.error('Error updating invoice:', error);
     return NextResponse.json(
       { error: 'Failed to update invoice' },

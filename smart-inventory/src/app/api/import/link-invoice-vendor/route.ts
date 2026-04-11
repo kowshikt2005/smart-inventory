@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { checkAuth } from '@/lib/api-auth';
+import { checkPermission } from '@/lib/api-auth';
 
 // POST /api/import/link-invoice-vendor
 // Links an existing master vendor to an imported purchase invoice that has no vendorId.
 export async function POST(request: Request) {
   try {
-    const { error } = await checkAuth();
+    const { error } = await checkPermission('purchases_invoices', 'edit');
     if (error) return error;
 
     const body = await request.json();

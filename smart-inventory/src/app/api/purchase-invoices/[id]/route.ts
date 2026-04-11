@@ -145,6 +145,21 @@ export async function PUT(
       const effectiveRoundOffMode = normalizeRoundOffMode(body.roundOffMode || roundOffSetting?.value);
 
       const updatedInvoice = await transaction(async (tx) => {
+        // Optimistic concurrency claim: abort if another request already changed this invoice.
+        const claim = await tx.purchaseInvoice.updateMany({
+          where: {
+            id,
+            updatedAt: existingInvoice.updatedAt,
+          },
+          data: {
+            updatedAt: new Date(),
+          },
+        });
+
+        if (claim.count !== 1) {
+          throw new Error('INVOICE_CONCURRENT_UPDATE');
+        }
+
         // Calculate new items first (needed for validation)
         const newItemsPreview: Record<string, number> = {};
         for (const item of body.items) {
@@ -343,6 +358,13 @@ export async function PUT(
 
     return NextResponse.json(updatedInvoice);
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'INVOICE_CONCURRENT_UPDATE') {
+      return NextResponse.json(
+        { error: 'Purchase invoice was modified by another request. Refresh and retry.' },
+        { status: 409 }
+      );
+    }
+
     console.error('Error updating purchase invoice:', error);
 
     const prismaError = error as { code?: string };

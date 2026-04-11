@@ -378,7 +378,6 @@ export function AddCustomerModal({
       name: rs.name,
       validFrom: rs.validFrom.split("T")[0],
       validTo: rs.validTo ? rs.validTo.split("T")[0] : "",
-      discountPercent: String(rs.discountPercent),
       isActive: rs.isActive,
       inclusionDiscounts: rs.inclusionDiscounts || { brands: [], subBrands: [], items: [] },
     });

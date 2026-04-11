@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { checkAuth } from '@/lib/api-auth';
+import { checkPermission } from '@/lib/api-auth';
 
 // pdf2json: pure-JS PDF parser that exposes per-character x/y positions.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -396,12 +396,17 @@ function parsePdfInvoice(rows: PageRow[], invoiceType: 'SALES' | 'PURCHASE') {
 
 export async function POST(request: Request) {
   try {
-    const { error } = await checkAuth();
-    if (error) return error;
-
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const invoiceType = (formData.get('invoiceType') as string) || 'PURCHASE';
+
+    if (invoiceType !== 'SALES' && invoiceType !== 'PURCHASE') {
+      return NextResponse.json({ error: 'invoiceType must be SALES or PURCHASE' }, { status: 400 });
+    }
+
+    const permissionKey = invoiceType === 'SALES' ? 'sales_invoices' : 'purchases_invoices';
+    const { error } = await checkPermission(permissionKey, 'view');
+    if (error) return error;
 
     if (!file)
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, transaction } from '@/lib/db';
 import { isValidPRStatusTransition } from '@/lib/purchase-utils';
 import { checkPermission } from '@/lib/api-auth';
 
@@ -26,6 +26,18 @@ export async function PATCH(
     // Find existing return
     const existingReturn = await db.purchaseReturn.findUnique({
       where: { id },
+      include: {
+        items: {
+          include: {
+            item: {
+              include: {
+                inventory: true,
+              },
+            },
+          },
+        },
+        vendor: true,
+      },
     });
 
     if (!existingReturn) {
@@ -68,7 +80,151 @@ export async function PATCH(
       );
     }
 
-    // Update the return status
+    // COMPLETED is not a plain status flip: it must also mutate inventory + ledgers.
+    if (newStatus === 'COMPLETED') {
+      // Verify all items have sufficient stock for return
+      for (const returnItem of existingReturn.items) {
+        const inventory = returnItem.item.inventory;
+        const currentStock = inventory ? Number(inventory.physicalStock) : 0;
+        const returnQty = Number(returnItem.quantity);
+
+        if (currentStock < returnQty) {
+          return NextResponse.json(
+            {
+              error: `Insufficient stock for ${returnItem.item.name}. Available: ${currentStock}, Return Qty: ${returnQty}`,
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      const completedReturn = await transaction(async (tx) => {
+        const claim = await tx.purchaseReturn.updateMany({
+          where: {
+            id,
+            status: 'OPEN',
+          },
+          data: {
+            status: 'COMPLETED',
+            notes: reason
+              ? `${existingReturn.notes ? existingReturn.notes + '\n' : ''}[Status: COMPLETED] ${reason}`
+              : existingReturn.notes,
+          },
+        });
+
+        if (claim.count !== 1) {
+          throw new Error('RETURN_ALREADY_COMPLETED');
+        }
+
+        // Update inventory - decrease physical stock for each item
+        for (const returnItem of existingReturn.items) {
+          const updated = await tx.inventory.updateMany({
+            where: {
+              itemId: returnItem.itemId,
+              physicalStock: { gte: Number(returnItem.quantity) },
+            },
+            data: {
+              physicalStock: {
+                decrement: Number(returnItem.quantity),
+              },
+            },
+          });
+
+          if (updated.count !== 1) {
+            throw new Error(`Insufficient stock for item ${returnItem.itemId}`);
+          }
+
+          const inventory = await tx.inventory.findUniqueOrThrow({
+            where: { itemId: returnItem.itemId },
+            select: { id: true },
+          });
+
+          await tx.stockMovement.create({
+            data: {
+              inventoryId: inventory.id,
+              itemId: returnItem.itemId,
+              quantity: -Number(returnItem.quantity),
+              type: 'RETURN',
+              referenceType: 'PURCHASE_RETURN',
+              referenceId: id,
+              notes: `Purchase return ${existingReturn.returnNumber}`,
+            },
+          });
+        }
+
+        const lastLedgerEntry = await tx.vendorLedger.findFirst({
+          where: { vendorId: existingReturn.vendorId },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        const previousBalance = lastLedgerEntry
+          ? Number(lastLedgerEntry.balance)
+          : Number(existingReturn.vendor.openingBalance);
+        const newBalance = previousBalance - Number(existingReturn.totalAmount);
+
+        await tx.vendorLedger.create({
+          data: {
+            vendorId: existingReturn.vendorId,
+            date: existingReturn.date,
+            description: `Purchase Return ${existingReturn.returnNumber}`,
+            type: 'PURCHASE_RETURN',
+            debit: Number(existingReturn.totalAmount),
+            credit: 0,
+            balance: newBalance,
+            referenceType: 'purchase_return',
+            referenceId: id,
+          },
+        });
+
+        if (existingReturn.purchaseInvoiceId) {
+          const invoice = await tx.purchaseInvoice.findUnique({
+            where: { id: existingReturn.purchaseInvoiceId },
+          });
+
+          if (invoice) {
+            const invoiceNewBalance = Math.max(0, Number(invoice.balanceAmount) - Number(existingReturn.totalAmount));
+            const invoiceNewStatus = invoiceNewBalance <= 0.01 ? 'PAID' : invoice.status;
+
+            await tx.purchaseInvoice.update({
+              where: { id: existingReturn.purchaseInvoiceId },
+              data: {
+                balanceAmount: invoiceNewBalance,
+                status: invoiceNewStatus,
+              },
+            });
+          }
+        }
+
+        return tx.purchaseReturn.findUniqueOrThrow({
+          where: { id },
+          include: {
+            vendor: {
+              select: {
+                id: true,
+                vendorNumber: true,
+                name: true,
+              },
+            },
+            items: {
+              include: {
+                item: {
+                  select: {
+                    id: true,
+                    itemCode: true,
+                    name: true,
+                    unit: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+      });
+
+      return NextResponse.json(completedReturn);
+    }
+
+    // Regular status updates (OPEN -> CANCELLED)
     const updatedReturn = await db.purchaseReturn.update({
       where: { id },
       data: {
@@ -102,6 +258,13 @@ export async function PATCH(
 
     return NextResponse.json(updatedReturn);
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'RETURN_ALREADY_COMPLETED') {
+      return NextResponse.json(
+        { error: 'Purchase return is already completed by another request' },
+        { status: 409 }
+      );
+    }
+
     console.error('Error updating purchase return status:', error);
 
     const prismaError = error as { code?: string };

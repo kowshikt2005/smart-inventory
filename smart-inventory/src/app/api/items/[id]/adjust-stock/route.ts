@@ -29,26 +29,7 @@ export async function POST(
       );
     }
 
-    // Get item with inventory
-    const item = await db.item.findUnique({
-      where: { id },
-      include: {
-        inventory: true,
-      },
-    });
-
-    if (!item) {
-      return NextResponse.json(
-        { error: 'Item not found' },
-        { status: 404 }
-      );
-    }
-
-    // User enters the actual physical count — reservations are sales-order-workflow
-    // only and must never affect physical stock adjustments
     const newPhysicalStock = Number(body.newStock);
-    const currentPhysicalStock = Number(item.inventory?.physicalStock || 0);
-    const adjustment = newPhysicalStock - currentPhysicalStock;
 
     // Ensure system user exists
     let systemUser = await db.user.findUnique({
@@ -70,9 +51,23 @@ export async function POST(
 
     // Update stock in transaction
     const result = await transaction(async (tx) => {
+      const item = await tx.item.findUnique({
+        where: { id },
+        include: {
+          inventory: true,
+        },
+      });
+
+      if (!item) {
+        throw new Error('ITEM_NOT_FOUND');
+      }
+
+      const currentPhysicalStock = Number(item.inventory?.physicalStock || 0);
+      const adjustment = newPhysicalStock - currentPhysicalStock;
+
       let inventory;
 
-      // Create or update inventory
+      // Create or update inventory with optimistic guard to avoid lost updates.
       if (!item.inventory) {
         inventory = await tx.inventory.create({
           data: {
@@ -83,12 +78,21 @@ export async function POST(
           },
         });
       } else {
-        inventory = await tx.inventory.update({
-          where: { id: item.inventory.id },
+        const updated = await tx.inventory.updateMany({
+          where: {
+            id: item.inventory.id,
+            physicalStock: currentPhysicalStock,
+          },
           data: {
             physicalStock: newPhysicalStock,
           },
         });
+
+        if (updated.count !== 1) {
+          throw new Error('STOCK_CONFLICT');
+        }
+
+        inventory = await tx.inventory.findUniqueOrThrow({ where: { id: item.inventory.id } });
       }
 
       // Record stock movement if there's an adjustment
@@ -108,7 +112,11 @@ export async function POST(
         });
       }
 
-      return inventory;
+      return {
+        inventory,
+        currentPhysicalStock,
+        adjustment,
+      };
     }, {
       maxWait: 10000,
       timeout: 30000,
@@ -117,12 +125,26 @@ export async function POST(
     return NextResponse.json({
       success: true,
       message: 'Physical stock adjusted successfully',
-      previousPhysicalStock: currentPhysicalStock,
+      previousPhysicalStock: result.currentPhysicalStock,
       newPhysicalStock: newPhysicalStock,
-      adjustment: adjustment,
-      inventory: result,
+      adjustment: result.adjustment,
+      inventory: result.inventory,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'ITEM_NOT_FOUND') {
+      return NextResponse.json(
+        { error: 'Item not found' },
+        { status: 404 }
+      );
+    }
+
+    if (error instanceof Error && error.message === 'STOCK_CONFLICT') {
+      return NextResponse.json(
+        { error: 'Stock was updated by another request. Please retry.' },
+        { status: 409 }
+      );
+    }
+
     console.error('Error adjusting stock:', error);
     return NextResponse.json(
       { error: 'Failed to adjust stock' },

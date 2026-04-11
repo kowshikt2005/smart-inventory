@@ -41,6 +41,12 @@ export async function POST(request: Request) {
     });
     const effectiveRoundOffMode = normalizeRoundOffMode(body.roundOffMode || roundOffSetting?.value);
 
+    const negativeBillingSetting = await db.appSetting.findUnique({
+      where: { key: 'negative_billing' },
+      select: { value: true },
+    });
+    const negativeBillingEnabled = negativeBillingSetting?.value === 'true';
+
     // Validate discount bounds on all items
     for (const item of items) {
       const dp = Number(item.discountPercent || 0);
@@ -142,7 +148,6 @@ export async function POST(request: Request) {
       const inventories = await tx.inventory.findMany({ where: { itemId: { in: itemIds } } });
       const inventoryMap = new Map(inventories.map((inv) => [inv.itemId, inv]));
 
-      const inventoryUpdates: Promise<unknown>[] = [];
       const stockMovements: Array<{
         inventoryId: string;
         itemId: string;
@@ -156,15 +161,26 @@ export async function POST(request: Request) {
 
       for (const orderItem of validItems) {
         const inv = inventoryMap.get(orderItem.itemId);
-        if (inv) {
-          inventoryUpdates.push(
-            tx.inventory.update({
-              where: { itemId: orderItem.itemId },
-              data: { physicalStock: { decrement: orderItem.quantity } },
-            })
-          );
+        if (!negativeBillingEnabled) {
+          const updated = await tx.inventory.updateMany({
+            where: {
+              itemId: orderItem.itemId,
+              physicalStock: { gte: orderItem.quantity },
+            },
+            data: { physicalStock: { decrement: orderItem.quantity } },
+          });
+
+          if (updated.count !== 1) {
+            throw new Error(`Insufficient stock for item ${orderItem.itemId}.`);
+          }
+
+          const lockedInventory = await tx.inventory.findUniqueOrThrow({
+            where: { itemId: orderItem.itemId },
+            select: { id: true },
+          });
+
           stockMovements.push({
-            inventoryId: inv.id,
+            inventoryId: lockedInventory.id,
             itemId: orderItem.itemId,
             quantity: orderItem.quantity,
             type: 'SALE',
@@ -173,15 +189,37 @@ export async function POST(request: Request) {
             notes: `Direct Invoice - ${invoiceNumber}`,
             createdBy: userId || null,
           });
+          continue;
         }
+
+        const updatedInventory = await tx.inventory.upsert({
+          where: { itemId: orderItem.itemId },
+          create: {
+            itemId: orderItem.itemId,
+            physicalStock: -orderItem.quantity,
+            reservedQuantity: 0,
+            minStockLevel: 0,
+          },
+          update: {
+            physicalStock: { decrement: orderItem.quantity },
+          },
+        });
+
+        stockMovements.push({
+          inventoryId: inv?.id || updatedInventory.id,
+          itemId: orderItem.itemId,
+          quantity: orderItem.quantity,
+          type: 'SALE',
+          referenceType: 'INVOICE',
+          referenceId: newInvoice.id,
+          notes: `Direct Invoice - ${invoiceNumber}`,
+          createdBy: userId || null,
+        });
       }
 
-      await Promise.all([
-        ...inventoryUpdates,
-        stockMovements.length > 0
-          ? tx.stockMovement.createMany({ data: stockMovements })
-          : Promise.resolve(),
-      ]);
+      if (stockMovements.length > 0) {
+        await tx.stockMovement.createMany({ data: stockMovements });
+      }
 
       // Customer ledger entry
       const lastLedgerEntry = await tx.customerLedger.findFirst({

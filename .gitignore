@@ -16,3 +16,6 @@ agents/
 # Zip/archive files
 *.zip
 *.rar
+
+# Ignore all markdown files
+*.md

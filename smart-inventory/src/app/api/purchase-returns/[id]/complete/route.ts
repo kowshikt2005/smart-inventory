@@ -63,6 +63,20 @@ export async function POST(
 
     // Complete the return in a transaction
     const completedReturn = await transaction(async (tx) => {
+      const claim = await tx.purchaseReturn.updateMany({
+        where: {
+          id,
+          status: 'OPEN',
+        },
+        data: {
+          status: 'COMPLETED',
+        },
+      });
+
+      if (claim.count !== 1) {
+        throw new Error('RETURN_ALREADY_COMPLETED');
+      }
+
       // Update inventory - decrease physical stock for each item
       for (const returnItem of existingReturn.items) {
         const inventory = returnItem.item.inventory;
@@ -140,12 +154,8 @@ export async function POST(
         }
       }
 
-      // Update the return status
-      const updated = await tx.purchaseReturn.update({
+      const updated = await tx.purchaseReturn.findUniqueOrThrow({
         where: { id },
-        data: {
-          status: 'COMPLETED',
-        },
         include: {
           vendor: {
             select: {
@@ -169,7 +179,10 @@ export async function POST(
         },
       });
 
-      return updated;
+      return {
+        ...updated,
+        status: 'COMPLETED',
+      };
     }, {
       maxWait: 10000,
       timeout: 30000,
@@ -177,6 +190,13 @@ export async function POST(
 
     return NextResponse.json(completedReturn);
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'RETURN_ALREADY_COMPLETED') {
+      return NextResponse.json(
+        { error: 'Purchase return is already completed by another request' },
+        { status: 409 }
+      );
+    }
+
     console.error('Error completing purchase return:', error);
 
     const prismaError = error as { code?: string };

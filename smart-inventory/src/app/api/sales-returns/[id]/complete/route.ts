@@ -45,6 +45,20 @@ export async function POST(
 
     // Complete return in transaction - OPTIMIZED VERSION
     await transaction(async (tx) => {
+      const claim = await tx.salesReturn.updateMany({
+        where: {
+          id,
+          status: 'OPEN',
+        },
+        data: {
+          status: 'COMPLETED',
+        },
+      });
+
+      if (claim.count !== 1) {
+        throw new Error('RETURN_ALREADY_COMPLETED');
+      }
+
       // Prepare batch operations
       const inventoryUpdates: Promise<any>[] = [];
       const stockMovements: any[] = [];
@@ -128,7 +142,7 @@ export async function POST(
         });
       }
 
-      // Create customer ledger entry, update return status, and update invoice in parallel
+      // Create customer ledger entry and update invoice in parallel
       await Promise.all([
         tx.customerLedger.create({
           data: {
@@ -141,12 +155,6 @@ export async function POST(
             balance: newBalance,
             referenceType: 'sales_return',
             referenceId: salesReturn.id,
-          },
-        }),
-        tx.salesReturn.update({
-          where: { id },
-          data: {
-            status: 'COMPLETED',
           },
         }),
         invoiceUpdatePromise,
@@ -165,6 +173,13 @@ export async function POST(
       status: 'COMPLETED'
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'RETURN_ALREADY_COMPLETED') {
+      return NextResponse.json(
+        { error: 'Sales return is already completed by another request' },
+        { status: 409 }
+      );
+    }
+
     console.error('Error completing sales return:', error);
     return NextResponse.json(
       { error: 'Failed to complete sales return' },

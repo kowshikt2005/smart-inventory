@@ -387,49 +387,82 @@ export async function POST(request: Request) {
       });
       const inventoryMap = new Map(inventories.map((inv) => [inv.itemId, inv]));
 
-      const inventoryUpdates: Promise<any>[] = [];
       const stockMovements: any[] = [];
 
       for (const orderItem of salesOrder.items) {
         const inventory = inventoryMap.get(orderItem.itemId);
+        const quantity = Number(orderItem.quantity);
 
-        if (inventory) {
-          // Deduct physical stock and release reservation
-          inventoryUpdates.push(
-            tx.inventory.update({
-              where: { itemId: orderItem.itemId },
-              data: {
-                physicalStock: {
-                  decrement: Number(orderItem.quantity),
-                },
-                reservedQuantity: {
-                  decrement: Number(orderItem.quantity),
-                },
-              },
-            })
-          );
+        if (!inventory) {
+          if (!negativeBillingEnabled) {
+            throw new Error(`Insufficient stock for item ${orderItem.itemId}: inventory record not found`);
+          }
 
-          // Record stock movement
+          const createdInventory = await tx.inventory.create({
+            data: {
+              itemId: orderItem.itemId,
+              physicalStock: -quantity,
+              reservedQuantity: 0,
+              minStockLevel: 0,
+            },
+          });
+
           stockMovements.push({
-            inventoryId: inventory.id,
+            inventoryId: createdInventory.id,
             itemId: orderItem.itemId,
-            quantity: Number(orderItem.quantity),
+            quantity,
             type: 'SALE',
             referenceType: 'INVOICE',
             referenceId: newInvoice.id,
             notes: `Invoiced - ${invoiceNumber} (Order: ${salesOrder.orderNumber})`,
             createdBy: salesOrder.createdBy,
           });
+          continue;
         }
+
+        if (!negativeBillingEnabled) {
+          const updated = await tx.inventory.updateMany({
+            where: {
+              itemId: orderItem.itemId,
+              physicalStock: { gte: quantity },
+              reservedQuantity: { gte: quantity },
+            },
+            data: {
+              physicalStock: { decrement: quantity },
+              reservedQuantity: { decrement: quantity },
+            },
+          });
+
+          if (updated.count !== 1) {
+            throw new Error(`Insufficient stock for item ${orderItem.itemId} during invoice creation. Please retry.`);
+          }
+        } else {
+          const releasableReserved = Math.min(Number(inventory.reservedQuantity || 0), quantity);
+          await tx.inventory.update({
+            where: { itemId: orderItem.itemId },
+            data: {
+              physicalStock: { decrement: quantity },
+              reservedQuantity: { decrement: releasableReserved },
+            },
+          });
+        }
+
+        // Record stock movement
+        stockMovements.push({
+          inventoryId: inventory.id,
+          itemId: orderItem.itemId,
+          quantity,
+          type: 'SALE',
+          referenceType: 'INVOICE',
+          referenceId: newInvoice.id,
+          notes: `Invoiced - ${invoiceNumber} (Order: ${salesOrder.orderNumber})`,
+          createdBy: salesOrder.createdBy,
+        });
       }
 
-      // Execute all inventory operations in parallel
-      await Promise.all([
-        ...inventoryUpdates,
-        stockMovements.length > 0
-          ? tx.stockMovement.createMany({ data: stockMovements })
-          : Promise.resolve(),
-      ]);
+      if (stockMovements.length > 0) {
+        await tx.stockMovement.createMany({ data: stockMovements });
+      }
 
       // Create customer ledger entry (DEBIT - customer owes us)
       const lastLedgerEntry = await tx.customerLedger.findFirst({

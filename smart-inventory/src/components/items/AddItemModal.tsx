@@ -34,17 +34,17 @@ interface EditItem {
   id: string;
   itemCode: string;
   name: string;
-  description?: string;
+  description?: string | null;
   purchasePrice: string | number; // Cost price
   mrp: string | number; // Maximum Retail Price
   sellingPrice: string | number; // Actual selling price
   margin?: string | number;
   marginType?: string;
-  userCode?: string;
+  userCode?: string | null;
   barcode?: string | null;
   unit: string;
   uomConversions?: Array<{ name: string; factor: number }> | null;
-  hsnCode?: string;
+  hsnCode?: string | null;
   gstRate: string | number;
   brand?: { id: string; name: string } | null;
   subBrand?: { id: string; name: string } | null;
@@ -52,7 +52,7 @@ interface EditItem {
   inventory?: {
     minStockLevel: string | number;
     openingStock?: string | number;
-  };
+  } | null;
 }
 
 interface PrefillData {
