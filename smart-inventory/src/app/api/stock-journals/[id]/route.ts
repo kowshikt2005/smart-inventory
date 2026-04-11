@@ -57,79 +57,65 @@ export async function DELETE(
 
     const { id } = await params;
 
-    const journal = await db.stockJournal.findUnique({
-      where: { id },
-    });
-
-    if (!journal) {
-      return NextResponse.json(
-        { error: 'Stock journal not found' },
-        { status: 404 }
-      );
-    }
-
-    // Get inventory
-    const inventory = await db.inventory.findUnique({
-      where: { itemId: journal.itemId },
-    });
-
-    if (!inventory) {
-      return NextResponse.json(
-        { error: 'Inventory record not found' },
-        { status: 404 }
-      );
-    }
-
-    const qty = Number(journal.quantity);
-
     // Reverse the transaction
     await transaction(async (tx) => {
-      // Determine what to reverse based on the original type
-      // ADJUSTMENT_IN was either INCREASE or UNRESERVED
-      // ADJUSTMENT_OUT was either DECREASE or RESERVED
-      
-      // Check stock movement to determine original action
-      const stockMovement = await tx.stockMovement.findFirst({
+      const journal = await tx.stockJournal.findUnique({
+        where: { id },
+      });
+
+      if (!journal) {
+        throw new Error('JOURNAL_NOT_FOUND');
+      }
+
+      const inventory = await tx.inventory.findUnique({
+        where: { itemId: journal.itemId },
+      });
+
+      if (!inventory) {
+        throw new Error('INVENTORY_NOT_FOUND');
+      }
+
+      const qty = Number(journal.quantity);
+
+      switch (journal.type) {
+        case 'ADJUSTMENT_IN': {
+          const updated = await tx.inventory.updateMany({
+            where: { id: inventory.id, physicalStock: { gte: qty } },
+            data: { physicalStock: { decrement: qty } },
+          });
+          if (updated.count !== 1) throw new Error('INSUFFICIENT_PHYSICAL_FOR_REVERSE');
+          break;
+        }
+        case 'ADJUSTMENT_OUT':
+          await tx.inventory.update({
+            where: { id: inventory.id },
+            data: { physicalStock: { increment: qty } },
+          });
+          break;
+        case 'TRANSFER': {
+          const updated = await tx.inventory.updateMany({
+            where: { id: inventory.id, reservedQuantity: { gte: qty } },
+            data: { reservedQuantity: { decrement: qty } },
+          });
+          if (updated.count !== 1) throw new Error('INSUFFICIENT_RESERVED_FOR_REVERSE');
+          break;
+        }
+        case 'RETURN':
+          await tx.inventory.update({
+            where: { id: inventory.id },
+            data: { reservedQuantity: { increment: qty } },
+          });
+          break;
+        default:
+          throw new Error(`Unsupported journal type: ${journal.type}`);
+      }
+
+      await tx.stockMovement.deleteMany({
         where: {
           referenceType: 'STOCK_JOURNAL',
           referenceId: id,
         },
       });
-
-      if (stockMovement) {
-        const notes = stockMovement.notes || '';
-        
-        if (notes.includes('INCREASE')) {
-          // Reverse INCREASE: decrement physical stock
-          await tx.inventory.update({
-            where: { id: inventory.id },
-            data: { physicalStock: { decrement: qty } },
-          });
-        } else if (notes.includes('DECREASE')) {
-          // Reverse DECREASE: increment physical stock
-          await tx.inventory.update({
-            where: { id: inventory.id },
-            data: { physicalStock: { increment: qty } },
-          });
-        } else if (notes.includes('RESERVED')) {
-          // Reverse RESERVED: decrement reserved quantity
-          await tx.inventory.update({
-            where: { id: inventory.id },
-            data: { reservedQuantity: { decrement: qty } },
-          });
-        } else if (notes.includes('UNRESERVED')) {
-          // Reverse UNRESERVED: increment reserved quantity
-          await tx.inventory.update({
-            where: { id: inventory.id },
-            data: { reservedQuantity: { increment: qty } },
-          });
-        }
-
-        // Delete the stock movement
-        await tx.stockMovement.delete({
-          where: { id: stockMovement.id },
-        });
-      }
 
       // Delete the journal
       await tx.stockJournal.delete({
@@ -139,6 +125,34 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, message: 'Stock journal deleted and reversed' });
   } catch (error) {
+    if (error instanceof Error && error.message === 'JOURNAL_NOT_FOUND') {
+      return NextResponse.json(
+        { error: 'Stock journal not found' },
+        { status: 404 }
+      );
+    }
+
+    if (error instanceof Error && error.message === 'INVENTORY_NOT_FOUND') {
+      return NextResponse.json(
+        { error: 'Inventory record not found' },
+        { status: 404 }
+      );
+    }
+
+    if (error instanceof Error && error.message === 'INSUFFICIENT_PHYSICAL_FOR_REVERSE') {
+      return NextResponse.json(
+        { error: 'Cannot reverse journal: physical stock is lower than journal quantity.' },
+        { status: 409 }
+      );
+    }
+
+    if (error instanceof Error && error.message === 'INSUFFICIENT_RESERVED_FOR_REVERSE') {
+      return NextResponse.json(
+        { error: 'Cannot reverse journal: reserved stock is lower than journal quantity.' },
+        { status: 409 }
+      );
+    }
+
     console.error('Error deleting stock journal:', error);
     return NextResponse.json(
       { error: 'Failed to delete stock journal' },

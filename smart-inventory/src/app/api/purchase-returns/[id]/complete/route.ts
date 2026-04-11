@@ -13,56 +13,44 @@ export async function POST(
 
     const { id } = await params;
 
-    // Find existing return
-    const existingReturn = await db.purchaseReturn.findUnique({
-      where: { id },
-      include: {
-        items: {
-          include: {
-            item: {
-              include: {
-                inventory: true,
+    // Complete the return in a transaction
+    const completedReturn = await transaction(async (tx) => {
+      const existingReturn = await tx.purchaseReturn.findUnique({
+        where: { id },
+        include: {
+          items: {
+            include: {
+              item: {
+                include: {
+                  inventory: true,
+                },
               },
             },
           },
+          vendor: true,
         },
-        vendor: true,
-      },
-    });
+      });
 
-    if (!existingReturn) {
-      return NextResponse.json(
-        { error: 'Purchase return not found' },
-        { status: 404 }
-      );
-    }
-
-    // Only allow completing OPEN returns
-    if (existingReturn.status !== 'OPEN') {
-      return NextResponse.json(
-        { error: 'Only OPEN returns can be completed' },
-        { status: 400 }
-      );
-    }
-
-    // Verify all items have sufficient stock for return
-    for (const returnItem of existingReturn.items) {
-      const inventory = returnItem.item.inventory;
-      const currentStock = inventory ? Number(inventory.physicalStock) : 0;
-      const returnQty = Number(returnItem.quantity);
-
-      if (currentStock < returnQty) {
-        return NextResponse.json(
-          {
-            error: `Insufficient stock for ${returnItem.item.name}. Available: ${currentStock}, Return Qty: ${returnQty}`,
-          },
-          { status: 400 }
-        );
+      if (!existingReturn) {
+        throw new Error('RETURN_NOT_FOUND');
       }
-    }
 
-    // Complete the return in a transaction
-    const completedReturn = await transaction(async (tx) => {
+      if (existingReturn.status !== 'OPEN') {
+        throw new Error('RETURN_NOT_OPEN');
+      }
+
+      for (const returnItem of existingReturn.items) {
+        const inventory = returnItem.item.inventory;
+        const currentStock = inventory ? Number(inventory.physicalStock) : 0;
+        const returnQty = Number(returnItem.quantity);
+
+        if (currentStock < returnQty) {
+          throw new Error(
+            `INSUFFICIENT_STOCK:${returnItem.item.name}:${currentStock}:${returnQty}`
+          );
+        }
+      }
+
       const claim = await tx.purchaseReturn.updateMany({
         where: {
           id,
@@ -82,15 +70,21 @@ export async function POST(
         const inventory = returnItem.item.inventory;
 
         if (inventory) {
-          // Update existing inventory
-          await tx.inventory.update({
-            where: { itemId: returnItem.itemId },
+          const updated = await tx.inventory.updateMany({
+            where: {
+              id: inventory.id,
+              physicalStock: { gte: Number(returnItem.quantity) },
+            },
             data: {
               physicalStock: {
                 decrement: Number(returnItem.quantity),
               },
             },
           });
+
+          if (updated.count !== 1) {
+            throw new Error(`INSUFFICIENT_STOCK:${returnItem.item.name}:0:${Number(returnItem.quantity)}`);
+          }
 
           // Create stock movement record
           await tx.stockMovement.create({
@@ -190,6 +184,30 @@ export async function POST(
 
     return NextResponse.json(completedReturn);
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'RETURN_NOT_FOUND') {
+      return NextResponse.json(
+        { error: 'Purchase return not found' },
+        { status: 404 }
+      );
+    }
+
+    if (error instanceof Error && error.message === 'RETURN_NOT_OPEN') {
+      return NextResponse.json(
+        { error: 'Only OPEN returns can be completed' },
+        { status: 400 }
+      );
+    }
+
+    if (error instanceof Error && error.message.startsWith('INSUFFICIENT_STOCK:')) {
+      const [, itemName, available, required] = error.message.split(':');
+      return NextResponse.json(
+        {
+          error: `Insufficient stock for ${itemName}. Available: ${available}, Return Qty: ${required}`,
+        },
+        { status: 400 }
+      );
+    }
+
     if (error instanceof Error && error.message === 'RETURN_ALREADY_COMPLETED') {
       return NextResponse.json(
         { error: 'Purchase return is already completed by another request' },

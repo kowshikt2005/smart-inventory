@@ -82,23 +82,43 @@ export async function PATCH(
 
     // COMPLETED is not a plain status flip: it must also mutate inventory + ledgers.
     if (newStatus === 'COMPLETED') {
-      // Verify all items have sufficient stock for return
-      for (const returnItem of existingReturn.items) {
-        const inventory = returnItem.item.inventory;
-        const currentStock = inventory ? Number(inventory.physicalStock) : 0;
-        const returnQty = Number(returnItem.quantity);
-
-        if (currentStock < returnQty) {
-          return NextResponse.json(
-            {
-              error: `Insufficient stock for ${returnItem.item.name}. Available: ${currentStock}, Return Qty: ${returnQty}`,
-            },
-            { status: 400 }
-          );
-        }
-      }
-
       const completedReturn = await transaction(async (tx) => {
+        const currentReturn = await tx.purchaseReturn.findUnique({
+          where: { id },
+          include: {
+            items: {
+              include: {
+                item: {
+                  include: {
+                    inventory: true,
+                  },
+                },
+              },
+            },
+            vendor: true,
+          },
+        });
+
+        if (!currentReturn) {
+          throw new Error('RETURN_NOT_FOUND');
+        }
+
+        if (currentReturn.status !== 'OPEN') {
+          throw new Error('RETURN_NOT_OPEN');
+        }
+
+        for (const returnItem of currentReturn.items) {
+          const inventory = returnItem.item.inventory;
+          const currentStock = inventory ? Number(inventory.physicalStock) : 0;
+          const returnQty = Number(returnItem.quantity);
+
+          if (currentStock < returnQty) {
+            throw new Error(
+              `INSUFFICIENT_STOCK:${returnItem.item.name}:${currentStock}:${returnQty}`
+            );
+          }
+        }
+
         const claim = await tx.purchaseReturn.updateMany({
           where: {
             id,
@@ -107,8 +127,8 @@ export async function PATCH(
           data: {
             status: 'COMPLETED',
             notes: reason
-              ? `${existingReturn.notes ? existingReturn.notes + '\n' : ''}[Status: COMPLETED] ${reason}`
-              : existingReturn.notes,
+              ? `${currentReturn.notes ? currentReturn.notes + '\n' : ''}[Status: COMPLETED] ${reason}`
+              : currentReturn.notes,
           },
         });
 
@@ -117,7 +137,7 @@ export async function PATCH(
         }
 
         // Update inventory - decrease physical stock for each item
-        for (const returnItem of existingReturn.items) {
+        for (const returnItem of currentReturn.items) {
           const updated = await tx.inventory.updateMany({
             where: {
               itemId: returnItem.itemId,
@@ -131,7 +151,7 @@ export async function PATCH(
           });
 
           if (updated.count !== 1) {
-            throw new Error(`Insufficient stock for item ${returnItem.itemId}`);
+            throw new Error(`INSUFFICIENT_STOCK:${returnItem.item.name}:0:${Number(returnItem.quantity)}`);
           }
 
           const inventory = await tx.inventory.findUniqueOrThrow({
@@ -147,28 +167,28 @@ export async function PATCH(
               type: 'RETURN',
               referenceType: 'PURCHASE_RETURN',
               referenceId: id,
-              notes: `Purchase return ${existingReturn.returnNumber}`,
+              notes: `Purchase return ${currentReturn.returnNumber}`,
             },
           });
         }
 
         const lastLedgerEntry = await tx.vendorLedger.findFirst({
-          where: { vendorId: existingReturn.vendorId },
+          where: { vendorId: currentReturn.vendorId },
           orderBy: { createdAt: 'desc' },
         });
 
         const previousBalance = lastLedgerEntry
           ? Number(lastLedgerEntry.balance)
-          : Number(existingReturn.vendor.openingBalance);
-        const newBalance = previousBalance - Number(existingReturn.totalAmount);
+          : Number(currentReturn.vendor.openingBalance);
+        const newBalance = previousBalance - Number(currentReturn.totalAmount);
 
         await tx.vendorLedger.create({
           data: {
-            vendorId: existingReturn.vendorId,
-            date: existingReturn.date,
-            description: `Purchase Return ${existingReturn.returnNumber}`,
+            vendorId: currentReturn.vendorId,
+            date: currentReturn.date,
+            description: `Purchase Return ${currentReturn.returnNumber}`,
             type: 'PURCHASE_RETURN',
-            debit: Number(existingReturn.totalAmount),
+            debit: Number(currentReturn.totalAmount),
             credit: 0,
             balance: newBalance,
             referenceType: 'purchase_return',
@@ -176,17 +196,17 @@ export async function PATCH(
           },
         });
 
-        if (existingReturn.purchaseInvoiceId) {
+        if (currentReturn.purchaseInvoiceId) {
           const invoice = await tx.purchaseInvoice.findUnique({
-            where: { id: existingReturn.purchaseInvoiceId },
+            where: { id: currentReturn.purchaseInvoiceId },
           });
 
           if (invoice) {
-            const invoiceNewBalance = Math.max(0, Number(invoice.balanceAmount) - Number(existingReturn.totalAmount));
+            const invoiceNewBalance = Math.max(0, Number(invoice.balanceAmount) - Number(currentReturn.totalAmount));
             const invoiceNewStatus = invoiceNewBalance <= 0.01 ? 'PAID' : invoice.status;
 
             await tx.purchaseInvoice.update({
-              where: { id: existingReturn.purchaseInvoiceId },
+              where: { id: currentReturn.purchaseInvoiceId },
               data: {
                 balanceAmount: invoiceNewBalance,
                 status: invoiceNewStatus,
@@ -258,6 +278,30 @@ export async function PATCH(
 
     return NextResponse.json(updatedReturn);
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'RETURN_NOT_FOUND') {
+      return NextResponse.json(
+        { error: 'Purchase return not found' },
+        { status: 404 }
+      );
+    }
+
+    if (error instanceof Error && error.message === 'RETURN_NOT_OPEN') {
+      return NextResponse.json(
+        { error: 'Purchase return is no longer OPEN. Please refresh and retry.' },
+        { status: 409 }
+      );
+    }
+
+    if (error instanceof Error && error.message.startsWith('INSUFFICIENT_STOCK:')) {
+      const [, itemName, available, required] = error.message.split(':');
+      return NextResponse.json(
+        {
+          error: `Insufficient stock for ${itemName}. Available: ${available}, Return Qty: ${required}`,
+        },
+        { status: 400 }
+      );
+    }
+
     if (error instanceof Error && error.message === 'RETURN_ALREADY_COMPLETED') {
       return NextResponse.json(
         { error: 'Purchase return is already completed by another request' },

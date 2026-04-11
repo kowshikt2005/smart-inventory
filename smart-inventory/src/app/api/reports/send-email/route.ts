@@ -30,19 +30,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No report PDF data provided" }, { status: 400 });
   }
 
-  try {
-    await sendReportEmail({
-      to: emails,
-      subject: subject || reportTitle || "Report",
-      pdfBase64,
-      filename: filename || "report.pdf",
-      reportTitle: reportTitle || "Report",
-      dateRange,
-    });
+  const result = await sendReportEmail({
+    to: emails,
+    subject: subject || reportTitle || "Report",
+    pdfBase64,
+    filename: filename || "report.pdf",
+    reportTitle: reportTitle || "Report",
+    dateRange,
+  });
 
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error("Email send error:", err);
-    return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
+  if (!result.success) {
+    return NextResponse.json({ error: result.error || "Failed to send email" }, { status: 502 });
   }
+
+  return NextResponse.json({ success: true });
 }

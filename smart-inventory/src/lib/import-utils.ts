@@ -173,6 +173,34 @@ function words(s: string): string[] {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 0);
 }
 
+function parseImportDate(value: string): Date | null {
+  const s = value.trim();
+  if (!s) return null;
+
+  // YYYY-MM-DD (treat as local calendar date to avoid UTC parsing drift)
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) {
+    const y = Number(iso[1]);
+    const m = Number(iso[2]);
+    const d = Number(iso[3]);
+    const dt = new Date(y, m - 1, d);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+
+  // DD/MM/YYYY or DD-MM-YYYY
+  const dmy = s.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
+  if (dmy) {
+    const d = Number(dmy[1]);
+    const m = Number(dmy[2]);
+    const y = Number(dmy[3]);
+    const dt = new Date(y, m - 1, d);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+
+  const dt = new Date(s);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
 /**
  * Auto-match entity fields to Excel column headers using multi-strategy matching.
  * Returns { dbField: excelColumn } — i.e. for each system field, which Excel column best matches.
@@ -307,8 +335,8 @@ export function validateRow(
     }
 
     if (field.type === 'date') {
-      const d = new Date(strVal);
-      if (isNaN(d.getTime())) {
+      const d = parseImportDate(strVal);
+      if (!d) {
         errors.push({ field: field.key, message: `${field.label} must be a valid date` });
       }
     }

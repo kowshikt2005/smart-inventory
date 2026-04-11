@@ -67,21 +67,34 @@ export async function sendReportEmail({
       </div>
     `;
 
-    await transporter.sendMail({
-      from: `"Smart Inventory" <${fromAddress}>`,
-      to: to.join(", "),
-      subject,
-      html,
-      attachments: [
-        {
-          filename,
-          content: attachment,
-          contentType: "application/pdf",
-        },
-      ],
-    });
+    try {
+      await transporter.sendMail({
+        from: `"Smart Inventory" <${fromAddress}>`,
+        to: to.join(", "),
+        subject,
+        html,
+        attachments: [
+          {
+            filename,
+            content: attachment,
+            contentType: "application/pdf",
+          },
+        ],
+      });
+
+      return { success: true as const, error: null };
+    } catch (error) {
+      console.error('Failed to send report email via SMTP:', error);
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : 'Failed to send report email',
+      };
+    }
   } catch (error) {
-    console.error('Failed to send report email:', error);
-    throw new Error('Failed to send report email');
+    console.error('Failed to prepare report email:', error);
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'Failed to prepare report email',
+    };
   }
 }

@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { checkPermission } from "@/lib/api-auth";
+
+const SEARCH_LIMIT_MAX = 20;
+const SEARCH_LIMIT_DEFAULT = 5;
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { error } = await checkPermission('reports', 'view');
+    if (error) return error;
 
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get("q");
-    const limit = parseInt(searchParams.get("limit") || "5");
+    const requestedLimit = Number.parseInt(searchParams.get("limit") || `${SEARCH_LIMIT_DEFAULT}`, 10);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(SEARCH_LIMIT_MAX, Math.max(1, requestedLimit))
+      : SEARCH_LIMIT_DEFAULT;
 
     if (!query || query.length < 2) {
       return NextResponse.json({

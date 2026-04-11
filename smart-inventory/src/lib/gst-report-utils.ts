@@ -68,10 +68,25 @@ export function getStateCode(
 // ─── Date Formatting ──────────────────────────────────────────────────────────
 /** Format Date to DD-MM-YYYY (government portal format) */
 export function fmtGovDate(d: Date | string): string {
+  if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    const [yyyy, mm, dd] = d.split("-");
+    return `${dd}-${mm}-${yyyy}`;
+  }
+
   const dt = typeof d === "string" ? new Date(d) : d;
-  const dd = String(dt.getDate()).padStart(2, "0");
-  const mm = String(dt.getMonth() + 1).padStart(2, "0");
-  return `${dd}-${mm}-${dt.getFullYear()}`;
+  if (isNaN(dt.getTime())) return String(d);
+
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(dt);
+
+  const dd = parts.find((p) => p.type === "day")?.value || "01";
+  const mm = parts.find((p) => p.type === "month")?.value || "01";
+  const yyyy = parts.find((p) => p.type === "year")?.value || "1970";
+  return `${dd}-${mm}-${yyyy}`;
 }
 
 /** Format filing period as MMYYYY */
@@ -107,9 +122,15 @@ export function getPlaceOfSupply(
 
 export function getFYDates(fy: string): { startDate: Date; endDate: Date } {
   const [startYear] = fy.split("-").map(Number);
+
+  // Report boundaries are based on IST (Indian financial year), converted to UTC instants.
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const startIstMs = Date.UTC(startYear, 3, 1, 0, 0, 0, 0);
+  const endIstMs = Date.UTC(startYear + 1, 2, 31, 23, 59, 59, 999);
+
   return {
-    startDate: new Date(startYear, 3, 1),
-    endDate: new Date(startYear + 1, 2, 31, 23, 59, 59, 999),
+    startDate: new Date(startIstMs - istOffsetMs),
+    endDate: new Date(endIstMs - istOffsetMs),
   };
 }
 
@@ -117,9 +138,14 @@ export function getMonthDates(
   month: number,
   year: number
 ): { startDate: Date; endDate: Date } {
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const monthStartIstMs = Date.UTC(year, month - 1, 1, 0, 0, 0, 0);
+  const monthEndDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const monthEndIstMs = Date.UTC(year, month - 1, monthEndDay, 23, 59, 59, 999);
+
   return {
-    startDate: new Date(year, month - 1, 1),
-    endDate: new Date(year, month, 0, 23, 59, 59, 999),
+    startDate: new Date(monthStartIstMs - istOffsetMs),
+    endDate: new Date(monthEndIstMs - istOffsetMs),
   };
 }
 

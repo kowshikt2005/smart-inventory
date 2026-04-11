@@ -72,6 +72,7 @@ export async function GET(request: Request) {
 
 // POST /api/stock-journals - Create a new stock journal entry
 export async function POST(request: Request) {
+  let requestedQty = 0;
   try {
     const { error } = await checkPermission('ledger_stock_journal', 'edit');
     if (error) return error;
@@ -104,24 +105,21 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    requestedQty = qty;
 
-    // Check item exists and get inventory
-    const item = await db.item.findUnique({
-      where: { id: itemId },
-      include: { inventory: true },
-    });
+    // Create journal entry in transaction
+    const result = await transaction(async (tx) => {
+      const item = await tx.item.findUnique({
+        where: { id: itemId },
+        include: { inventory: true },
+      });
 
-    if (!item) {
-      return NextResponse.json(
-        { error: 'Item not found' },
-        { status: 404 }
-      );
-    }
+      if (!item) {
+        throw new Error('ITEM_NOT_FOUND');
+      }
 
-    // Ensure inventory record exists
-    let inventory = item.inventory;
-    if (!inventory) {
-      inventory = await db.inventory.create({
+      // Ensure inventory record exists inside the same transaction.
+      const inventory = item.inventory || await tx.inventory.create({
         data: {
           itemId: item.id,
           physicalStock: 0,
@@ -129,51 +127,86 @@ export async function POST(request: Request) {
           minStockLevel: Number(item.minStock) || 0,
         },
       });
-    }
 
-    const physicalStock = Number(inventory.physicalStock);
-    const reservedQuantity = Number(inventory.reservedQuantity);
+      const physicalStock = Number(inventory.physicalStock);
+      const reservedQuantity = Number(inventory.reservedQuantity);
+      const availableStock = physicalStock - reservedQuantity;
 
-    // Validate stock levels for DECREASE and UNRESERVED
-    if (adjustmentType === 'DECREASE' && physicalStock < qty) {
-      return NextResponse.json(
-        { error: `Insufficient physical stock. Available: ${physicalStock}, Requested: ${qty}` },
-        { status: 400 }
-      );
-    }
-
-    if (adjustmentType === 'UNRESERVED' && reservedQuantity < qty) {
-      return NextResponse.json(
-        { error: `Insufficient reserved quantity. Reserved: ${reservedQuantity}, Requested: ${qty}` },
-        { status: 400 }
-      );
-    }
-
-    // Create journal entry in transaction
-    const result = await transaction(async (tx) => {
       // Generate journal number
       const journalNumber = await generateJournalNumber(tx as any);
 
       // Map adjustment type to stock movement type
-      let stockMovementType: 'ADJUSTMENT_IN' | 'ADJUSTMENT_OUT';
-      let inventoryUpdate: any = {};
+      let journalType: 'ADJUSTMENT_IN' | 'ADJUSTMENT_OUT' | 'TRANSFER' | 'RETURN';
+      let stockMovementType: 'ADJUSTMENT_IN' | 'ADJUSTMENT_OUT' | 'TRANSFER' | 'RETURN';
 
       switch (adjustmentType) {
         case 'INCREASE':
+          journalType = 'ADJUSTMENT_IN';
           stockMovementType = 'ADJUSTMENT_IN';
-          inventoryUpdate = { physicalStock: { increment: qty } };
+          await tx.inventory.update({
+            where: { id: inventory.id },
+            data: { physicalStock: { increment: qty } },
+          });
           break;
         case 'DECREASE':
+          if (availableStock < qty) {
+            throw new Error(`INSUFFICIENT_PHYSICAL:${availableStock}`);
+          }
+
+          journalType = 'ADJUSTMENT_OUT';
           stockMovementType = 'ADJUSTMENT_OUT';
-          inventoryUpdate = { physicalStock: { decrement: qty } };
+          // Optimistic guard prevents lost updates between read and write.
+          {
+            const updated = await tx.inventory.updateMany({
+              where: {
+                id: inventory.id,
+                physicalStock,
+                reservedQuantity,
+              },
+              data: { physicalStock: { decrement: qty } },
+            });
+            if (updated.count !== 1) throw new Error('INVENTORY_CONFLICT');
+          }
           break;
         case 'RESERVED':
-          stockMovementType = 'ADJUSTMENT_OUT'; // Reserved reduces available
-          inventoryUpdate = { reservedQuantity: { increment: qty } };
+          if (availableStock < qty) {
+            throw new Error(`INSUFFICIENT_AVAILABLE:${availableStock}`);
+          }
+
+          // Dedicated type allows deterministic reversal on delete.
+          journalType = 'TRANSFER';
+          stockMovementType = 'TRANSFER';
+          {
+            const updated = await tx.inventory.updateMany({
+              where: {
+                id: inventory.id,
+                physicalStock,
+                reservedQuantity,
+              },
+              data: { reservedQuantity: { increment: qty } },
+            });
+            if (updated.count !== 1) throw new Error('INVENTORY_CONFLICT');
+          }
           break;
         case 'UNRESERVED':
-          stockMovementType = 'ADJUSTMENT_IN'; // Unreserved increases available
-          inventoryUpdate = { reservedQuantity: { decrement: qty } };
+          if (reservedQuantity < qty) {
+            throw new Error(`INSUFFICIENT_RESERVED:${reservedQuantity}`);
+          }
+
+          // Dedicated type allows deterministic reversal on delete.
+          journalType = 'RETURN';
+          stockMovementType = 'RETURN';
+          {
+            const updated = await tx.inventory.updateMany({
+              where: {
+                id: inventory.id,
+                physicalStock,
+                reservedQuantity,
+              },
+              data: { reservedQuantity: { decrement: qty } },
+            });
+            if (updated.count !== 1) throw new Error('INVENTORY_CONFLICT');
+          }
           break;
         default:
           throw new Error('Invalid adjustment type');
@@ -186,22 +219,16 @@ export async function POST(request: Request) {
           date: new Date(date),
           itemId,
           quantity: qty,
-          type: stockMovementType,
+          type: journalType,
           reason: reason || null,
           createdBy: SYSTEM_USER_ID,
         },
       });
 
-      // Update inventory
-      await tx.inventory.update({
-        where: { id: inventory!.id },
-        data: inventoryUpdate,
-      });
-
       // Create stock movement record for audit trail
       await tx.stockMovement.create({
         data: {
-          inventoryId: inventory!.id,
+          inventoryId: inventory.id,
           itemId,
           quantity: qty,
           type: stockMovementType,
@@ -225,14 +252,56 @@ export async function POST(request: Request) {
       },
     });
 
-    // Add item info
+    const item = await db.item.findUnique({
+      where: { id: itemId },
+      select: { id: true, itemCode: true, name: true, unit: true },
+    });
+
     const journalWithItem = {
       ...completeJournal,
-      item: { id: item.id, itemCode: item.itemCode, name: item.name, unit: item.unit },
+      item,
     };
 
     return NextResponse.json(journalWithItem, { status: 201 });
   } catch (error) {
+    if (error instanceof Error && error.message === 'ITEM_NOT_FOUND') {
+      return NextResponse.json(
+        { error: 'Item not found' },
+        { status: 404 }
+      );
+    }
+
+    if (error instanceof Error && error.message === 'INVENTORY_CONFLICT') {
+      return NextResponse.json(
+        { error: 'Inventory changed concurrently. Please retry.' },
+        { status: 409 }
+      );
+    }
+
+    if (error instanceof Error && error.message.startsWith('INSUFFICIENT_PHYSICAL:')) {
+      const available = error.message.split(':')[1] || '0';
+      return NextResponse.json(
+        { error: `Insufficient physical stock. Available: ${available}, Requested: ${requestedQty}` },
+        { status: 400 }
+      );
+    }
+
+    if (error instanceof Error && error.message.startsWith('INSUFFICIENT_AVAILABLE:')) {
+      const available = error.message.split(':')[1] || '0';
+      return NextResponse.json(
+        { error: `Insufficient available stock. Available: ${available}, Requested: ${requestedQty}` },
+        { status: 400 }
+      );
+    }
+
+    if (error instanceof Error && error.message.startsWith('INSUFFICIENT_RESERVED:')) {
+      const reserved = error.message.split(':')[1] || '0';
+      return NextResponse.json(
+        { error: `Insufficient reserved quantity. Reserved: ${reserved}, Requested: ${requestedQty}` },
+        { status: 400 }
+      );
+    }
+
     console.error('Error creating stock journal:', error);
     return NextResponse.json(
       { error: 'Failed to create stock journal' },

@@ -8,14 +8,21 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 class SimpleCache {
   private cache = new Map<string, CacheEntry<unknown>>();
+  private inFlight = new Map<string, Promise<unknown>>();
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     // Cleanup expired entries every minute
     if (typeof setInterval !== 'undefined') {
       this.cleanupInterval = setInterval(() => this.cleanup(), 60000);
+      // Do not keep the Node.js event loop alive only for cache cleanup.
+      this.cleanupInterval.unref?.();
     }
   }
 
@@ -30,19 +37,34 @@ class SimpleCache {
     factory: () => Promise<T>,
     ttlSeconds: number = 30
   ): Promise<T> {
+    const now = Date.now();
     const existing = this.cache.get(key) as CacheEntry<T> | undefined;
 
-    if (existing && existing.expiresAt > Date.now()) {
+    if (existing && existing.expiresAt > now) {
       return existing.data;
     }
 
-    const data = await factory();
-    this.cache.set(key, {
-      data,
-      expiresAt: Date.now() + ttlSeconds * 1000,
-    });
+    const pending = this.inFlight.get(key) as Promise<T> | undefined;
+    if (pending) {
+      return pending;
+    }
 
-    return data;
+    const inFlightPromise = (async () => {
+      const data = await factory();
+      this.cache.set(key, {
+        data,
+        expiresAt: Date.now() + ttlSeconds * 1000,
+      });
+      return data;
+    })();
+
+    this.inFlight.set(key, inFlightPromise);
+
+    try {
+      return await inFlightPromise;
+    } finally {
+      this.inFlight.delete(key);
+    }
   }
 
   /**
@@ -71,16 +93,30 @@ class SimpleCache {
    */
   delete(key: string): void {
     this.cache.delete(key);
+    this.inFlight.delete(key);
   }
 
   /**
    * Invalidate cache entries matching a pattern
    */
   invalidate(pattern: string | RegExp): void {
-    const regex = typeof pattern === 'string' ? new RegExp(pattern) : pattern;
+    const regex = typeof pattern === 'string' ? new RegExp(escapeRegExp(pattern)) : pattern;
     for (const key of this.cache.keys()) {
       if (regex.test(key)) {
         this.cache.delete(key);
+        this.inFlight.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Invalidate all keys with a common prefix.
+   */
+  invalidatePrefix(prefix: string): void {
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(prefix)) {
+        this.cache.delete(key);
+        this.inFlight.delete(key);
       }
     }
   }
@@ -90,6 +126,7 @@ class SimpleCache {
    */
   clear(): void {
     this.cache.clear();
+    this.inFlight.clear();
   }
 
   /**

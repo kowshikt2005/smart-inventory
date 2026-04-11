@@ -46,12 +46,17 @@ export async function GET(
     // Determine content type
     const ext = path.extname(fullPath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    const safeFilename = path
+      .basename(fullPath)
+      .replace(/["\\\r\n]/g, '');
 
     const fileBuffer = await readFile(fullPath);
 
     return new NextResponse(fileBuffer, {
       headers: {
         'Content-Type': contentType,
+        'Content-Disposition': `attachment; filename="${safeFilename}"`,
+        'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     });

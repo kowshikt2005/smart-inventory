@@ -18,8 +18,22 @@ export interface VendorInvoiceParseResult {
 
 // ── Helpers ──────────────────────────────────────────────
 
-function cleanNum(v: unknown): number {
-  return parseFloat(String(v ?? "0").replace(/,/g, "")) || 0;
+function cleanNum(v: unknown, fallback = 0): number {
+  const s = String(v ?? "").replace(/,/g, "").trim();
+  if (!s) return fallback;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function cleanMaybeNum(v: unknown): number | null {
+  const s = String(v ?? "").replace(/,/g, "").trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function round3(n: number): number {
+  return Math.round(n * 1000) / 1000;
 }
 
 function cleanStr(v: unknown): string {
@@ -175,12 +189,41 @@ interface LineItem {
 }
 
 function extractLineItem(row: unknown[], col: ColMap): LineItem | null {
-  const qty = cleanNum(row[col.qty!]);
-  const rate = cleanNum(row[col.rate!]);
-  if (qty <= 0 || rate <= 0) return null;
+  const qty = cleanMaybeNum(row[col.qty!]);
+  const rate = cleanMaybeNum(row[col.rate!]);
+  if (!qty || !rate || qty <= 0 || rate <= 0) return null;
 
   const name = col.desc !== undefined ? cleanStr(row[col.desc]) : "";
   if (!name) return null;
+
+  const computedBaseValue = round3(qty * rate);
+  let baseValue = col.baseValue !== undefined ? cleanNum(row[col.baseValue], 0) : 0;
+  if (baseValue <= 0 || Math.abs(baseValue - computedBaseValue) > 1) {
+    baseValue = computedBaseValue;
+  }
+
+  let taxableValue = col.taxableValue !== undefined ? cleanNum(row[col.taxableValue], 0) : 0;
+  if (taxableValue <= 0 || Math.abs(taxableValue - baseValue) > 1) {
+    taxableValue = baseValue;
+  }
+
+  const sgstPct = col.sgstPct !== undefined ? cleanNum(row[col.sgstPct], 0) : 0;
+  const cgstPct = col.cgstPct !== undefined ? cleanNum(row[col.cgstPct], 0) : 0;
+  const igstPct = col.igstPct !== undefined ? cleanNum(row[col.igstPct], 0) : 0;
+
+  let sgstAmt = col.sgstAmt !== undefined ? cleanNum(row[col.sgstAmt], 0) : 0;
+  let cgstAmt = col.cgstAmt !== undefined ? cleanNum(row[col.cgstAmt], 0) : 0;
+  let igstAmt = col.igstAmt !== undefined ? cleanNum(row[col.igstAmt], 0) : 0;
+
+  if (sgstAmt <= 0 && sgstPct > 0) sgstAmt = round3((taxableValue * sgstPct) / 100);
+  if (cgstAmt <= 0 && cgstPct > 0) cgstAmt = round3((taxableValue * cgstPct) / 100);
+  if (igstAmt <= 0 && igstPct > 0) igstAmt = round3((taxableValue * igstPct) / 100);
+
+  const expectedGross = round3(taxableValue + sgstAmt + cgstAmt + igstAmt);
+  let grossValue = col.grossValue !== undefined ? cleanNum(row[col.grossValue], 0) : 0;
+  if (grossValue <= 0 || Math.abs(grossValue - expectedGross) > 1.5) {
+    grossValue = expectedGross;
+  }
 
   return {
     name,
@@ -193,17 +236,17 @@ function extractLineItem(row: unknown[], col: ColMap): LineItem | null {
     noOfPkt: col.noOfPkt !== undefined ? cleanNum(row[col.noOfPkt]) : 0,
     qty,
     rate,
-    baseValue: col.baseValue !== undefined ? cleanNum(row[col.baseValue]) : 0,
+    baseValue,
     discountRs: col.discountRs !== undefined ? cleanNum(row[col.discountRs]) : 0,
     discount: col.discount !== undefined ? cleanNum(row[col.discount]) : 0,
-    taxableValue: col.taxableValue !== undefined ? cleanNum(row[col.taxableValue]) : 0,
-    sgstPct: col.sgstPct !== undefined ? cleanNum(row[col.sgstPct]) : 0,
-    sgstAmt: col.sgstAmt !== undefined ? cleanNum(row[col.sgstAmt]) : 0,
-    cgstPct: col.cgstPct !== undefined ? cleanNum(row[col.cgstPct]) : 0,
-    cgstAmt: col.cgstAmt !== undefined ? cleanNum(row[col.cgstAmt]) : 0,
-    igstPct: col.igstPct !== undefined ? cleanNum(row[col.igstPct]) : 0,
-    igstAmt: col.igstAmt !== undefined ? cleanNum(row[col.igstAmt]) : 0,
-    grossValue: col.grossValue !== undefined ? cleanNum(row[col.grossValue]) : 0,
+    taxableValue,
+    sgstPct,
+    sgstAmt,
+    cgstPct,
+    cgstAmt,
+    igstPct,
+    igstAmt,
+    grossValue,
   };
 }
 
@@ -261,9 +304,9 @@ function parseMergedRow(
   const items: LineItem[] = [];
 
   for (let j = 0; j < count; j++) {
-    const qty = cleanNum(qtyLines[j]);
-    const rate = cleanNum(rateLines[j]);
-    if (qty <= 0 || rate <= 0) continue;
+    const qty = cleanMaybeNum(qtyLines[j]);
+    const rate = cleanMaybeNum(rateLines[j]);
+    if (!qty || !rate || qty <= 0 || rate <= 0) continue;
 
     const name = usePackCodes
       ? packLines[j]?.replace(/\s*\([^)]*\)/g, "").trim() || ""
@@ -271,6 +314,35 @@ function parseMergedRow(
         packLines[j]?.replace(/\s*\([^)]*\)/g, "").trim() ||
         "";
     if (!name) continue;
+
+    const computedBaseValue = round3(qty * rate);
+    let baseValue = cleanNum(baseLines[j]);
+    if (baseValue <= 0 || Math.abs(baseValue - computedBaseValue) > 1) {
+      baseValue = computedBaseValue;
+    }
+
+    let taxableValue = cleanNum(taxableLines[j]);
+    if (taxableValue <= 0 || Math.abs(taxableValue - baseValue) > 1) {
+      taxableValue = baseValue;
+    }
+
+    const sgstPct = cleanNum(sgstPctLines[j]);
+    const cgstPct = cleanNum(cgstPctLines[j]);
+    const igstPct = cleanNum(igstPctLines[j]);
+
+    let sgstAmt = cleanNum(sgstAmtLines[j]);
+    let cgstAmt = cleanNum(cgstAmtLines[j]);
+    let igstAmt = cleanNum(igstAmtLines[j]);
+
+    if (sgstAmt <= 0 && sgstPct > 0) sgstAmt = round3((taxableValue * sgstPct) / 100);
+    if (cgstAmt <= 0 && cgstPct > 0) cgstAmt = round3((taxableValue * cgstPct) / 100);
+    if (igstAmt <= 0 && igstPct > 0) igstAmt = round3((taxableValue * igstPct) / 100);
+
+    const expectedGross = round3(taxableValue + sgstAmt + cgstAmt + igstAmt);
+    let grossValue = cleanNum(grossLines[j]);
+    if (grossValue <= 0 || Math.abs(grossValue - expectedGross) > 1.5) {
+      grossValue = expectedGross;
+    }
 
     items.push({
       name,
@@ -283,17 +355,17 @@ function parseMergedRow(
       noOfPkt: cleanNum(pktLines[j]),
       qty,
       rate,
-      baseValue: cleanNum(baseLines[j]),
+      baseValue,
       discountRs: cleanNum(discRsLines[j]),
       discount: cleanNum(discLines[j]),
-      taxableValue: cleanNum(taxableLines[j]),
-      sgstPct: cleanNum(sgstPctLines[j]),
-      sgstAmt: cleanNum(sgstAmtLines[j]),
-      cgstPct: cleanNum(cgstPctLines[j]),
-      cgstAmt: cleanNum(cgstAmtLines[j]),
-      igstPct: cleanNum(igstPctLines[j]),
-      igstAmt: cleanNum(igstAmtLines[j]),
-      grossValue: cleanNum(grossLines[j]),
+      taxableValue,
+      sgstPct,
+      sgstAmt,
+      cgstPct,
+      cgstAmt,
+      igstPct,
+      igstAmt,
+      grossValue,
     });
   }
   return items;

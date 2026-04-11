@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
 export const PORTAL_COOKIE_NAME = "portal-token";
+const PORTAL_TOKEN_ISSUER = "smart-inventory-portal";
+const PORTAL_TOKEN_SCOPE = process.env.PORTAL_TOKEN_SCOPE || "default";
 
 // Portal JWT lifetime — kept short so that a stolen token has a tight replay window.
 // If you lengthen this, consider adding server-side revocation.
@@ -27,16 +29,29 @@ export async function signPortalToken(payload: {
   customerNumber: string;
   name: string;
 }) {
-  return new SignJWT(payload)
+  return new SignJWT({
+    ...payload,
+    scope: PORTAL_TOKEN_SCOPE,
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
+    .setIssuer(PORTAL_TOKEN_ISSUER)
+    .setAudience(PORTAL_TOKEN_SCOPE)
     .setExpirationTime(`${PORTAL_JWT_MAX_AGE_SECONDS}s`)
     .sign(getSecret());
 }
 
 export async function verifyPortalToken(token: string) {
-  const { payload } = await jwtVerify(token, getSecret());
-  return payload as { customerId: string; customerNumber: string; name: string };
+  const { payload } = await jwtVerify(token, getSecret(), {
+    issuer: PORTAL_TOKEN_ISSUER,
+    audience: PORTAL_TOKEN_SCOPE,
+  });
+  return payload as {
+    customerId: string;
+    customerNumber: string;
+    name: string;
+    scope: string;
+  };
 }
 
 type PortalAuthSuccess = {
@@ -105,13 +120,20 @@ export async function getPortalCustomer(
  */
 export function isRequestSecure(request: NextRequest): boolean {
   const proto = request.headers.get("x-forwarded-proto");
-  if (proto) return proto.split(",")[0].trim() === "https";
+  if (proto) {
+    return proto.split(",")[0].trim() === "https";
+  }
+
+  if (process.env.NEXTAUTH_URL) {
+    return process.env.NEXTAUTH_URL.startsWith("https://");
+  }
+
   try {
     if (request.nextUrl.protocol === "https:") return true;
   } catch {
     // ignore
   }
-  return process.env.NEXTAUTH_URL?.startsWith("https://") ?? false;
+  return false;
 }
 
 /**

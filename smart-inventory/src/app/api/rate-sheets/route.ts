@@ -169,6 +169,8 @@ export async function POST(request: Request) {
     for (const customerId of body.customerIds) {
       cache.delete(cacheKeys.rateSheet(customerId));
     }
+    // Defensive: assignment changes can affect effective pricing across customers.
+    cache.invalidatePrefix('rate-sheet:');
 
     return NextResponse.json(rateSheet, { status: 201 });
   } catch (error: any) {

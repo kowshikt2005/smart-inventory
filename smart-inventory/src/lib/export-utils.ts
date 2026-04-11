@@ -36,15 +36,70 @@ export async function fetchCompanySettings(): Promise<{
   company: CompanySettings;
   bank: BankAccountInfo | null;
 }> {
+  const emptyCompany: CompanySettings = {
+    company_name: "",
+    company_address: "",
+    company_city: "",
+    company_state: "",
+    company_pincode: "",
+    company_phone: "",
+    company_email: "",
+    company_gstin: "",
+    company_pan: "",
+    company_msme: "",
+    company_fssai: "",
+  };
+
   const [settingsRes, bankRes] = await Promise.all([
     fetch("/api/settings"),
     fetch("/api/bank-accounts"),
   ]);
-  const settingsArr = await settingsRes.json();
-  const bankData = await bankRes.json();
+
+  if (!settingsRes.ok) {
+    return { company: emptyCompany, bank: null };
+  }
+
+  let settingsData: unknown;
+  try {
+    settingsData = await settingsRes.json();
+  } catch {
+    return { company: emptyCompany, bank: null };
+  }
+
+  let bankData: unknown = null;
+  if (bankRes.ok) {
+    try {
+      bankData = await bankRes.json();
+    } catch {
+      bankData = null;
+    }
+  }
 
   const settingsMap: Record<string, string> = {};
-  for (const s of settingsArr) settingsMap[s.key] = s.value;
+
+  const addSetting = (entry: unknown) => {
+    if (
+      entry &&
+      typeof entry === "object" &&
+      "key" in entry &&
+      "value" in entry &&
+      typeof (entry as { key: unknown }).key === "string" &&
+      typeof (entry as { value: unknown }).value === "string"
+    ) {
+      settingsMap[(entry as { key: string }).key] = (entry as { value: string }).value;
+    }
+  };
+
+  if (Array.isArray(settingsData)) {
+    for (const entry of settingsData) addSetting(entry);
+  } else if (
+    settingsData &&
+    typeof settingsData === "object" &&
+    "settings" in settingsData &&
+    Array.isArray((settingsData as { settings?: unknown }).settings)
+  ) {
+    for (const entry of (settingsData as { settings: unknown[] }).settings) addSetting(entry);
+  }
 
   const company: CompanySettings = {
     company_name: settingsMap.company_name || "",
@@ -60,7 +115,12 @@ export async function fetchCompanySettings(): Promise<{
     company_fssai: settingsMap.company_fssai || "",
   };
 
-  const bankAccounts = bankData.bankAccounts || bankData || [];
+  const bankAccounts =
+    bankData && typeof bankData === "object" && "bankAccounts" in bankData
+      ? (bankData as { bankAccounts?: unknown }).bankAccounts || []
+      : Array.isArray(bankData)
+        ? bankData
+        : [];
   const bank: BankAccountInfo | null =
     (Array.isArray(bankAccounts)
       ? bankAccounts.find((b: { isDefault?: boolean }) => b.isDefault) || bankAccounts[0]

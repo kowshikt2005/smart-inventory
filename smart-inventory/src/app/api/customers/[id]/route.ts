@@ -4,6 +4,28 @@ import { checkPermission } from '@/lib/api-auth';
 import { normalizeGstin, validateGstin } from '@/lib/gst-validation';
 import { hashPassword } from '@/lib/auth-utils';
 
+function splitAddress(address: string | null | undefined) {
+  if (!address) {
+    return { addressLine1: '', addressLine2: '' };
+  }
+
+  const [line1, ...rest] = address
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return {
+    addressLine1: line1 || '',
+    addressLine2: rest.join(', '),
+  };
+}
+
+function getStateCodeFromGstin(gstin: string | null | undefined) {
+  if (!gstin) return '';
+  const normalized = normalizeGstin(gstin);
+  return normalized.length >= 2 ? normalized.slice(0, 2) : '';
+}
+
 // GET /api/customers/[id] - Get a single customer by ID
 export async function GET(
   request: Request,
@@ -31,7 +53,14 @@ export async function GET(
 
     // Never expose the hashed PIN — replace with a boolean for the UI
     const { portalPassword, ...customerData } = customer;
-    return NextResponse.json({ ...customerData, hasPortalPin: portalPassword !== null });
+    const { addressLine1, addressLine2 } = splitAddress(customer.address);
+    return NextResponse.json({
+      ...customerData,
+      addressLine1,
+      addressLine2,
+      stateCode: getStateCodeFromGstin(customer.gstin),
+      hasPortalPin: portalPassword !== null,
+    });
   } catch (error) {
     console.error('Error fetching customer:', error);
     return NextResponse.json(
@@ -96,7 +125,25 @@ export async function PUT(
     if (body.email !== undefined) updateData.email = body.email || null;
     if (body.phone !== undefined) updateData.phone = body.phone || null;
     if (hasGstinField) updateData.gstin = normalizedGstin;
-    if (body.address !== undefined) updateData.address = body.address || null;
+    if (
+      body.address !== undefined ||
+      body.addressLine1 !== undefined ||
+      body.addressLine2 !== undefined
+    ) {
+      if (
+        body.address !== undefined &&
+        body.addressLine1 === undefined &&
+        body.addressLine2 === undefined
+      ) {
+        updateData.address = body.address || null;
+      } else {
+        const existingAddress = splitAddress(existingCustomer.address);
+        const addressLine1 = String(body.addressLine1 ?? existingAddress.addressLine1).trim();
+        const addressLine2 = String(body.addressLine2 ?? existingAddress.addressLine2).trim();
+        const combinedAddress = [addressLine1, addressLine2].filter(Boolean).join(', ');
+        updateData.address = combinedAddress || null;
+      }
+    }
     if (body.city !== undefined) updateData.city = body.city || null;
     if (body.state !== undefined) updateData.state = body.state || null;
     if (body.pincode !== undefined) updateData.pincode = body.pincode || null;
@@ -144,7 +191,14 @@ export async function PUT(
     });
 
     const { portalPassword, ...updatedData } = updated;
-    return NextResponse.json({ ...updatedData, hasPortalPin: portalPassword !== null });
+    const { addressLine1, addressLine2 } = splitAddress(updated.address);
+    return NextResponse.json({
+      ...updatedData,
+      addressLine1,
+      addressLine2,
+      stateCode: getStateCodeFromGstin(updated.gstin),
+      hasPortalPin: portalPassword !== null,
+    });
   } catch (error: any) {
     console.error('Error updating customer:', error);
 

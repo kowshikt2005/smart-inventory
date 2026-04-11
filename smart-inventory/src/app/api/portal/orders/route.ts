@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     const itemIds = items.map((i) => i.itemId);
 
     // Fetch items and customer's rate sheet in parallel
-    const [dbItems, rateSheetJoin] = await Promise.all([
+    const [dbItems, rateSheetJoin, customerProfile] = await Promise.all([
       db.item.findMany({
         where: { id: { in: itemIds }, isActive: true },
         select: {
@@ -88,10 +88,29 @@ export async function POST(request: NextRequest) {
         include: { rateSheet: true },
         orderBy: { rateSheet: { createdAt: "desc" } },
       }),
+      db.customer.findUnique({
+        where: { id: auth.customerId },
+        select: {
+          preferredBrands: {
+            select: { brandId: true },
+          },
+        },
+      }),
     ]);
 
     if (dbItems.length !== itemIds.length) {
       return NextResponse.json({ error: "One or more items are unavailable" }, { status: 400 });
+    }
+
+    const preferredBrandIds = new Set((customerProfile?.preferredBrands || []).map((b) => b.brandId));
+    if (preferredBrandIds.size > 0) {
+      const disallowed = dbItems.filter((i) => !i.brandId || !preferredBrandIds.has(i.brandId));
+      if (disallowed.length > 0) {
+        return NextResponse.json(
+          { error: "Some items are outside your allowed brand list" },
+          { status: 403 }
+        );
+      }
     }
 
     // Pick the most recent rate sheet (matches admin API pattern)

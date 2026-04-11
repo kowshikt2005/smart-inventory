@@ -29,6 +29,7 @@ export const PERMISSION_PAGES = {
   masters_rate_sheets:  { label: 'Rate Sheets',        section: 'Masters' },
   masters_items:        { label: 'Items',              section: 'Masters' },
   masters_roles:        { label: 'Roles',              section: 'Masters' },
+  data_import:          { label: 'Data Import',        section: 'Settings' },
   settings:             { label: 'Settings',           section: 'Settings' },
 } as const;
 
@@ -131,6 +132,7 @@ export const API_TO_PERMISSION: Record<string, PermissionKey> = {
   '/api/reports/gstr-9': 'gst',
   '/api/dashboard': 'dashboard',
   '/api/roles': 'masters_roles',
+  '/api/import': 'data_import',
   '/api/settings': 'settings',
   '/api/system': 'settings',
 };

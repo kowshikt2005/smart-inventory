@@ -2,8 +2,34 @@ import { PrismaClient } from '@/generated/prisma';
 import type { Decimal } from '@prisma/client/runtime/library';
 import { withNumberLock } from '@/lib/invoice-utils';
 
+type RawNumberClient = {
+  $queryRawUnsafe: <T = unknown>(query: string, ...values: unknown[]) => Promise<T>;
+};
+
 // System user ID for operations before auth is implemented
 export const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
+
+async function getMaxSalesOrderSequence(client: RawNumberClient): Promise<number> {
+  const rows = await client.$queryRawUnsafe<Array<{ max_num: bigint | number | null }>>(
+    `
+      SELECT MAX(seq) AS max_num
+      FROM (
+        SELECT CAST(SUBSTRING(orderNumber, 4) AS UNSIGNED) AS seq
+        FROM sales_orders
+        WHERE orderNumber REGEXP '^SO-[0-9]+$'
+        UNION ALL
+        SELECT CAST(SUBSTRING(orderNumber, 4) AS UNSIGNED) AS seq
+        FROM invoices
+        WHERE orderNumber REGEXP '^SO-[0-9]+$'
+      ) t
+    `
+  );
+
+  const raw = rows?.[0]?.max_num;
+  if (typeof raw === 'bigint') return Number(raw);
+  const parsed = Number(raw ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 /**
  * Generate the next order number in sequence (SO-0001, SO-0002, etc.)
@@ -11,27 +37,18 @@ export const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
  * duplicates. Checks both SalesOrder and Invoice tables to handle deleted orders.
  */
 export async function generateOrderNumber(db: PrismaClient): Promise<string> {
-  return withNumberLock(db, 'so_number_lock', async (tx) => {
-    const [lastSalesOrder, lastInvoice] = await Promise.all([
-      tx.salesOrder.findFirst({
-        orderBy: { orderNumber: 'desc' },
-        select: { orderNumber: true },
-      }),
-      tx.invoice.findFirst({
-        where: { orderNumber: { startsWith: 'SO-' } },
-        orderBy: { orderNumber: 'desc' },
-        select: { orderNumber: true },
-      }),
-    ]);
+  const format = (num: number) => `SO-${String(num + 1).padStart(4, '0')}`;
 
-    let maxNum = 0;
-    const soMatch = lastSalesOrder?.orderNumber.match(/SO-(\d+)/);
-    if (soMatch) maxNum = Math.max(maxNum, parseInt(soMatch[1], 10));
-    const invMatch = lastInvoice?.orderNumber?.match(/SO-(\d+)/);
-    if (invMatch) maxNum = Math.max(maxNum, parseInt(invMatch[1], 10));
-
-    return `SO-${String(maxNum + 1).padStart(4, '0')}`;
-  });
+  try {
+    return await withNumberLock(db, 'so_number_lock', async (tx) => {
+      const maxNum = await getMaxSalesOrderSequence(tx as unknown as RawNumberClient);
+      return format(maxNum);
+    });
+  } catch (error) {
+    console.error('SO number lock path failed, using unlocked fallback:', error);
+    const maxNum = await getMaxSalesOrderSequence(db as unknown as RawNumberClient);
+    return format(maxNum);
+  }
 }
 
 /**

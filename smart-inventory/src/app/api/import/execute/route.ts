@@ -4,7 +4,7 @@ import { ENTITY_FIELDS, type EntityType } from '@/lib/import-utils';
 import { generateJournalNumber, generatePaymentNumber } from '@/lib/invoice-utils';
 import { generateVendorPaymentNumber } from '@/lib/purchase-utils';
 import { SYSTEM_USER_ID } from '@/lib/order-utils';
-import { checkAuth, checkPermission } from '@/lib/api-auth';
+import { checkPermission } from '@/lib/api-auth';
 import type { PermissionKey } from '@/types/permissions';
 
 const IMPORT_ENTITY_PERMISSION: Record<EntityType, PermissionKey> = {
@@ -1063,7 +1063,7 @@ async function importPurchaseInvoices(batch: Record<string, unknown>[], offset: 
 
 export async function POST(request: Request) {
   try {
-    const { error } = await checkAuth();
+    const { error } = await checkPermission('data_import', 'edit');
     if (error) return error;
 
     const body = await request.json();

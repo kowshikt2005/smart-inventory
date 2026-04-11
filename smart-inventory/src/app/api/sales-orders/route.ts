@@ -351,9 +351,33 @@ export async function POST(request: Request) {
       // Generate order number
       const orderNumber = await generateOrderNumber(tx as any);
 
+      const txCustomer = await tx.customer.findUnique({
+        where: { id: body.customerId },
+        select: { id: true, status: true },
+      });
+
+      if (!txCustomer) {
+        throw new Error('TX_CUSTOMER_NOT_FOUND');
+      }
+
+      if (txCustomer.status !== 'ACTIVE') {
+        throw new Error('TX_CUSTOMER_INACTIVE');
+      }
+
+      const txItems = await tx.item.findMany({
+        where: { id: { in: itemIds } },
+        include: {
+          inventory: true,
+        },
+      });
+
+      if (txItems.length !== itemIds.length) {
+        throw new Error('TX_ITEMS_NOT_FOUND');
+      }
+
       // Calculate item totals using V2 which handles both inclusive and exclusive GST
       const orderItems = body.items.map((orderItem: any) => {
-        const item = items.find((i) => i.id === orderItem.itemId)!;
+        const item = txItems.find((i) => i.id === orderItem.itemId)!;
         const taxRate = Number(item.gstRate);
         const discountPercent = orderItem.discountPercent || 0;
         const { amount, taxAmount } = calculateLineItemV2(
@@ -428,9 +452,9 @@ export async function POST(request: Request) {
       });
 
       // Reserve inventory for each item (only if inventory record exists) - OPTIMIZED
-      const itemIds = orderItems.map((item: any) => item.itemId);
+      const orderItemIds = orderItems.map((item: any) => item.itemId);
       const inventories = await tx.inventory.findMany({
-        where: { itemId: { in: itemIds } },
+        where: { itemId: { in: orderItemIds } },
       });
       const inventoryMap = new Map(inventories.map(inv => [inv.itemId, inv]));
 
@@ -471,6 +495,27 @@ export async function POST(request: Request) {
     return NextResponse.json(salesOrder, { status: 201 });
   } catch (error: unknown) {
     console.error('Error creating sales order:', error);
+
+    if (error instanceof Error && error.message === 'TX_CUSTOMER_NOT_FOUND') {
+      return NextResponse.json(
+        { error: 'Customer not found' },
+        { status: 404 }
+      );
+    }
+
+    if (error instanceof Error && error.message === 'TX_CUSTOMER_INACTIVE') {
+      return NextResponse.json(
+        { error: 'Cannot create order for inactive customer' },
+        { status: 400 }
+      );
+    }
+
+    if (error instanceof Error && error.message === 'TX_ITEMS_NOT_FOUND') {
+      return NextResponse.json(
+        { error: 'One or more items not found' },
+        { status: 400 }
+      );
+    }
 
     // Type-safe error handling
     const prismaError = error as { code?: string; message?: string };

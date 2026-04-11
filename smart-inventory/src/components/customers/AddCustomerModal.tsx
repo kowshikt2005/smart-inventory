@@ -68,7 +68,7 @@ export interface EditCustomer {
   creditLimit: number;
   openingBalance: number;
   openingAsOfDate: string;
-  portalPassword?: string | null;
+  hasPortalPin?: boolean;
   preferredBrands?: { brandId: string }[];
 }
 
@@ -225,7 +225,8 @@ export function AddCustomerModal({
         creditDays: String(editCustomer.creditDays ?? 0),
         creditLimit: String(editCustomer.creditLimit ?? 0),
       });
-      setPortalPin(editCustomer.portalPassword ?? "");
+      // PIN hashes are not returned by API; keep input empty until user sets a new value.
+      setPortalPin("");
       setPreferredBrandIds(editCustomer.preferredBrands?.map((b) => b.brandId) ?? []);
       setDeletedAddressIds([]);
       setShowRSEditor(false);

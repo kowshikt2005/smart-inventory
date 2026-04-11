@@ -81,7 +81,7 @@ function twoDigitWords(n: number): string {
 export function numberToWords(num: number): string {
   if (num === 0) return "Zero";
 
-  const n = Math.round(Math.abs(num));
+  const n = Math.floor(Math.abs(num));
   if (n === 0) return "Zero";
 
   const crore = Math.floor(n / 10000000);
@@ -98,6 +98,33 @@ export function numberToWords(num: number): string {
   if (remainder) parts.push(twoDigitWords(remainder));
 
   return parts.join(" ");
+}
+
+function amountToWordsINR(amount: number): string {
+  const absolute = Math.abs(amount);
+  let rupees = Math.floor(absolute);
+  let paise = Math.round((absolute - rupees) * 100);
+
+  if (paise === 100) {
+    rupees += 1;
+    paise = 0;
+  }
+
+  const signPrefix = amount < 0 ? "Minus " : "";
+  const rupeesWords = numberToWords(rupees);
+
+  if (paise === 0) {
+    return `${signPrefix}Rupees ${rupeesWords} only`;
+  }
+
+  return `${signPrefix}Rupees ${rupeesWords} and ${numberToWords(paise)} Paise only`;
+}
+
+function extractPanFromGSTIN(gstin: string | null): string | null {
+  if (!gstin) return null;
+  const normalized = gstin.trim().toUpperCase();
+  if (!/^[0-9A-Z]{15}$/.test(normalized)) return null;
+  return normalized.slice(2, 12);
 }
 
 // ── Formatting helpers ───────────────────────────────────────────
@@ -249,12 +276,15 @@ export function generateInvoicePDF(
   // Left column: GSTIN, PAN (derived), POS
   let ly = y;
   if (invoice.customer.gstin) {
-    doc.text("GSTIN: " + invoice.customer.gstin, ml, ly);
+    const normalizedGstin = invoice.customer.gstin.trim().toUpperCase();
+    doc.text("GSTIN: " + normalizedGstin, ml, ly);
     ly += 3.5;
-    // PAN derived from GSTIN chars 2-12 (0-indexed: 2..11)
-    const pan = invoice.customer.gstin.substring(2, 12);
-    doc.text("PAN: " + pan, ml, ly);
-    ly += 3.5;
+
+    const pan = extractPanFromGSTIN(normalizedGstin);
+    if (pan) {
+      doc.text("PAN: " + pan, ml, ly);
+      ly += 3.5;
+    }
   }
   if (invoice.customer.state) {
     doc.text("POS: " + invoice.customer.state, ml, ly);
@@ -396,8 +426,7 @@ export function generateInvoicePDF(
   y += 4;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  const totalRounded = Math.round(Number(invoice.totalAmount));
-  const words = "Rupees " + numberToWords(totalRounded) + " only";
+  const words = amountToWordsINR(Number(invoice.totalAmount));
   const wordLines = doc.splitTextToSize(words, footerLeftW);
   doc.text(wordLines, ml, y);
   y += wordLines.length * 3.5 + 4;

@@ -12,39 +12,33 @@ export async function POST(
     if (error) return error;
     const { id } = await params;
 
-    const salesReturn = await db.salesReturn.findUnique({
-      where: { id },
-      include: {
-        customer: true,
-        invoice: true,
-        items: {
-          include: {
-            item: {
-              include: {
-                inventory: true,
+    // Complete return in transaction - read and write on the same snapshot.
+    const completed = await transaction(async (tx) => {
+      const salesReturn = await tx.salesReturn.findUnique({
+        where: { id },
+        include: {
+          customer: true,
+          invoice: true,
+          items: {
+            include: {
+              item: {
+                include: {
+                  inventory: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    if (!salesReturn) {
-      return NextResponse.json(
-        { error: 'Sales return not found' },
-        { status: 404 }
-      );
-    }
+      if (!salesReturn) {
+        throw new Error('RETURN_NOT_FOUND');
+      }
 
-    if (salesReturn.status !== 'OPEN') {
-      return NextResponse.json(
-        { error: 'Can only complete OPEN sales returns' },
-        { status: 400 }
-      );
-    }
+      if (salesReturn.status !== 'OPEN') {
+        throw new Error('RETURN_NOT_OPEN');
+      }
 
-    // Complete return in transaction - OPTIMIZED VERSION
-    await transaction(async (tx) => {
       const claim = await tx.salesReturn.updateMany({
         where: {
           id,
@@ -159,6 +153,11 @@ export async function POST(
         }),
         invoiceUpdatePromise,
       ]);
+
+      return {
+        id: salesReturn.id,
+        returnNumber: salesReturn.returnNumber,
+      };
     }, {
       maxWait: 15000, // Increased timeout for batch operations
       timeout: 45000,
@@ -168,11 +167,25 @@ export async function POST(
     return NextResponse.json({ 
       success: true, 
       message: 'Sales return completed successfully',
-      id: salesReturn.id,
-      returnNumber: salesReturn.returnNumber,
+      id: completed.id,
+      returnNumber: completed.returnNumber,
       status: 'COMPLETED'
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'RETURN_NOT_FOUND') {
+      return NextResponse.json(
+        { error: 'Sales return not found' },
+        { status: 404 }
+      );
+    }
+
+    if (error instanceof Error && error.message === 'RETURN_NOT_OPEN') {
+      return NextResponse.json(
+        { error: 'Can only complete OPEN sales returns' },
+        { status: 400 }
+      );
+    }
+
     if (error instanceof Error && error.message === 'RETURN_ALREADY_COMPLETED') {
       return NextResponse.json(
         { error: 'Sales return is already completed by another request' },

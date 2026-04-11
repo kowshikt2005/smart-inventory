@@ -156,6 +156,8 @@ export async function PUT(
       for (const customerId of body.customerIds) {
         cache.delete(cacheKeys.rateSheet(customerId));
       }
+      // Customer assignments changed; clear all customer rate-sheet entries defensively.
+      cache.invalidatePrefix('rate-sheet:');
     }
 
     return NextResponse.json(rateSheet);
@@ -206,6 +208,7 @@ export async function DELETE(
     for (const entry of affectedCustomers) {
       cache.delete(cacheKeys.rateSheet(entry.customerId));
     }
+    cache.invalidatePrefix('rate-sheet:');
 
     return NextResponse.json({ message: 'Rate sheet deleted successfully' });
   } catch (error) {

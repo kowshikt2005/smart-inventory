@@ -42,74 +42,75 @@ export async function POST(
       );
     }
 
-    // Validate reorder exists and is PENDING
-    const reorder = await db.stockReorder.findUnique({
-      where: { id },
-      include: {
-        items: {
-          include: {
-            item: {
-              select: { id: true, gstRate: true, name: true, itemCode: true, unit: true },
-            },
-          },
-        },
-      },
-    });
-
-    if (!reorder) {
-      return NextResponse.json({ error: 'Reorder not found' }, { status: 404 });
-    }
-
-    if (reorder.status !== 'PENDING') {
-      return NextResponse.json(
-        { error: 'Only PENDING reorders can be converted' },
-        { status: 400 }
-      );
-    }
-
-    // Build a map of reorderItemId → reorderItem for quick lookup
-    const reorderItemMap = new Map<string, any>((reorder.items as any[]).map((ri) => [ri.id, ri]));
-
-    // Validate all itemIds in vendorGroups belong to this reorder
-    const allGroupItemIds = vendorGroups.flatMap((g) => g.itemIds);
-    for (const itemId of allGroupItemIds) {
-      if (!reorderItemMap.has(itemId)) {
-        return NextResponse.json(
-          { error: `Item ${itemId} does not belong to this reorder` },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Validate all vendorIds exist and are active
-    const vendorIds = [...new Set(vendorGroups.map((g) => g.vendorId))];
-    const vendors = await db.vendor.findMany({
-      where: { id: { in: vendorIds } },
-      select: { id: true, name: true, isActive: true },
-    });
-
-    const vendorMap = new Map(vendors.map((v) => [v.id, v]));
-    for (const vendorId of vendorIds) {
-      const vendor = vendorMap.get(vendorId);
-      if (!vendor) {
-        return NextResponse.json(
-          { error: `Vendor ${vendorId} not found` },
-          { status: 400 }
-        );
-      }
-      if (!vendor.isActive) {
-        return NextResponse.json(
-          { error: `Vendor "${vendor.name}" is inactive` },
-          { status: 400 }
-        );
-      }
-    }
-
     const poDate = new Date(date);
     const poExpectedDelivery = expectedDelivery ? new Date(expectedDelivery) : null;
 
     // Create all POs in one transaction
     const createdOrders = await transaction(async (tx) => {
+      const reorder = await tx.stockReorder.findUnique({
+        where: { id },
+        include: {
+          items: {
+            include: {
+              item: {
+                select: { id: true, gstRate: true, name: true, itemCode: true, unit: true },
+              },
+            },
+          },
+        },
+      });
+
+      if (!reorder) {
+        throw new Error('REORDER_NOT_FOUND');
+      }
+
+      if (reorder.status !== 'PENDING') {
+        throw new Error('REORDER_NOT_PENDING');
+      }
+
+      // Build a map of reorderItemId -> reorderItem for quick lookup.
+      const reorderItemMap = new Map<string, any>((reorder.items as any[]).map((ri) => [ri.id, ri]));
+
+      // Validate all itemIds in vendorGroups belong to this reorder.
+      const allGroupItemIds = vendorGroups.flatMap((g) => g.itemIds);
+      for (const itemId of allGroupItemIds) {
+        if (!reorderItemMap.has(itemId)) {
+          throw new Error(`INVALID_REORDER_ITEM:${itemId}`);
+        }
+      }
+
+      // Validate all vendorIds exist and are active.
+      const vendorIds = [...new Set(vendorGroups.map((g) => g.vendorId))];
+      const vendors = await tx.vendor.findMany({
+        where: { id: { in: vendorIds } },
+        select: { id: true, name: true, isActive: true },
+      });
+
+      const vendorMap = new Map(vendors.map((v) => [v.id, v]));
+      for (const vendorId of vendorIds) {
+        const vendor = vendorMap.get(vendorId);
+        if (!vendor) {
+          throw new Error(`INVALID_VENDOR:${vendorId}`);
+        }
+        if (!vendor.isActive) {
+          throw new Error(`INACTIVE_VENDOR:${vendor.name}`);
+        }
+      }
+
+      const claim = await (tx as any).stockReorder.updateMany({
+        where: {
+          id,
+          status: 'PENDING',
+        },
+        data: {
+          status: 'CONVERTED',
+        },
+      });
+
+      if (claim.count !== 1) {
+        throw new Error('REORDER_ALREADY_CONVERTED');
+      }
+
       const results: { purchaseOrderId: string; orderNumber: string; vendorName: string; itemCount: number }[] = [];
 
       for (const group of vendorGroups) {
@@ -166,17 +167,53 @@ export async function POST(
         });
       }
 
-      // Mark reorder as CONVERTED
-      await (tx as any).stockReorder.update({
-        where: { id },
-        data: { status: 'CONVERTED' },
-      });
-
       return results;
     });
 
     return NextResponse.json({ createdOrders }, { status: 201 });
   } catch (error) {
+    if (error instanceof Error && error.message === 'REORDER_NOT_FOUND') {
+      return NextResponse.json({ error: 'Reorder not found' }, { status: 404 });
+    }
+
+    if (error instanceof Error && error.message === 'REORDER_NOT_PENDING') {
+      return NextResponse.json(
+        { error: 'Only PENDING reorders can be converted' },
+        { status: 400 }
+      );
+    }
+
+    if (error instanceof Error && error.message.startsWith('INVALID_REORDER_ITEM:')) {
+      const itemId = error.message.split(':')[1] || 'unknown';
+      return NextResponse.json(
+        { error: `Item ${itemId} does not belong to this reorder` },
+        { status: 400 }
+      );
+    }
+
+    if (error instanceof Error && error.message.startsWith('INVALID_VENDOR:')) {
+      const vendorId = error.message.split(':')[1] || 'unknown';
+      return NextResponse.json(
+        { error: `Vendor ${vendorId} not found` },
+        { status: 400 }
+      );
+    }
+
+    if (error instanceof Error && error.message.startsWith('INACTIVE_VENDOR:')) {
+      const vendorName = error.message.split(':')[1] || 'Unknown';
+      return NextResponse.json(
+        { error: `Vendor "${vendorName}" is inactive` },
+        { status: 400 }
+      );
+    }
+
+    if (error instanceof Error && error.message === 'REORDER_ALREADY_CONVERTED') {
+      return NextResponse.json(
+        { error: 'Reorder was already converted by another request.' },
+        { status: 409 }
+      );
+    }
+
     console.error('Error converting reorder:', error);
     return NextResponse.json(
       { error: 'Failed to convert reorder to purchase orders' },

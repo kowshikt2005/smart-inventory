@@ -96,6 +96,62 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No valid items provided' }, { status: 400 });
     }
 
+    if (!negativeBillingEnabled) {
+      const requiredByItem = new Map<string, number>();
+      for (const orderItem of validItems) {
+        requiredByItem.set(
+          orderItem.itemId,
+          (requiredByItem.get(orderItem.itemId) || 0) + Number(orderItem.quantity)
+        );
+      }
+
+      const itemIds = [...requiredByItem.keys()];
+      const catalogItems = await db.item.findMany({
+        where: { id: { in: itemIds } },
+        select: { id: true, itemCode: true, name: true },
+      });
+
+      if (catalogItems.length !== itemIds.length) {
+        return NextResponse.json({ error: 'One or more items not found' }, { status: 400 });
+      }
+
+      const itemMeta = new Map(catalogItems.map((item) => [item.id, item]));
+      const inventories = await db.inventory.findMany({
+        where: { itemId: { in: itemIds } },
+        select: { itemId: true, physicalStock: true },
+      });
+      const stockMap = new Map(inventories.map((inv) => [inv.itemId, Number(inv.physicalStock)]));
+
+      const insufficientStock = itemIds
+        .map((itemId) => {
+          const required = Number(requiredByItem.get(itemId) || 0);
+          const available = Number(stockMap.get(itemId) || 0);
+          if (available < required) {
+            const meta = itemMeta.get(itemId);
+            return {
+              itemId,
+              itemCode: meta?.itemCode || itemId,
+              itemName: meta?.name || 'Unknown Item',
+              required,
+              available,
+              shortfall: required - available,
+            };
+          }
+          return null;
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+      if (insufficientStock.length > 0) {
+        return NextResponse.json(
+          {
+            error: 'Insufficient stock for one or more items',
+            insufficientStock,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const invoice = await transaction(async (tx) => {
       const invoiceNumber = await generateInvoiceNumber(tx as any);
 
@@ -248,6 +304,11 @@ export async function POST(request: Request) {
     return NextResponse.json(invoice, { status: 201 });
   } catch (error) {
     console.error('Error creating direct sales invoice:', error);
+
+    if (error instanceof Error && error.message.startsWith('Insufficient stock for item')) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
     return NextResponse.json({ error: 'Failed to create invoice' }, { status: 500 });
   }
 }

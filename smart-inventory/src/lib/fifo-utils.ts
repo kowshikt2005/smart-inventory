@@ -275,55 +275,108 @@ export async function calculateFIFOCost(
     cost: number;
   }>;
 }> {
-  // Get all purchase movements in FIFO order
-  const purchases = await db.stockMovement.findMany({
-    where: {
-      itemId,
-      type: 'PURCHASE',
-    },
-    orderBy: [
-      { createdAt: 'asc' }, // FIFO: oldest purchase first
-    ],
-  });
+  if (quantitySold <= 0) {
+    return { totalCost: 0, averageCost: 0, movements: [] };
+  }
 
-  const movements: Array<{
-    quantity: number;
-    rate: number;
-    cost: number;
-  }> = [];
+  const [item, movementRows] = await Promise.all([
+    db.item.findUnique({
+      where: { id: itemId },
+      select: { purchasePrice: true },
+    }),
+    db.stockMovement.findMany({
+      where: { itemId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        quantity: true,
+        rate: true,
+        type: true,
+      },
+    }),
+  ]);
 
-  let remainingQty = quantitySold;
+  const fallbackRate = Number(item?.purchasePrice || 0);
+
+  type Layer = { quantity: number; rate: number };
+  const layers: Layer[] = [];
+
+  const pushLayer = (quantity: number, rate: number) => {
+    if (quantity <= 0) return;
+    layers.push({ quantity, rate });
+  };
+
+  const consumeLayers = (requiredQty: number) => {
+    let remaining = requiredQty;
+    while (remaining > 0 && layers.length > 0) {
+      const head = layers[0];
+      const used = Math.min(head.quantity, remaining);
+      head.quantity -= used;
+      remaining -= used;
+      if (head.quantity <= 0) layers.shift();
+    }
+    return remaining;
+  };
+
+  for (const movement of movementRows) {
+    const rawQty = Number(movement.quantity);
+    const qty = Math.abs(rawQty);
+    const rate = Number(movement.rate ?? fallbackRate);
+
+    switch (movement.type) {
+      case 'PURCHASE':
+      case 'ADJUSTMENT_IN':
+        pushLayer(qty, rate);
+        break;
+      case 'SALE':
+      case 'ADJUSTMENT_OUT':
+      case 'DAMAGE':
+      case 'TRANSFER':
+        consumeLayers(qty);
+        break;
+      case 'RETURN':
+        if (rawQty >= 0) {
+          // Sales return: stock comes back.
+          pushLayer(qty, rate);
+        } else {
+          // Purchase return: stock goes out.
+          consumeLayers(qty);
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  const movements: Array<{ quantity: number; rate: number; cost: number }> = [];
   let totalCost = 0;
+  let remainingQty = quantitySold;
 
-  for (const purchase of purchases) {
-    if (remainingQty <= 0) break;
-
-    const purchaseQty = Number(purchase.quantity);
-    const qtyToUse = Math.min(remainingQty, purchaseQty);
-
-    // Note: We'd need to store purchase rate in stock movements
-    // For now, assume we have it or fetch from purchase invoice
-    const rate = 0; // TODO: Fetch actual purchase rate
-
-    const cost = qtyToUse * rate;
+  while (remainingQty > 0 && layers.length > 0) {
+    const layer = layers[0];
+    const qtyToUse = Math.min(layer.quantity, remainingQty);
+    const cost = qtyToUse * layer.rate;
 
     movements.push({
       quantity: qtyToUse,
-      rate,
+      rate: layer.rate,
       cost,
     });
 
     totalCost += cost;
     remainingQty -= qtyToUse;
+    layer.quantity -= qtyToUse;
+    if (layer.quantity <= 0) layers.shift();
+  }
+
+  if (remainingQty > 0) {
+    const cost = remainingQty * fallbackRate;
+    movements.push({ quantity: remainingQty, rate: fallbackRate, cost });
+    totalCost += cost;
   }
 
   const averageCost = quantitySold > 0 ? totalCost / quantitySold : 0;
-
-  return {
-    totalCost,
-    averageCost,
-    movements,
-  };
+  return { totalCost, averageCost, movements };
 }
 
 // ============================================

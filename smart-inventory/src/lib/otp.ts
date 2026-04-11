@@ -161,3 +161,37 @@ export async function verifyOTP(phone: string, otp: string): Promise<boolean> {
   cache.delete(verifyAttemptsKey);
   return true;
 }
+
+/**
+ * Validate OTP without consuming it.
+ * Useful for pre-check endpoints that do not establish a session.
+ */
+export async function verifyOTPPreview(phone: string, otp: string): Promise<boolean> {
+  let normalizedPhone: string;
+  try {
+    normalizedPhone = normalizePhone(phone);
+  } catch {
+    return false;
+  }
+
+  const otpKey = `${OTP_PREFIX}${normalizedPhone}`;
+  const verifyAttemptsKey = `${OTP_VERIFY_ATTEMPTS_PREFIX}${normalizedPhone}`;
+
+  const storedOTP = cache.get<string>(otpKey);
+  if (!storedOTP) return false;
+
+  const match =
+    storedOTP.length === otp.length &&
+    timingSafeEqual(Buffer.from(storedOTP), Buffer.from(otp));
+
+  if (!match) {
+    const verifyAttempts = (cache.get<number>(verifyAttemptsKey) ?? 0) + 1;
+    cache.set(verifyAttemptsKey, verifyAttempts, OTP_EXPIRY_SECONDS);
+    if (verifyAttempts >= MAX_OTP_VERIFY_ATTEMPTS) {
+      cache.delete(otpKey);
+    }
+    return false;
+  }
+
+  return true;
+}

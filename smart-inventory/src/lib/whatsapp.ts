@@ -21,6 +21,52 @@ export function normalizePhone(phone: string): string {
   return digits;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+async function readJsonSafely(response: Response): Promise<unknown> {
+  const raw = await response.text();
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return { rawBody: raw.slice(0, 1000) };
+  }
+}
+
+function extractGraphErrorMessage(data: unknown): string {
+  if (isRecord(data)) {
+    const errorObj = data.error;
+    if (isRecord(errorObj)) {
+      const message = errorObj.message;
+      if (typeof message === "string" && message.trim()) {
+        return message;
+      }
+
+      const errorData = errorObj.error_data;
+      if (isRecord(errorData)) {
+        const details = errorData.details;
+        if (typeof details === "string" && details.trim()) {
+          return details;
+        }
+      }
+    }
+
+    const rawBody = data.rawBody;
+    if (typeof rawBody === "string" && rawBody.trim()) {
+      return rawBody;
+    }
+  }
+
+  if (typeof data === "string" && data.trim()) {
+    return data;
+  }
+
+  return "Unknown Graph API error";
+}
+
 // ─── Media Upload ──────────────────────────────────────────────
 
 /**
@@ -49,17 +95,21 @@ export async function uploadMedia(
     body: form.getBuffer() as unknown as BodyInit,
   });
 
-  const data = await res.json();
+  const data = await readJsonSafely(res);
 
   if (!res.ok) {
     console.error("WhatsApp media upload failed:", JSON.stringify(data));
     throw new Error(
-      `Media upload failed: ${data?.error?.message || JSON.stringify(data)}`
+      `Media upload failed: ${extractGraphErrorMessage(data)}`
     );
   }
 
+  if (!isRecord(data) || typeof data.id !== "string" || !data.id) {
+    throw new Error("Media upload failed: missing media id in Graph response");
+  }
+
   console.log(`WhatsApp media uploaded: ${data.id}`);
-  return data.id as string;
+  return data.id;
 }
 
 // ─── Send Messages ─────────────────────────────────────────────
@@ -81,18 +131,22 @@ async function postMessage(payload: Record<string, unknown>): Promise<{
     body: JSON.stringify(payload),
   });
 
-  const data = await res.json();
+  const data = await readJsonSafely(res);
 
   if (!res.ok) {
-    const errMsg =
-      data?.error?.message ||
-      data?.error?.error_data?.details ||
-      JSON.stringify(data);
+    const errMsg = extractGraphErrorMessage(data);
     console.error("WhatsApp send failed:", errMsg);
     return { success: false, error: errMsg };
   }
 
-  const messageId = data?.messages?.[0]?.id;
+  const messageId =
+    isRecord(data) &&
+    Array.isArray(data.messages) &&
+    data.messages.length > 0 &&
+    isRecord(data.messages[0]) &&
+    typeof data.messages[0].id === "string"
+      ? data.messages[0].id
+      : undefined;
   console.log(`WhatsApp message sent: ${messageId}`);
   return { success: true, messageId };
 }
