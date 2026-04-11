@@ -3,6 +3,15 @@ import { db } from '@/lib/db';
 import { checkPermission } from '@/lib/api-auth';
 import { normalizeGstin, validateGstin } from '@/lib/gst-validation';
 
+function normalizeCustomerPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  const last10 = digits.length > 10 ? digits.slice(-10) : digits;
+  if (last10.length !== 10) {
+    throw new Error('Please enter a valid 10-digit phone number');
+  }
+  return `+91${last10}`;
+}
+
 // GET /api/customers - Get all customers with optional search and pagination
 export async function GET(request: Request) {
   try {
@@ -91,6 +100,18 @@ export async function POST(request: Request) {
       );
     }
 
+    let normalizedPhone: string | null = null;
+    if (body.phone && String(body.phone).trim()) {
+      try {
+        normalizedPhone = normalizeCustomerPhone(String(body.phone));
+      } catch (error) {
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : 'Invalid phone number' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Create customer
     const customer = await db.customer.create({
       data: {
@@ -98,7 +119,7 @@ export async function POST(request: Request) {
         name: body.name,
         contactName: body.contactName?.trim() || null,
         email: body.email || null,
-        phone: body.phone || null,
+        phone: normalizedPhone,
         gstin: normalizedGstin,
         state: body.state,
         city: body.city,

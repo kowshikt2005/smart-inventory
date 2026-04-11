@@ -4,6 +4,15 @@ import { checkPermission } from '@/lib/api-auth';
 import { normalizeGstin, validateGstin } from '@/lib/gst-validation';
 import { hashPassword } from '@/lib/auth-utils';
 
+function normalizeCustomerPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  const last10 = digits.length > 10 ? digits.slice(-10) : digits;
+  if (last10.length !== 10) {
+    throw new Error('Please enter a valid 10-digit phone number');
+  }
+  return `+91${last10}`;
+}
+
 function splitAddress(address: string | null | undefined) {
   if (!address) {
     return { addressLine1: '', addressLine2: '' };
@@ -123,7 +132,20 @@ export async function PUT(
     if (body.name !== undefined) updateData.name = body.name;
     if (body.contactName !== undefined) updateData.contactName = body.contactName || null;
     if (body.email !== undefined) updateData.email = body.email || null;
-    if (body.phone !== undefined) updateData.phone = body.phone || null;
+    if (body.phone !== undefined) {
+      if (!body.phone || !String(body.phone).trim()) {
+        updateData.phone = null;
+      } else {
+        try {
+          updateData.phone = normalizeCustomerPhone(String(body.phone));
+        } catch (error) {
+          return NextResponse.json(
+            { error: error instanceof Error ? error.message : 'Invalid phone number' },
+            { status: 400 }
+          );
+        }
+      }
+    }
     if (hasGstinField) updateData.gstin = normalizedGstin;
     if (
       body.address !== undefined ||
