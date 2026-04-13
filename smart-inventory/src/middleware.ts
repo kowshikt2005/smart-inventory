@@ -51,7 +51,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // ── Portal page routes ───────────────────────────────────────────────────
-  if (pathname.startsWith("/portal")) {
+  if (pathname.startsWith("/portal/") || pathname === "/portal") {
     if (pathname === "/portal/login") {
       return NextResponse.next();
     }
@@ -141,6 +141,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public folder
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|workbox-.*\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot|webmanifest)$).*)",
   ],
 };

@@ -61,7 +61,7 @@ export function PortalSidebar() {
   const activeSubBrandId = pathname.match(/\/portal\/shop\/[^/]+\/([^/]+)/)?.[1] ?? null;
 
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-[230px] bg-gradient-to-b from-[#2D2A5E] via-[#272462] to-[#1A1740] flex flex-col shadow-xl">
+    <aside className="hidden md:flex fixed left-0 top-0 z-40 h-screen w-[230px] bg-gradient-to-b from-[#2D2A5E] via-[#272462] to-[#1A1740] flex-col shadow-xl">
       {/* Logo */}
       <div className="flex items-center justify-center px-3 py-3 border-b border-white/[0.12]">
         <div className="w-full rounded-lg bg-white px-3 py-2 flex items-center justify-center min-h-[48px]">

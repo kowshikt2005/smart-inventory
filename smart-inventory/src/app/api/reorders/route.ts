@@ -14,6 +14,14 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '15');
     const skip = (page - 1) * limit;
 
+    const validStatuses = ['PENDING', 'CONVERTED', 'CANCELLED'];
+    if (status && status !== 'ALL' && !validStatuses.includes(status)) {
+      return NextResponse.json(
+        { error: `Invalid status. Must be one of: ${validStatuses.join(', ')} or ALL` },
+        { status: 400 }
+      );
+    }
+
     const where: any = {};
     if (status && status !== 'ALL') {
       where.status = status;

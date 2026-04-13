@@ -81,10 +81,17 @@ export async function withNumberLock<T>(
   fn: (tx: DbOrTxClient) => Promise<T>
 ): Promise<T> {
   const runWithConnection = async (conn: DbOrTxClient): Promise<T> => {
-    const result = await conn.$queryRawUnsafe<{ lock_result: number }[]>(
-      `SELECT GET_LOCK(?, 5) as lock_result`, lockName
+    // Release any stale lock this session may hold from a previously crashed request.
+    // RELEASE_LOCK is a no-op (returns 0) if this session does not currently hold it,
+    // so this is safe to call unconditionally before acquiring.
+    await conn.$queryRawUnsafe(`SELECT RELEASE_LOCK(?)`, lockName);
+
+    const result = await conn.$queryRawUnsafe<{ lock_result: bigint | number | null }[]>(
+      `SELECT GET_LOCK(?, 10) as lock_result`, lockName
     );
-    if (!result[0] || result[0].lock_result !== 1) {
+    // Prisma 6 + MySQL returns BigInt for raw numeric results. Use Number() to
+    // normalise before comparing — 1n !== 1 in JS strict equality.
+    if (!result[0] || Number(result[0].lock_result) !== 1) {
       throw new Error(`Failed to acquire lock for ${lockName} generation`);
     }
     try {

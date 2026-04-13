@@ -1,0 +1,1174 @@
+{
+  "startedAt": "2026-04-11T18:38:46.109Z",
+  "baseUrl": "http://localhost:3000",
+  "tag": "20260412000846",
+  "steps": [
+    {
+      "name": "auth.login",
+      "status": "pass"
+    },
+    {
+      "name": "auth.session.verify",
+      "status": "pass"
+    },
+    {
+      "name": "auth.unauth.items.blocked",
+      "status": "pass"
+    },
+    {
+      "name": "auth.unauth.customers.blocked",
+      "status": "pass"
+    },
+    {
+      "name": "auth.unauth.salesOrders.blocked",
+      "status": "pass"
+    },
+    {
+      "name": "auth.unauth.stockJournals.blocked",
+      "status": "pass"
+    },
+    {
+      "name": "masters.brand.create",
+      "status": "pass"
+    },
+    {
+      "name": "masters.brand.get.verify",
+      "status": "pass"
+    },
+    {
+      "name": "masters.subBrand.list.smoke",
+      "status": "pass"
+    },
+    {
+      "name": "masters.item.create",
+      "status": "pass"
+    },
+    {
+      "name": "KNOWN-GAP: masters.item.create.negativeSellingPrice.missing",
+      "status": "pass",
+      "note": "gap previously reported — now passing"
+    },
+    {
+      "name": "KNOWN-GAP: masters.item.create.negativePurchasePrice.missing",
+      "status": "pass",
+      "note": "gap previously reported — now passing"
+    },
+    {
+      "name": "masters.item.update.negativeSellingPrice.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "masters.item.get.inventory.verify",
+      "status": "pass"
+    },
+    {
+      "name": "masters.customer.create",
+      "status": "pass"
+    },
+    {
+      "name": "masters.customer.update.negativeCreditLimit.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "masters.customer.deactivate.activeOnly.excludes",
+      "status": "pass"
+    },
+    {
+      "name": "masters.customer.reactivate",
+      "status": "pass"
+    },
+    {
+      "name": "masters.vendor.create",
+      "status": "pass"
+    },
+    {
+      "name": "masters.vendor.activeOnly.includes",
+      "status": "pass"
+    },
+    {
+      "name": "rateSheet.create",
+      "status": "pass"
+    },
+    {
+      "name": "rateSheet.get.verify",
+      "status": "pass"
+    },
+    {
+      "name": "rateSheet.missingValidFrom.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "sales.order.create",
+      "status": "pass"
+    },
+    {
+      "name": "sales.order.stock.reservedQty.verify",
+      "status": "pass"
+    },
+    {
+      "name": "sales.invoice.create",
+      "status": "pass"
+    },
+    {
+      "name": "sales.invoice.stock.deducted.verify",
+      "status": "pass"
+    },
+    {
+      "name": "sales.invoice.duplicate.expect409",
+      "status": "pass"
+    },
+    {
+      "name": "sales.invoice.customerLedger.debit.verify",
+      "status": "pass"
+    },
+    {
+      "name": "sales.payment.create",
+      "status": "pass"
+    },
+    {
+      "name": "sales.invoice.paymentStatus.paid.verify",
+      "status": "pass"
+    },
+    {
+      "name": "sales.direct.create",
+      "status": "pass"
+    },
+    {
+      "name": "sales.direct.stock.verify",
+      "status": "pass"
+    },
+    {
+      "name": "sales.direct.insufficientStock.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "sales.direct.zeroQty.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "sales.direct.negativeRate.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "sales.return.create",
+      "status": "pass"
+    },
+    {
+      "name": "sales.return.stock.snapshot",
+      "status": "pass"
+    },
+    {
+      "name": "sales.return.complete",
+      "status": "pass"
+    },
+    {
+      "name": "sales.return.stock.restored.verify",
+      "status": "pass"
+    },
+    {
+      "name": "sales.return.complete.again.expect400or409",
+      "status": "pass"
+    },
+    {
+      "name": "purchase.order.create",
+      "status": "pass"
+    },
+    {
+      "name": "purchase.invoice.stock.snapshot",
+      "status": "pass"
+    },
+    {
+      "name": "purchase.invoice.create",
+      "status": "pass"
+    },
+    {
+      "name": "purchase.invoice.stock.increase.verify",
+      "status": "pass"
+    },
+    {
+      "name": "purchase.vendorLedger.entry.verify",
+      "status": "pass"
+    },
+    {
+      "name": "purchase.vendorPayment.create",
+      "status": "pass"
+    },
+    {
+      "name": "purchase.return.create",
+      "status": "pass"
+    },
+    {
+      "name": "purchase.return.stock.snapshot",
+      "status": "pass"
+    },
+    {
+      "name": "purchase.return.complete",
+      "status": "pass"
+    },
+    {
+      "name": "purchase.return.stock.decrease.verify",
+      "status": "pass"
+    },
+    {
+      "name": "purchase.return.complete.again.expect400or409",
+      "status": "pass"
+    },
+    {
+      "name": "stockJournal.baseline.snapshot",
+      "status": "pass"
+    },
+    {
+      "name": "stockJournal.INCREASE.create",
+      "status": "pass"
+    },
+    {
+      "name": "stockJournal.DECREASE.create",
+      "status": "pass"
+    },
+    {
+      "name": "stockJournal.RESERVED.create",
+      "status": "pass"
+    },
+    {
+      "name": "stockJournal.UNRESERVED.create",
+      "status": "pass"
+    },
+    {
+      "name": "stockJournal.DECREASE.beyondStock.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "stockJournal.UNRESERVED.delete.reversal [BUG-2]",
+      "status": "pass"
+    },
+    {
+      "name": "stockJournal.RESERVED.delete.reversal [BUG-2]",
+      "status": "pass"
+    },
+    {
+      "name": "stockJournal.DECREASE.delete.reversal",
+      "status": "pass"
+    },
+    {
+      "name": "stockJournal.INCREASE.delete.reversal",
+      "status": "pass"
+    },
+    {
+      "name": "bug3.order.create",
+      "status": "pass"
+    },
+    {
+      "name": "bug3.unreserve.2units",
+      "status": "pass"
+    },
+    {
+      "name": "bug3.invoice.attempt [BUG-3]",
+      "status": "pass"
+    },
+    {
+      "name": "bug3.cleanup.journal",
+      "status": "pass"
+    },
+    {
+      "name": "adjustStock.setAbsolute.verify",
+      "status": "pass"
+    },
+    {
+      "name": "adjustStock.negativeStock.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "list.items",
+      "status": "pass"
+    },
+    {
+      "name": "list.customers",
+      "status": "pass"
+    },
+    {
+      "name": "list.vendors",
+      "status": "pass"
+    },
+    {
+      "name": "list.brands",
+      "status": "pass"
+    },
+    {
+      "name": "list.sub-brands",
+      "status": "pass"
+    },
+    {
+      "name": "list.sales-orders",
+      "status": "pass"
+    },
+    {
+      "name": "list.sales-invoices",
+      "status": "pass"
+    },
+    {
+      "name": "list.sales-returns",
+      "status": "pass"
+    },
+    {
+      "name": "list.purchase-orders",
+      "status": "pass"
+    },
+    {
+      "name": "list.purchase-invoices",
+      "status": "pass"
+    },
+    {
+      "name": "list.purchase-returns",
+      "status": "pass"
+    },
+    {
+      "name": "list.payments",
+      "status": "pass"
+    },
+    {
+      "name": "list.vendor-payments",
+      "status": "pass"
+    },
+    {
+      "name": "list.stock-journals",
+      "status": "pass"
+    },
+    {
+      "name": "list.roles",
+      "status": "pass"
+    },
+    {
+      "name": "list.employees",
+      "status": "pass"
+    },
+    {
+      "name": "list.rate-sheets",
+      "status": "pass"
+    },
+    {
+      "name": "list.bank-accounts",
+      "status": "pass"
+    },
+    {
+      "name": "list.settings",
+      "status": "pass"
+    },
+    {
+      "name": "search.item",
+      "status": "pass"
+    },
+    {
+      "name": "search.customer",
+      "status": "pass"
+    },
+    {
+      "name": "search.vendor",
+      "status": "pass"
+    },
+    {
+      "name": "stockScan.run",
+      "status": "pass"
+    },
+    {
+      "name": "dashboard.stats",
+      "status": "pass"
+    },
+    {
+      "name": "dashboard.charts",
+      "status": "pass"
+    },
+    {
+      "name": "dashboard.activity",
+      "status": "pass"
+    },
+    {
+      "name": "reports.outstanding.customer",
+      "status": "pass"
+    },
+    {
+      "name": "reports.outstanding.vendor",
+      "status": "pass"
+    },
+    {
+      "name": "reports.closing-stock",
+      "status": "pass"
+    },
+    {
+      "name": "reports.billed-unbilled",
+      "status": "pass"
+    },
+    {
+      "name": "reports.sales-register",
+      "status": "fail",
+      "error": "[GET /api/reports/sales-register] expected 200, got 400 — {\"error\":\"startDate and endDate are required\"}"
+    },
+    {
+      "name": "reports.sales-register.details",
+      "status": "fail",
+      "error": "[GET /api/reports/sales-register/details] expected 200, got 400 — {\"error\":\"month and year are required\"}"
+    },
+    {
+      "name": "reports.purchase-register",
+      "status": "fail",
+      "error": "[GET /api/reports/purchase-register] expected 200, got 400 — {\"error\":\"startDate and endDate are required\"}"
+    },
+    {
+      "name": "reports.purchase-register.details",
+      "status": "fail",
+      "error": "[GET /api/reports/purchase-register/details] expected 200, got 400 — {\"error\":\"month and year are required\"}"
+    },
+    {
+      "name": "reports.profit-report",
+      "status": "fail",
+      "error": "[GET /api/reports/profit-report] expected 200, got 500 — {\"error\":\"Failed to fetch profit report\"}"
+    },
+    {
+      "name": "reports.gstr-1",
+      "status": "fail",
+      "error": "[GET /api/reports/gstr-1] expected 200, got 400 — {\"error\":\"month and year are required\"}"
+    },
+    {
+      "name": "reports.gstr-2",
+      "status": "fail",
+      "error": "[GET /api/reports/gstr-2] expected 200, got 400 — {\"error\":\"month and year are required\"}"
+    },
+    {
+      "name": "reports.gstr-3b",
+      "status": "fail",
+      "error": "[GET /api/reports/gstr-3b] expected 200, got 400 — {\"error\":\"month and year are required\"}"
+    },
+    {
+      "name": "reports.gstr-9",
+      "status": "fail",
+      "error": "[GET /api/reports/gstr-9] expected 200, got 400 — {\"error\":\"fy is required (e.g. 2025-26)\"}"
+    },
+    {
+      "name": "reports.claim-report",
+      "status": "pass"
+    },
+    {
+      "name": "purchases.stats",
+      "status": "pass"
+    },
+    {
+      "name": "ledger.item.verify",
+      "status": "pass"
+    },
+    {
+      "name": "rateSheet.byCustomer.verify",
+      "status": "pass"
+    },
+    {
+      "name": "customer.pendingInvoices",
+      "status": "pass"
+    },
+    {
+      "name": "customer.shippingAddresses.create",
+      "status": "pass"
+    },
+    {
+      "name": "customer.shippingAddresses.list.verify",
+      "status": "pass"
+    },
+    {
+      "name": "customer.shippingAddresses.missingLabel.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "item.reservations.get",
+      "status": "pass"
+    },
+    {
+      "name": "bankAccount.create.missingName.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "bankAccount.create",
+      "status": "pass"
+    },
+    {
+      "name": "ledger.bankAccount.verify",
+      "status": "pass"
+    },
+    {
+      "name": "bankAccount.create.duplicate.expect409",
+      "status": "pass"
+    },
+    {
+      "name": "roles.create.missingName.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "roles.create.missingPermissions.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "roles.create",
+      "status": "fail",
+      "error": "[POST /api/roles] expected 201, got 400 — {\"error\":\"At least one view permission must be enabled.\"}"
+    },
+    {
+      "name": "soStatus.testOrder.create",
+      "status": "pass"
+    },
+    {
+      "name": "soStatus.OPEN.to.HOLD",
+      "status": "pass"
+    },
+    {
+      "name": "soStatus.HOLD.to.OPEN",
+      "status": "pass"
+    },
+    {
+      "name": "soStatus.OPEN.to.REJECTED.releases.reservedQty",
+      "status": "pass"
+    },
+    {
+      "name": "soStatus.REJECTED.terminal.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "soStatus.invalidStatus.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "soStatus.missingStatus.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "poStatus.missingStatus.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "poStatus.invalid.to.OPEN.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "piStatus.missingStatus.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "piStatus.PAID.is.terminal.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "salesInvoice.copy.missingSource.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "salesInvoice.copy.notFound.expect404",
+      "status": "pass"
+    },
+    {
+      "name": "salesInvoice.copy.create",
+      "status": "fail",
+      "error": "[POST /api/sales-invoices/copy] expected 201, got 200 — {\"id\":\"9ee19d26-f03a-441d-a428-c230aff59093\",\"invoiceNumber\":\"INV-0026\"}"
+    },
+    {
+      "name": "KNOWN-ISSUE: salesInvoice.copy.noStockCheck",
+      "status": "gap"
+    },
+    {
+      "name": "salesReturn.forCancel.create",
+      "status": "pass"
+    },
+    {
+      "name": "salesReturn.cancel",
+      "status": "pass"
+    },
+    {
+      "name": "salesReturn.cancel.again.expect400",
+      "status": "pass"
+    },
+    {
+      "name": "reorders.list",
+      "status": "pass"
+    },
+    {
+      "name": "reorders.list.filtered",
+      "status": "fail",
+      "error": "[GET /api/reorders?status=OPEN] expected 200, got 500 — {\"error\":\"Failed to fetch reorders\"}"
+    },
+    {
+      "name": "brands.subBrands.nested.smoke",
+      "status": "pass"
+    }
+  ],
+  "created": {
+    "brand": {
+      "id": "306d35c2-ac4b-4421-adfb-eca1ad2bf31b",
+      "name": "WF Brand 20260412000846",
+      "discountPercent": "2.5",
+      "logoUrl": null,
+      "preferredVendorId": null,
+      "isActive": true,
+      "createdAt": "2026-04-11T18:38:49.954Z",
+      "updatedAt": "2026-04-11T18:38:49.954Z"
+    },
+    "item": {
+      "id": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+      "itemCode": "item-1775488196036",
+      "userCode": null,
+      "barcode": null,
+      "name": "WF Item 20260412000846",
+      "description": "Workflow test item",
+      "brandId": "306d35c2-ac4b-4421-adfb-eca1ad2bf31b",
+      "subBrandId": null,
+      "importedBrandName": null,
+      "importedSubBrandName": null,
+      "isImported": false,
+      "hsnCode": "85171200",
+      "gstRate": "18",
+      "purchasePrice": "780",
+      "mrp": "1200",
+      "sellingPrice": "1100",
+      "margin": null,
+      "marginType": "PERCENTAGE",
+      "discountPercent": null,
+      "minStock": "5",
+      "unit": "PCS",
+      "uomConversions": null,
+      "imageUrl": null,
+      "isActive": true,
+      "createdAt": "2026-04-11T18:38:53.591Z",
+      "updatedAt": "2026-04-11T18:38:53.591Z",
+      "brand": {
+        "id": "306d35c2-ac4b-4421-adfb-eca1ad2bf31b",
+        "name": "WF Brand 20260412000846",
+        "discountPercent": "2.5",
+        "logoUrl": null,
+        "preferredVendorId": null,
+        "isActive": true,
+        "createdAt": "2026-04-11T18:38:49.954Z",
+        "updatedAt": "2026-04-11T18:38:49.954Z"
+      },
+      "subBrand": null,
+      "inventory": {
+        "id": "dfa85d84-6fed-431c-90da-70479b88899a",
+        "itemId": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+        "physicalStock": "80",
+        "openingStock": "80",
+        "reservedQuantity": "0",
+        "minStockLevel": "5",
+        "lastUpdated": "2026-04-11T18:38:53.599Z"
+      }
+    },
+    "customer": {
+      "id": "7c6f551e-5817-485b-be1c-4dbea5b724d7",
+      "customerNumber": "customer-1775932738617",
+      "name": "WF Customer 20260412000846",
+      "contactName": "Workflow Contact",
+      "gstin": "36ABCDE0846A1Z9",
+      "email": "wf-customer-20260412000846@example.com",
+      "phone": "+919908460011",
+      "address": "Plot 42, Industrial Area",
+      "city": "Hyderabad",
+      "state": "Telangana",
+      "pincode": "500081",
+      "latitude": null,
+      "longitude": null,
+      "creditLimit": "50000",
+      "creditDays": 15,
+      "openingBalance": "0",
+      "status": "ACTIVE",
+      "portalPassword": null,
+      "createdAt": "2026-04-11T18:38:58.619Z",
+      "updatedAt": "2026-04-11T18:38:58.619Z"
+    },
+    "vendor": {
+      "id": "2b8a7f56-62df-457f-885a-5d43d8448c1e",
+      "vendorNumber": "VEN-0008",
+      "name": "WF Vendor 20260412000846",
+      "gstin": "29PQRST0846B1Z9",
+      "email": "wf-vendor-20260412000846@example.com",
+      "phone": "+918808462299",
+      "address": "No 99, Supplier Park",
+      "city": "Bengaluru",
+      "state": "Karnataka",
+      "pincode": "560001",
+      "latitude": null,
+      "longitude": null,
+      "creditDays": 20,
+      "openingBalance": "0",
+      "isActive": true,
+      "createdAt": "2026-04-11T18:39:03.348Z",
+      "updatedAt": "2026-04-11T18:39:03.348Z"
+    },
+    "rateSheet": {
+      "id": "a2db8081-de94-4a10-b623-499286f08899",
+      "name": "WF Rate 20260412000846",
+      "validFrom": "2026-04-11T00:00:00.000Z",
+      "validTo": null,
+      "itemRatePercent": "100",
+      "discountPercent": "0",
+      "excludedItemIds": [],
+      "excludedBrandIds": [],
+      "excludedSubBrandIds": [],
+      "useInclusionModel": true,
+      "inclusionDiscounts": {},
+      "currency": "INR",
+      "roundOff": "NONE",
+      "isActive": true,
+      "createdAt": "2026-04-11T18:39:04.726Z",
+      "updatedAt": "2026-04-11T18:39:04.726Z",
+      "customers": [
+        {
+          "rateSheetId": "a2db8081-de94-4a10-b623-499286f08899",
+          "customerId": "7c6f551e-5817-485b-be1c-4dbea5b724d7",
+          "customer": {
+            "id": "7c6f551e-5817-485b-be1c-4dbea5b724d7",
+            "customerNumber": "customer-1775932738617",
+            "name": "WF Customer 20260412000846"
+          }
+        }
+      ]
+    },
+    "salesOrder": {
+      "id": "8dc05bde-7431-4f92-b39a-bdff661d4693",
+      "orderNumber": "SO-0020",
+      "orderDate": "2026-04-11T00:00:00.000Z",
+      "customerId": "7c6f551e-5817-485b-be1c-4dbea5b724d7",
+      "expectedDelivery": "2026-04-13T00:00:00.000Z",
+      "referenceNumber": "WF-SO-20260412000846",
+      "status": "OPEN",
+      "subtotal": "6600",
+      "discountAmount": "0",
+      "taxAmount": "1188",
+      "totalAmount": "7788",
+      "notes": "Workflow sales order",
+      "terms": "Net 15",
+      "source": null,
+      "createdAt": "2026-04-11T18:39:08.871Z",
+      "updatedAt": "2026-04-11T18:39:08.871Z",
+      "createdBy": "00000000-0000-0000-0000-000000000001",
+      "customer": {
+        "id": "7c6f551e-5817-485b-be1c-4dbea5b724d7",
+        "customerNumber": "customer-1775932738617",
+        "name": "WF Customer 20260412000846"
+      },
+      "items": [
+        {
+          "id": "f5c1d710-308e-4418-8515-b262bcbc989a",
+          "salesOrderId": "8dc05bde-7431-4f92-b39a-bdff661d4693",
+          "itemId": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+          "quantity": "6",
+          "invoicedQuantity": "0",
+          "rate": "1100",
+          "discountPercent": "0",
+          "taxRate": "18",
+          "taxAmount": "1188",
+          "amount": "6600",
+          "item": {
+            "id": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+            "itemCode": "item-1775488196036",
+            "name": "WF Item 20260412000846",
+            "unit": "PCS",
+            "mrp": "1200",
+            "discountPercent": null
+          }
+        }
+      ]
+    },
+    "salesInvoice": {
+      "id": "2f82b9fb-189b-42fd-9079-81689f01691f",
+      "invoiceNumber": "INV-0023",
+      "invoiceDate": "2026-04-11T00:00:00.000Z",
+      "salesOrderId": "8dc05bde-7431-4f92-b39a-bdff661d4693",
+      "orderNumber": "SO-0020",
+      "customerId": "7c6f551e-5817-485b-be1c-4dbea5b724d7",
+      "customerName": null,
+      "shippingAddressId": null,
+      "subtotal": "6600",
+      "cgst": "594",
+      "sgst": "594",
+      "taxAmount": "1188",
+      "roundOff": "0",
+      "totalAmount": "7788",
+      "paidAmount": "0",
+      "balanceAmount": "7788",
+      "paymentStatus": "PENDING",
+      "dueDate": "2026-04-26T00:00:00.000Z",
+      "notes": "Workflow invoice",
+      "ref": null,
+      "isImported": false,
+      "createdAt": "2026-04-11T18:39:10.379Z",
+      "updatedAt": "2026-04-11T18:39:10.379Z",
+      "customer": {
+        "id": "7c6f551e-5817-485b-be1c-4dbea5b724d7",
+        "customerNumber": "customer-1775932738617",
+        "name": "WF Customer 20260412000846"
+      },
+      "items": [
+        {
+          "id": "5dbc9379-bcd6-4efb-8516-6816179d4af9",
+          "invoiceId": "2f82b9fb-189b-42fd-9079-81689f01691f",
+          "itemId": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+          "itemName": null,
+          "hsnCode": null,
+          "salesOrderItemId": null,
+          "ref": null,
+          "quantity": "6",
+          "rate": "1100",
+          "discountPercent": "0",
+          "taxRate": "18",
+          "taxAmount": "1188",
+          "amount": "6600",
+          "item": {
+            "id": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+            "itemCode": "item-1775488196036",
+            "name": "WF Item 20260412000846",
+            "unit": "PCS"
+          }
+        }
+      ]
+    },
+    "salesPayment": {
+      "id": "a532bf98-4b12-44dd-8d50-52b33c100f47",
+      "paymentNumber": "PAY-0012",
+      "paymentDate": "2026-04-11T00:00:00.000Z",
+      "customerId": "7c6f551e-5817-485b-be1c-4dbea5b724d7",
+      "invoiceId": null,
+      "amount": "7788",
+      "mode": "CASH",
+      "referenceNumber": "WF-RCPT-20260412000846",
+      "bankAccountId": null,
+      "chequeCollected": false,
+      "chequeCollectedDate": null,
+      "notes": "Workflow receipt",
+      "createdAt": "2026-04-11T18:39:14.791Z",
+      "updatedAt": "2026-04-11T18:39:14.791Z",
+      "customer": {
+        "id": "7c6f551e-5817-485b-be1c-4dbea5b724d7",
+        "customerNumber": "customer-1775932738617",
+        "name": "WF Customer 20260412000846"
+      },
+      "allocations": [
+        {
+          "id": "4eae16c7-2138-4d1b-8264-e99139e8f0a0",
+          "paymentId": "a532bf98-4b12-44dd-8d50-52b33c100f47",
+          "invoiceId": "2f82b9fb-189b-42fd-9079-81689f01691f",
+          "amount": "7788",
+          "invoice": {
+            "id": "2f82b9fb-189b-42fd-9079-81689f01691f",
+            "invoiceNumber": "INV-0023"
+          }
+        }
+      ]
+    },
+    "directInvoice": {
+      "id": "39d98c8a-b9bb-464d-b2dc-0cc8525c52ef",
+      "invoiceNumber": "INV-0024",
+      "invoiceDate": "2026-04-11T00:00:00.000Z",
+      "salesOrderId": null,
+      "orderNumber": null,
+      "customerId": "7c6f551e-5817-485b-be1c-4dbea5b724d7",
+      "customerName": null,
+      "shippingAddressId": null,
+      "subtotal": "2200",
+      "cgst": "0",
+      "sgst": "0",
+      "taxAmount": "0",
+      "roundOff": "0",
+      "totalAmount": "2200",
+      "paidAmount": "0",
+      "balanceAmount": "2200",
+      "paymentStatus": "PENDING",
+      "dueDate": "2026-04-26T00:00:00.000Z",
+      "notes": "Workflow direct invoice",
+      "ref": null,
+      "isImported": false,
+      "createdAt": "2026-04-11T18:39:23.423Z",
+      "updatedAt": "2026-04-11T18:39:23.423Z",
+      "customer": {
+        "id": "7c6f551e-5817-485b-be1c-4dbea5b724d7",
+        "customerNumber": "customer-1775932738617",
+        "name": "WF Customer 20260412000846"
+      },
+      "items": [
+        {
+          "id": "5f5750c1-1c33-4b33-9b9d-78f512f6f636",
+          "invoiceId": "39d98c8a-b9bb-464d-b2dc-0cc8525c52ef",
+          "itemId": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+          "itemName": null,
+          "hsnCode": null,
+          "salesOrderItemId": null,
+          "ref": null,
+          "quantity": "2",
+          "rate": "1100",
+          "discountPercent": "0",
+          "taxRate": "0",
+          "taxAmount": "0",
+          "amount": "2200",
+          "item": {
+            "id": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+            "itemCode": "item-1775488196036",
+            "name": "WF Item 20260412000846",
+            "unit": "PCS"
+          }
+        }
+      ]
+    },
+    "salesReturn": {
+      "id": "e0208c3e-1751-4782-b169-0f40ed03f877",
+      "returnNumber": "SR-0005",
+      "returnDate": "2026-04-11T00:00:00.000Z",
+      "customerId": "7c6f551e-5817-485b-be1c-4dbea5b724d7",
+      "invoiceId": "2f82b9fb-189b-42fd-9079-81689f01691f",
+      "subtotal": "2200",
+      "cgst": "198",
+      "sgst": "198",
+      "taxAmount": "396",
+      "totalAmount": "2596",
+      "reason": "Workflow test return",
+      "status": "OPEN",
+      "createdAt": "2026-04-11T18:39:26.363Z",
+      "updatedAt": "2026-04-11T18:39:26.363Z",
+      "customer": {
+        "id": "7c6f551e-5817-485b-be1c-4dbea5b724d7",
+        "customerNumber": "customer-1775932738617",
+        "name": "WF Customer 20260412000846"
+      },
+      "items": [
+        {
+          "id": "1eebee20-e31e-481a-b547-62fa8638304e",
+          "salesReturnId": "e0208c3e-1751-4782-b169-0f40ed03f877",
+          "itemId": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+          "quantity": "2",
+          "rate": "1100",
+          "taxRate": "18",
+          "taxAmount": "396",
+          "amount": "2200",
+          "item": {
+            "id": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+            "itemCode": "item-1775488196036",
+            "name": "WF Item 20260412000846",
+            "unit": "PCS"
+          }
+        }
+      ]
+    },
+    "purchaseOrder": {
+      "id": "d6ee43ae-14f3-421b-abee-581cb37fa375",
+      "orderNumber": "PO-0009",
+      "vendorId": "2b8a7f56-62df-457f-885a-5d43d8448c1e",
+      "vendorName": "WF Vendor 20260412000846",
+      "date": "2026-04-11T00:00:00.000Z",
+      "expectedDelivery": "2026-04-15T00:00:00.000Z",
+      "amount": "8640",
+      "taxAmount": "1555.2",
+      "totalAmount": "10195.2",
+      "status": "OPEN",
+      "notes": "Workflow purchase order",
+      "createdAt": "2026-04-11T18:39:31.318Z",
+      "updatedAt": "2026-04-11T18:39:31.318Z",
+      "vendor": {
+        "id": "2b8a7f56-62df-457f-885a-5d43d8448c1e",
+        "vendorNumber": "VEN-0008",
+        "name": "WF Vendor 20260412000846"
+      },
+      "items": [
+        {
+          "id": "eca43228-c730-4cf3-bfb1-59f7c59ea094",
+          "purchaseOrderId": "d6ee43ae-14f3-421b-abee-581cb37fa375",
+          "itemId": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+          "quantity": "12",
+          "rate": "720",
+          "taxRate": "18",
+          "taxAmount": "1555.2",
+          "amount": "8640",
+          "item": {
+            "id": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+            "itemCode": "item-1775488196036",
+            "name": "WF Item 20260412000846",
+            "unit": "PCS"
+          }
+        }
+      ]
+    },
+    "purchaseInvoice": {
+      "id": "9a5b03b6-c268-48eb-a539-587a63c063d0",
+      "invoiceNumber": "PI-0011",
+      "vendorId": "2b8a7f56-62df-457f-885a-5d43d8448c1e",
+      "vendorName": "WF Vendor 20260412000846",
+      "purchaseOrderId": "d6ee43ae-14f3-421b-abee-581cb37fa375",
+      "date": "2026-04-11T00:00:00.000Z",
+      "dueDate": "2026-04-26T00:00:00.000Z",
+      "amount": "8640",
+      "taxAmount": "1555.2",
+      "roundOff": "0",
+      "totalAmount": "10195.2",
+      "paidAmount": "0",
+      "balanceAmount": "10195.2",
+      "status": "PENDING",
+      "notes": "Workflow purchase invoice",
+      "ref": null,
+      "isImported": false,
+      "createdAt": "2026-04-11T18:39:32.752Z",
+      "updatedAt": "2026-04-11T18:39:32.752Z",
+      "vendor": {
+        "id": "2b8a7f56-62df-457f-885a-5d43d8448c1e",
+        "vendorNumber": "VEN-0008",
+        "name": "WF Vendor 20260412000846"
+      },
+      "items": [
+        {
+          "id": "33d45389-753c-400d-ba4a-e26cef52a350",
+          "purchaseInvoiceId": "9a5b03b6-c268-48eb-a539-587a63c063d0",
+          "itemId": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+          "itemName": null,
+          "hsnCode": null,
+          "ref": null,
+          "quantity": "12",
+          "rate": "720",
+          "discountPercent": "0",
+          "taxRate": "18",
+          "taxAmount": "1555.2",
+          "amount": "8640",
+          "item": {
+            "id": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+            "itemCode": "item-1775488196036",
+            "name": "WF Item 20260412000846",
+            "unit": "PCS"
+          }
+        }
+      ]
+    },
+    "vendorPayment": {
+      "id": "d8c50403-43ee-4e3a-8af5-7c4df0159578",
+      "paymentNumber": "VP-0008",
+      "vendorId": "2b8a7f56-62df-457f-885a-5d43d8448c1e",
+      "purchaseInvoiceId": "9a5b03b6-c268-48eb-a539-587a63c063d0",
+      "date": "2026-04-11T00:00:00.000Z",
+      "amount": "10195.2",
+      "mode": "CASH",
+      "paidFrom": "Cash",
+      "bankAccountId": null,
+      "chequeCollected": false,
+      "chequeCollectedDate": null,
+      "reference": "WF-VPAY-20260412000846",
+      "notes": "Workflow vendor payment",
+      "createdAt": "2026-04-11T18:39:36.745Z",
+      "updatedAt": "2026-04-11T18:39:36.745Z",
+      "vendor": {
+        "id": "2b8a7f56-62df-457f-885a-5d43d8448c1e",
+        "vendorNumber": "VEN-0008",
+        "name": "WF Vendor 20260412000846"
+      },
+      "purchaseInvoice": {
+        "id": "9a5b03b6-c268-48eb-a539-587a63c063d0",
+        "invoiceNumber": "PI-0011"
+      }
+    },
+    "purchaseReturn": {
+      "id": "af457048-7b2b-4d0d-8921-4b54e1037a33",
+      "returnNumber": "PR-0005",
+      "vendorId": "2b8a7f56-62df-457f-885a-5d43d8448c1e",
+      "vendorName": "WF Vendor 20260412000846",
+      "purchaseInvoiceId": "9a5b03b6-c268-48eb-a539-587a63c063d0",
+      "date": "2026-04-11T00:00:00.000Z",
+      "amount": "2160",
+      "taxAmount": "388.8",
+      "totalAmount": "2548.8",
+      "status": "OPEN",
+      "reason": "Workflow purchase return",
+      "notes": null,
+      "createdAt": "2026-04-11T18:39:37.934Z",
+      "updatedAt": "2026-04-11T18:39:37.934Z",
+      "vendor": {
+        "id": "2b8a7f56-62df-457f-885a-5d43d8448c1e",
+        "vendorNumber": "VEN-0008",
+        "name": "WF Vendor 20260412000846"
+      },
+      "items": [
+        {
+          "id": "af1b0a11-a80a-4fed-a200-c52e851aac25",
+          "purchaseReturnId": "af457048-7b2b-4d0d-8921-4b54e1037a33",
+          "itemId": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+          "quantity": "3",
+          "rate": "720",
+          "taxRate": "18",
+          "taxAmount": "388.8",
+          "amount": "2160",
+          "item": {
+            "id": "ebe591f1-04ed-4c4a-95ad-99e59adda30d",
+            "itemCode": "item-1775488196036",
+            "name": "WF Item 20260412000846",
+            "unit": "PCS"
+          }
+        }
+      ]
+    }
+  },
+  "bugTests": {
+    "bug2_unreserved_delete": "PASS",
+    "bug2_reserved_delete": "PASS",
+    "bug3_low_reservation": "FIXED — invoice succeeded despite reservedQty < orderQty"
+  },
+  "knownGaps": [],
+  "completedAt": "2026-04-11T18:41:32.557Z",
+  "summary": {
+    "passed": 131,
+    "failed": 12,
+    "skipped": 0,
+    "gaps": 1,
+    "total": 144,
+    "failedSteps": [
+      {
+        "name": "reports.sales-register",
+        "error": "[GET /api/reports/sales-register] expected 200, got 400 — {\"error\":\"startDate and endDate are required\"}"
+      },
+      {
+        "name": "reports.sales-register.details",
+        "error": "[GET /api/reports/sales-register/details] expected 200, got 400 — {\"error\":\"month and year are required\"}"
+      },
+      {
+        "name": "reports.purchase-register",
+        "error": "[GET /api/reports/purchase-register] expected 200, got 400 — {\"error\":\"startDate and endDate are required\"}"
+      },
+      {
+        "name": "reports.purchase-register.details",
+        "error": "[GET /api/reports/purchase-register/details] expected 200, got 400 — {\"error\":\"month and year are required\"}"
+      },
+      {
+        "name": "reports.profit-report",
+        "error": "[GET /api/reports/profit-report] expected 200, got 500 — {\"error\":\"Failed to fetch profit report\"}"
+      },
+      {
+        "name": "reports.gstr-1",
+        "error": "[GET /api/reports/gstr-1] expected 200, got 400 — {\"error\":\"month and year are required\"}"
+      },
+      {
+        "name": "reports.gstr-2",
+        "error": "[GET /api/reports/gstr-2] expected 200, got 400 — {\"error\":\"month and year are required\"}"
+      },
+      {
+        "name": "reports.gstr-3b",
+        "error": "[GET /api/reports/gstr-3b] expected 200, got 400 — {\"error\":\"month and year are required\"}"
+      },
+      {
+        "name": "reports.gstr-9",
+        "error": "[GET /api/reports/gstr-9] expected 200, got 400 — {\"error\":\"fy is required (e.g. 2025-26)\"}"
+      },
+      {
+        "name": "roles.create",
+        "error": "[POST /api/roles] expected 201, got 400 — {\"error\":\"At least one view permission must be enabled.\"}"
+      },
+      {
+        "name": "salesInvoice.copy.create",
+        "error": "[POST /api/sales-invoices/copy] expected 201, got 200 — {\"id\":\"9ee19d26-f03a-441d-a428-c230aff59093\",\"invoiceNumber\":\"INV-0026\"}"
+      },
+      {
+        "name": "reorders.list.filtered",
+        "error": "[GET /api/reorders?status=OPEN] expected 200, got 500 — {\"error\":\"Failed to fetch reorders\"}"
+      }
+    ],
+    "gapSteps": [
+      "KNOWN-ISSUE: salesInvoice.copy.noStockCheck"
+    ],
+    "bugTests": {
+      "bug2_unreserved_delete": "PASS",
+      "bug2_reserved_delete": "PASS",
+      "bug3_low_reservation": "FIXED — invoice succeeded despite reservedQty < orderQty"
+    }
+  }
+}

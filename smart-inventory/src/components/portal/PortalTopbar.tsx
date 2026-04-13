@@ -204,7 +204,7 @@ export function PortalTopbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-white border-b border-gray-100 shadow-sm h-14 flex items-center">
+      <header className="hidden md:flex sticky top-0 z-30 bg-white border-b border-gray-100 shadow-sm h-14 items-center">
         <div className="w-full px-6 flex items-center justify-between">
           {/* Page title */}
           <p className="text-sm font-semibold text-gray-700">

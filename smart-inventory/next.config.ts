@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import withPWA from "@ducanh2912/next-pwa";
 
 // ─── Security Headers ────────────────────────────────────────────────────────
 // Fixes all 7 medium-severity issues from the Barrion security scan (2026-03-20)
@@ -28,8 +29,9 @@ const CSP = [
   // SWR makes fetch() calls — all to the same origin (/api/*)
   "connect-src 'self'",
 
-  // jspdf / xlsx may use web workers via blob URLs
-  "worker-src blob:",
+  // 'self' → PWA service worker (served at /sw.js, same origin)
+  // blob: → jspdf / xlsx may use web workers via blob URLs
+  "worker-src 'self' blob:",
 
   // No external iframes allowed
   "frame-src 'none'",
@@ -123,7 +125,20 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// ─── PWA Configuration ────────────────────────────────────────────────────────
+// Wraps nextConfig with Workbox service worker generation.
+// SW is served at /sw.js and scoped to /portal/ via the manifest.
+// Disabled in development (hot reload conflicts with SW caching).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default withPWA({
+  dest: "public",
+  disable: process.env.NODE_ENV === "development",
+  fallbacks: {
+    // Shown instead of browser error page when user is offline and tries to navigate
+    document: "/portal/offline",
+  },
+})(nextConfig);
 
 // ─── NGINX CONFIG — do this on your server ──────────────────────────────────
 //

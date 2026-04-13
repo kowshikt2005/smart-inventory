@@ -78,10 +78,28 @@ export async function POST(request: Request) {
         },
       });
 
-      // Deduct stock for each item
+      // Deduct stock for each item — validate sufficiency before any decrement
       const itemIds = sourceInvoice.items.map((i: { itemId: string }) => i.itemId);
       const inventories = await tx.inventory.findMany({ where: { itemId: { in: itemIds } } });
-      const inventoryMap = new Map(inventories.map((inv: { itemId: string; id: string }) => [inv.itemId, inv]));
+      const inventoryMap = new Map(
+        inventories.map((inv: { itemId: string; id: string; physicalStock: unknown }) => [inv.itemId, inv])
+      );
+
+      // Pre-flight check: ensure all items have sufficient stock
+      for (const orderItem of sourceInvoice.items) {
+        const inventory = inventoryMap.get(orderItem.itemId) as
+          | { id: string; physicalStock: unknown }
+          | undefined;
+        if (inventory) {
+          const available = Number(inventory.physicalStock);
+          const required = Number(orderItem.quantity);
+          if (available < required) {
+            throw new Error(
+              `Insufficient stock for item ${orderItem.itemId}: available ${available}, required ${required}`
+            );
+          }
+        }
+      }
 
       for (const orderItem of sourceInvoice.items) {
         const inventory = inventoryMap.get(orderItem.itemId) as { id: string } | undefined;
@@ -129,9 +147,13 @@ export async function POST(request: Request) {
       return created;
     });
 
-    return NextResponse.json({ id: newInvoice.id, invoiceNumber: newInvoice.invoiceNumber });
+    return NextResponse.json({ id: newInvoice.id, invoiceNumber: newInvoice.invoiceNumber }, { status: 201 });
   } catch (error) {
     console.error('Error copying invoice:', error);
+    const msg = error instanceof Error ? error.message : '';
+    if (msg.startsWith('Insufficient stock')) {
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
     return NextResponse.json({ error: 'Failed to copy invoice' }, { status: 500 });
   }
 }

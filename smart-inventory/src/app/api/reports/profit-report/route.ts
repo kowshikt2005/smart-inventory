@@ -25,7 +25,7 @@ export async function GET(request: Request) {
         gte: startDate ? new Date(startDate) : defaultStart,
         lte: endDate ? new Date(endDate) : defaultEnd,
       },
-      status: { not: 'CANCELLED' },
+      paymentStatus: { not: 'CANCELLED' },
     };
 
     if (customerId) where.customerId = customerId;
