@@ -5,13 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -20,7 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, BookOpen } from "lucide-react";
+import { Loader2, Search, BookOpen, ChevronDown } from "lucide-react";
+import { PartySelectionModal } from "@/components/ledger/PartySelectionModal";
 import { ExportButtons } from "@/components/ui/ExportButtons";
 import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
 import { useState, useEffect, useCallback } from "react";
@@ -70,6 +64,7 @@ const TYPE_LABELS: Record<string, string> = {
 export default function BankLedgerPage() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -194,23 +189,36 @@ export default function BankLedgerPage() {
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <Label htmlFor="bankAccount">Bank Account</Label>
-              <Select
-                value={selectedAccountId}
-                onValueChange={setSelectedAccountId}
+              <Label>Bank Account</Label>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
                 disabled={isLoadingAccounts}
+                className="w-full h-10 flex items-center justify-between px-3 rounded-md border border-input bg-background text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <SelectTrigger id="bankAccount">
-                  <SelectValue placeholder="Select account..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {bankAccounts.map((acc) => (
-                    <SelectItem key={acc.id} value={acc.id}>
-                      {acc.accountName} ({acc.bankName})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <span className={selectedAccountId ? "text-foreground" : "text-muted-foreground"}>
+                  {selectedAccountId
+                    ? bankAccounts.find((a) => a.id === selectedAccountId)?.accountName ?? "Select..."
+                    : "Select account..."}
+                </span>
+                {isLoadingAccounts ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </button>
+              <PartySelectionModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                title="Select Account"
+                items={bankAccounts.map((acc) => ({
+                  id: acc.id,
+                  primaryText: acc.accountName,
+                  secondaryText: acc.bankName,
+                }))}
+                selectedId={selectedAccountId}
+                onSelect={setSelectedAccountId}
+              />
             </div>
 
             <div>

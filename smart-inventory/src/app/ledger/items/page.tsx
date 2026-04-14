@@ -6,13 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -20,7 +13,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, Search, Package } from "lucide-react";
+import { Loader2, Search, Package, ChevronDown } from "lucide-react";
+import { PartySelectionModal } from "@/components/ledger/PartySelectionModal";
 import { ExportButtons } from "@/components/ui/ExportButtons";
 import { exportToExcel, exportToPDF, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
 import { useState, useCallback } from "react";
@@ -74,6 +68,7 @@ const TYPE_META: Record<string, { label: string; color: string }> = {
 
 export default function StockLedgerPage() {
   const [selectedItemId, setSelectedItemId] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -189,23 +184,35 @@ export default function StockLedgerPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Item Selection */}
             <div>
-              <Label htmlFor="item">Item</Label>
-              <Select
-                value={selectedItemId}
-                onValueChange={setSelectedItemId}
+              <Label>Item</Label>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
                 disabled={isLoadingItems}
+                className="w-full h-10 flex items-center justify-between px-3 rounded-md border border-input bg-background text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <SelectTrigger id="item">
-                  <SelectValue placeholder="Select item..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {items.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.itemCode} - {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <span className={selectedItemId ? "text-foreground" : "text-muted-foreground"}>
+                  {selectedItemId
+                    ? (() => { const i = items.find((it) => it.id === selectedItemId); return i ? `${i.itemCode} - ${i.name}` : "Select..."; })()
+                    : "Select item..."}
+                </span>
+                {isLoadingItems ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </button>
+              <PartySelectionModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                title="Select Item"
+                items={items.map((item) => ({
+                  id: item.id,
+                  primaryText: `${item.itemCode} — ${item.name}`,
+                }))}
+                selectedId={selectedItemId}
+                onSelect={setSelectedItemId}
+              />
             </div>
 
             {/* From Date */}

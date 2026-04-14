@@ -81,19 +81,31 @@ export async function PUT(
       }
     }
 
-    const updatedBrand = await db.brand.update({
-      where: { id },
-      data: {
-        name: body.name !== undefined ? body.name : existingBrand.name,
-        discountPercent: body.discountPercent !== undefined
-          ? (body.discountPercent === null ? null : parseFloat(body.discountPercent))
-          : existingBrand.discountPercent,
-        logoUrl: body.logoUrl !== undefined ? (body.logoUrl || null) : existingBrand.logoUrl,
-        preferredVendorId: body.preferredVendorId !== undefined
-          ? (body.preferredVendorId || null)
-          : existingBrand.preferredVendorId,
-        isActive: body.isActive !== undefined ? body.isActive : existingBrand.isActive,
-      },
+    const deactivating = body.isActive === false && existingBrand.isActive === true;
+
+    const updatedBrand = await db.$transaction(async (tx) => {
+      const brand = await tx.brand.update({
+        where: { id },
+        data: {
+          name: body.name !== undefined ? body.name : existingBrand.name,
+          discountPercent: body.discountPercent !== undefined
+            ? (body.discountPercent === null ? null : parseFloat(body.discountPercent))
+            : existingBrand.discountPercent,
+          logoUrl: body.logoUrl !== undefined ? (body.logoUrl || null) : existingBrand.logoUrl,
+          preferredVendorId: body.preferredVendorId !== undefined
+            ? (body.preferredVendorId || null)
+            : existingBrand.preferredVendorId,
+          isActive: body.isActive !== undefined ? body.isActive : existingBrand.isActive,
+        },
+      });
+
+      // Cascade deactivation: sub-brands and their items become inactive
+      if (deactivating) {
+        await tx.subBrand.updateMany({ where: { brandId: id }, data: { isActive: false } });
+        await tx.item.updateMany({ where: { brandId: id }, data: { isActive: false } });
+      }
+
+      return brand;
     });
 
     return NextResponse.json(updatedBrand);

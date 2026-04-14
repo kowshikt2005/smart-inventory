@@ -103,6 +103,7 @@ export async function withNumberLock<T>(
 
   if ('$transaction' in db && typeof db.$transaction === 'function') {
     return db.$transaction(async (tx) => runWithConnection(tx as DbOrTxClient), {
+      maxWait: 10000, // match db.ts transaction helper — needed for AWS RDS pool latency
       timeout: 15000,
     });
   }

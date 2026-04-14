@@ -30,7 +30,7 @@ export default function PortalLoginPage() {
         setError(data.error || "Invalid credentials. Please try again.");
         return;
       }
-      router.push("/portal/shop?welcome=1");
+      router.push(data.isDefaultPin ? "/portal/shop?changePIN=1" : "/portal/shop");
     } catch {
       setError("Connection error. Please try again.");
     } finally {

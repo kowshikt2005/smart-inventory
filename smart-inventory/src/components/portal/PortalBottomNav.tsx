@@ -6,8 +6,9 @@ import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import {
   ShoppingBag, ShoppingCart, Package, User,
-  X, KeyRound, LogOut, Loader2, Eye, EyeOff, ChevronRight,
+  X, KeyRound, LogOut, Loader2, Eye, EyeOff, ChevronRight, Play,
 } from "lucide-react";
+import { WelcomeModal } from "@/components/portal/WelcomeModal";
 import { motion, AnimatePresence } from "motion/react";
 import { useCart } from "@/components/portal/CartContext";
 import { portalFetcher } from "@/lib/portal-fetcher";
@@ -140,6 +141,7 @@ function ChangePinForm({ onBack }: { onBack: () => void }) {
 
 function AccountSheet({ onClose }: { onClose: () => void }) {
   const [showChangePin, setShowChangePin] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
   const { clearCart } = useCart();
 
   const { data } = useSWR<{ customer: { name: string; customerNumber: string } }>(
@@ -248,6 +250,20 @@ function AccountSheet({ onClose }: { onClose: () => void }) {
 
                 <button
                   type="button"
+                  onClick={() => setShowTutorial(true)}
+                  className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl hover:bg-gray-50 active:bg-gray-100 transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+                      <Play className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <span className="text-sm font-medium text-[#1A1740]">Watch Tutorial</span>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-gray-400 transition-colors" />
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleLogout}
                   className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl hover:bg-red-50 active:bg-red-100 transition-colors"
                 >
@@ -264,6 +280,13 @@ function AccountSheet({ onClose }: { onClose: () => void }) {
           )}
         </AnimatePresence>
       </motion.div>
+
+      {showTutorial && (
+        <WelcomeModal
+          customerName={data?.customer?.name}
+          onClose={() => setShowTutorial(false)}
+        />
+      )}
     </motion.div>
   );
 }

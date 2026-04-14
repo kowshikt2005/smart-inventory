@@ -76,22 +76,30 @@ export async function POST(request: NextRequest) {
     }
 
     if (!customer.portalPassword) {
-      return NextResponse.json({ error: "No PIN is set. Contact your sales representative." }, { status: 400 });
-    }
+      // No PIN set — customer is on the default "123456". Verify that was provided.
+      if (currentPin !== "123456") {
+        recordFailed(rateLimitKey);
+        return NextResponse.json({ error: "Current PIN is incorrect" }, { status: 401 });
+      }
+      // Prevent setting the default as the new PIN
+      if (newPin === "123456") {
+        return NextResponse.json({ error: "Please choose a PIN different from the default" }, { status: 400 });
+      }
+    } else {
+      const isCurrentValid = await verifyPassword(currentPin, customer.portalPassword);
+      if (!isCurrentValid) {
+        recordFailed(rateLimitKey);
+        return NextResponse.json({ error: "Current PIN is incorrect" }, { status: 401 });
+      }
 
-    const isCurrentValid = await verifyPassword(currentPin, customer.portalPassword);
-    if (!isCurrentValid) {
-      recordFailed(rateLimitKey);
-      return NextResponse.json({ error: "Current PIN is incorrect" }, { status: 401 });
-    }
-
-    // Prevent reuse of current PIN
-    const isSame = await verifyPassword(newPin, customer.portalPassword);
-    if (isSame) {
-      return NextResponse.json(
-        { error: "New PIN must be different from current PIN" },
-        { status: 400 }
-      );
+      // Prevent reuse of current PIN
+      const isSame = await verifyPassword(newPin, customer.portalPassword);
+      if (isSame) {
+        return NextResponse.json(
+          { error: "New PIN must be different from current PIN" },
+          { status: 400 }
+        );
+      }
     }
 
     clearAttempts(rateLimitKey);

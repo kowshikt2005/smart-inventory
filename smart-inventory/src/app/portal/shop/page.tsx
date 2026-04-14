@@ -6,9 +6,11 @@ import {
   ShoppingBag, Play, Search, ShoppingCart, PackageCheck,
   ChevronRight, RefreshCw,
 } from "lucide-react";
+// Play is used in DesktopWelcome only — mobile tutorial moved to Account sheet
 import { motion } from "motion/react";
 import useSWR from "swr";
 import { WelcomeModal } from "@/components/portal/WelcomeModal";
+import { ChangePINModal } from "@/components/portal/ChangePINModal";
 import { portalFetcher } from "@/lib/portal-fetcher";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -156,6 +158,7 @@ function MobileBrandList() {
           })}
         </div>
       )}
+
     </div>
   );
 }
@@ -256,6 +259,7 @@ function ShopContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [showWelcome, setShowWelcome] = useState(false);
+  const [showChangePIN, setShowChangePIN] = useState(false);
   const [customerName, setCustomerName] = useState<string>();
 
   useEffect(() => {
@@ -271,8 +275,8 @@ function ShopContent() {
   }, []);
 
   useEffect(() => {
-    if (searchParams.get("welcome") === "1") {
-      setShowWelcome(true);
+    if (searchParams.get("changePIN") === "1") {
+      setShowChangePIN(true);
       router.replace("/portal/shop", { scroll: false });
     }
   }, [searchParams, router]);
@@ -283,6 +287,13 @@ function ShopContent() {
         <WelcomeModal
           customerName={customerName}
           onClose={() => setShowWelcome(false)}
+        />
+      )}
+
+      {showChangePIN && (
+        <ChangePINModal
+          onClose={() => setShowChangePIN(false)}
+          onSuccess={() => setShowChangePIN(false)}
         />
       )}
 

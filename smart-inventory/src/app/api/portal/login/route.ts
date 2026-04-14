@@ -187,6 +187,7 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({
       ok: true,
+      isDefaultPin: !customer.portalPassword,
       customer: { name: customer.name, customerNumber: customer.customerNumber },
     });
 

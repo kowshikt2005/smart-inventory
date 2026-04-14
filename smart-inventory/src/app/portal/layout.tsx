@@ -4,6 +4,7 @@ import { PortalTopbar } from "@/components/portal/PortalTopbar";
 import { PortalSidebar } from "@/components/portal/PortalSidebar";
 import { PortalMobileHeader } from "@/components/portal/PortalMobileHeader";
 import { PortalBottomNav } from "@/components/portal/PortalBottomNav";
+import { InactivityGuard } from "@/components/portal/InactivityGuard";
 
 // Viewport export — themeColor moved here in Next.js 14+ (not in metadata)
 export const viewport: Viewport = {
@@ -38,7 +39,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           {/* Desktop: white topbar — hidden on mobile */}
           <PortalTopbar />
           {/* pb-20 on mobile leaves room above the fixed bottom nav */}
-          <main className="flex-1 pb-20 md:pb-0">{children}</main>
+          <main className="flex-1 pb-20 md:pb-0">
+            <InactivityGuard>{children}</InactivityGuard>
+          </main>
         </div>
 
         {/* Mobile: fixed bottom nav — hidden on desktop */}

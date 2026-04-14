@@ -5,13 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -20,7 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, BookOpen, Users, Truck } from "lucide-react";
+import { Loader2, Search, BookOpen, Users, Truck, ChevronDown } from "lucide-react";
+import { PartySelectionModal } from "@/components/ledger/PartySelectionModal";
 import { ExportButtons } from "@/components/ui/ExportButtons";
 import { exportToExcel, exportToPDF, fmtNum, fmtDateExport, fetchCompanySettings } from "@/lib/export-utils";
 import { useState, useEffect, useCallback } from "react";
@@ -81,6 +75,7 @@ export default function LedgerPage() {
   const [mode, setMode] = useState<LedgerMode>("customer");
   const [parties, setParties] = useState<Party[]>([]);
   const [selectedPartyId, setSelectedPartyId] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -287,27 +282,36 @@ export default function LedgerPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Party Selection */}
             <div>
-              <Label htmlFor="party">
-                {mode === "customer" ? "Customer" : "Vendor"}
-              </Label>
-              <Select
-                value={selectedPartyId}
-                onValueChange={setSelectedPartyId}
+              <Label>{mode === "customer" ? "Customer" : "Vendor"}</Label>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
                 disabled={isLoadingParties}
+                className="w-full h-10 flex items-center justify-between px-3 rounded-md border border-input bg-background text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <SelectTrigger id="party">
-                  <SelectValue
-                    placeholder={`Select ${mode === "customer" ? "customer" : "vendor"}...`}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {parties.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} ({p.number})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <span className={selectedPartyId ? "text-foreground" : "text-muted-foreground"}>
+                  {selectedPartyId
+                    ? parties.find((p) => p.id === selectedPartyId)?.name ?? "Select..."
+                    : `Select ${mode === "customer" ? "customer" : "vendor"}...`}
+                </span>
+                {isLoadingParties ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </button>
+              <PartySelectionModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                title={mode === "customer" ? "Select Customer" : "Select Vendor"}
+                items={parties.map((p) => ({
+                  id: p.id,
+                  primaryText: p.name,
+                  secondaryText: p.number,
+                }))}
+                selectedId={selectedPartyId}
+                onSelect={setSelectedPartyId}
+              />
             </div>
 
             {/* From Date */}

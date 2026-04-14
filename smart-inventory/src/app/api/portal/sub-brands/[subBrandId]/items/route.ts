@@ -14,10 +14,27 @@ export async function GET(
 
   const subBrand = await db.subBrand.findUnique({
     where: { id: subBrandId, isActive: true },
-    select: { id: true, name: true, brandId: true, discountPercent: true },
+    select: {
+      id: true,
+      name: true,
+      brandId: true,
+      discountPercent: true,
+      brand: { select: { isActive: true } },
+    },
   });
 
-  if (!subBrand) {
+  // Reject if sub-brand doesn't exist or its parent brand is inactive
+  if (!subBrand || !subBrand.brand.isActive) {
+    return NextResponse.json({ error: "Sub-brand not found" }, { status: 404 });
+  }
+
+  // Enforce preferred-brand restriction: if the customer has preferred brands set,
+  // this sub-brand's parent must be one of them (mirrors the nav filter)
+  const preferred = await db.customerPreferredBrand.findMany({
+    where: { customerId: auth.customerId },
+    select: { brandId: true },
+  });
+  if (preferred.length > 0 && !preferred.some((p) => p.brandId === subBrand.brandId)) {
     return NextResponse.json({ error: "Sub-brand not found" }, { status: 404 });
   }
 

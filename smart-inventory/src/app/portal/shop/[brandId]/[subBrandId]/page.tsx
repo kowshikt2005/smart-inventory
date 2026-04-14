@@ -3,7 +3,7 @@
 import { useState, Suspense } from "react";
 import useSWR from "swr";
 import { useParams, useSearchParams } from "next/navigation";
-import { Loader2, Package, Plus, Minus, ShoppingCart, RefreshCw, ChevronRight } from "lucide-react";
+import { Loader2, Package, Plus, Minus, ShoppingCart, RefreshCw, ChevronRight, Search, X } from "lucide-react";
 import { useCart } from "@/components/portal/CartContext";
 import { portalFetcher } from "@/lib/portal-fetcher";
 
@@ -125,6 +125,7 @@ function ItemsContent() {
   const searchParams = useSearchParams();
   const subBrandId = params.subBrandId as string;
   const brandName = searchParams.get("brand");
+  const [query, setQuery] = useState("");
 
   const { data, error, isLoading, mutate } = useSWR<{ subBrand: SubBrandDetail; items: Item[] }>(
     subBrandId ? `/api/portal/sub-brands/${subBrandId}/items` : null,
@@ -134,11 +135,19 @@ function ItemsContent() {
 
   const subBrand = data?.subBrand;
   const items = data?.items ?? [];
+  const q = query.toLowerCase().trim();
+  const filtered = q
+    ? items.filter(
+        (i) =>
+          i.name.toLowerCase().includes(q) ||
+          i.itemCode.toLowerCase().includes(q)
+      )
+    : items;
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-6">
       {/* Breadcrumb + header */}
-      <div className="mb-6">
+      <div className="mb-4">
         {(brandName || subBrand) && (
           <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-2">
             {brandName && <span>{brandName}</span>}
@@ -150,9 +159,37 @@ function ItemsContent() {
           {subBrand ? subBrand.name : <span className="bg-gray-100 text-transparent rounded animate-pulse">Loading range…</span>}
         </h1>
         <p className="text-gray-400 text-sm mt-0.5">
-          {isLoading ? "Loading…" : `${items.length} product${items.length !== 1 ? "s" : ""}`}
+          {isLoading
+            ? "Loading…"
+            : q
+            ? `${filtered.length} of ${items.length} product${items.length !== 1 ? "s" : ""}`
+            : `${items.length} product${items.length !== 1 ? "s" : ""}`}
         </p>
       </div>
+
+      {/* Search bar — shown once items are loaded */}
+      {!isLoading && !error && items.length > 0 && (
+        <div className="relative mb-5">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name or code…"
+            className="w-full h-11 bg-white border border-gray-200 rounded-xl pl-10 pr-10 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2D2A5E]/20 focus:border-[#2D2A5E]/40 transition-all shadow-sm"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Loading */}
       {isLoading && (
@@ -175,7 +212,7 @@ function ItemsContent() {
         </div>
       )}
 
-      {/* Empty */}
+      {/* Empty range */}
       {!isLoading && !error && items.length === 0 && (
         <div className="flex flex-col items-center justify-center py-24 gap-4">
           <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center">
@@ -185,10 +222,29 @@ function ItemsContent() {
         </div>
       )}
 
+      {/* No search results */}
+      {!isLoading && !error && items.length > 0 && filtered.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-24 gap-3">
+          <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center">
+            <Search className="h-7 w-7 text-gray-300" />
+          </div>
+          <p className="text-gray-400 text-sm">
+            No products match &ldquo;{query}&rdquo;
+          </p>
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            className="text-xs font-medium text-[#2D2A5E] hover:text-[#1A1740] transition-colors"
+          >
+            Clear search
+          </button>
+        </div>
+      )}
+
       {/* Grid */}
-      {!isLoading && items.length > 0 && (
+      {!isLoading && filtered.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {items.map((item) => (
+          {filtered.map((item) => (
             <ItemCard key={item.id} item={item} />
           ))}
         </div>

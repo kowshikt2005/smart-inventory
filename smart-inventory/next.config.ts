@@ -82,7 +82,6 @@ const securityHeaders = [
       "geolocation=()",
       "payment=()",
       "usb=()",
-      "interest-cohort=()",
       "display-capture=()",
     ].join(", "),
   },
