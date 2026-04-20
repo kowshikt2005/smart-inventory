@@ -17,6 +17,7 @@ interface Item {
   imageUrl: string | null;
   description: string | null;
   gstRate: string;
+  discountPercent?: number;
 }
 
 interface SubBrandDetail {
@@ -47,7 +48,13 @@ function ItemCard({ item }: { item: Item }) {
   const mrp = Number(item.mrp);
   const price = Number(item.sellingPrice);
   const gstRate = Number(item.gstRate);
-  const hasDiscount = mrp > 0 && mrp > price;
+  const configuredDiscountPercent = Number(item.discountPercent ?? 0);
+  const derivedDiscountPercent = mrp > 0 && mrp > price ? ((mrp - price) / mrp) * 100 : 0;
+  const discountPercent = configuredDiscountPercent > 0 ? configuredDiscountPercent : derivedDiscountPercent;
+  const hasDiscount = mrp > 0 && discountPercent > 0 && mrp >= price;
+  const discountLabel = Number.isInteger(discountPercent)
+    ? discountPercent.toFixed(0)
+    : discountPercent.toFixed(2).replace(/\.?0+$/, "");
 
   function handleAdd() {
     addItem({
@@ -80,7 +87,12 @@ function ItemCard({ item }: { item: Item }) {
         <div className="flex items-baseline gap-2 mb-1 mt-auto">
           <span className="text-lg font-bold text-amber-600">₹{price.toFixed(2)}</span>
           {hasDiscount && (
-            <span className="text-xs text-gray-400 line-through">₹{mrp.toFixed(2)}</span>
+            <>
+              <span className="text-xs text-gray-400 line-through">₹{mrp.toFixed(2)}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-full">
+                {discountLabel}% Off
+              </span>
+            </>
           )}
         </div>
         <p className="text-xs text-gray-400 mb-3">per {item.unit}</p>

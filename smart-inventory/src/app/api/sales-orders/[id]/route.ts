@@ -101,19 +101,28 @@ export async function GET(
     const allocationMap = new Map(
       allocations.map((a) => [a.itemId, a])
     );
-
-    // Calculate stock status based on allocation
-    const stockStatus = calculateOrderStockStatus(allocations);
+    const expectsAllocation = salesOrder.status === 'OPEN' || salesOrder.status === 'HOLD';
+    let usedFallbackForOrder = false;
 
     // Calculate detailed stock status for each item
     const itemsWithStock = salesOrder.items.map((orderItem) => {
       const physicalStock = Number(orderItem.item.inventory?.physicalStock || 0);
       const reservedQuantity = Number(orderItem.item.inventory?.reservedQuantity || 0);
       const quantity = Number(orderItem.quantity);
+      const fallbackAvailableStock = Math.max(0, physicalStock - reservedQuantity);
 
       const allocation = allocationMap.get(orderItem.itemId);
-      const allocatedQty = allocation?.allocatedQty || 0;
-      const shortfall = allocation?.shortfallQty || 0;
+      const useFallback = expectsAllocation && !allocation;
+      if (useFallback) {
+        usedFallbackForOrder = true;
+      }
+
+      const allocatedQty = useFallback
+        ? Math.min(quantity, fallbackAvailableStock)
+        : allocation?.allocatedQty || 0;
+      const shortfall = useFallback
+        ? Math.max(0, quantity - allocatedQty)
+        : allocation?.shortfallQty || 0;
       const hasStock = shortfall === 0;
 
       return {
@@ -131,6 +140,13 @@ export async function GET(
         },
       };
     });
+
+    let stockStatus: 'Available' | 'Partial' | 'Unavailable' = calculateOrderStockStatus(allocations);
+    if (usedFallbackForOrder) {
+      const allFullyAllocated = itemsWithStock.every((item) => item.stockInfo.shortfall === 0);
+      const someAllocated = itemsWithStock.some((item) => item.stockInfo.allocatedQty > 0);
+      stockStatus = allFullyAllocated ? 'Available' : someAllocated ? 'Partial' : 'Unavailable';
+    }
 
     // Create summary for stock
     const stockSummary = {

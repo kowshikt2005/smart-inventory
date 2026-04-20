@@ -212,7 +212,16 @@ export async function POST(request: Request) {
         customer: true,
         items: {
           include: {
-            item: true,
+            item: {
+              include: {
+                inventory: {
+                  select: {
+                    physicalStock: true,
+                    reservedQuantity: true,
+                  },
+                },
+              },
+            },
           },
         },
         invoices: true,
@@ -258,31 +267,54 @@ export async function POST(request: Request) {
     if (!negativeBillingEnabled) {
       const allocationResult = await calculateStockAllocation(db);
       const allocations = getOrderAllocation(salesOrder.id, allocationResult);
-      const stockStatus = calculateOrderStockStatus(allocations);
+      const allocationMap = new Map(allocations.map((a) => [a.itemId, a]));
+      const expectsAllocation = salesOrder.status === 'OPEN' || salesOrder.status === 'HOLD';
+
+      const itemAllocations = salesOrder.items.map((orderItem) => {
+        const orderedQty = Number(orderItem.quantity);
+        const allocation = allocationMap.get(orderItem.itemId);
+
+        const fallbackAvailableStock = Math.max(
+          0,
+          Number(orderItem.item.inventory?.physicalStock || 0) -
+            Number(orderItem.item.inventory?.reservedQuantity || 0)
+        );
+        const useFallback = expectsAllocation && !allocation;
+
+        const allocatedQty = useFallback
+          ? Math.min(orderedQty, fallbackAvailableStock)
+          : allocation?.allocatedQty || 0;
+        const shortfall = useFallback
+          ? Math.max(0, orderedQty - allocatedQty)
+          : allocation?.shortfallQty || 0;
+
+        return {
+          orderItem,
+          orderedQty,
+          allocatedQty,
+          shortfall,
+          useFallback,
+        };
+      });
+
+      let stockStatus: 'Available' | 'Partial' | 'Unavailable' = calculateOrderStockStatus(allocations);
+      if (itemAllocations.some((item) => item.useFallback)) {
+        const allFullyAllocated = itemAllocations.every((item) => item.shortfall === 0);
+        const someAllocated = itemAllocations.some((item) => item.allocatedQty > 0);
+        stockStatus = allFullyAllocated ? 'Available' : someAllocated ? 'Partial' : 'Unavailable';
+      }
 
       // Only allow invoice creation for fully allocated orders (In Stock)
       if (stockStatus !== 'Available') {
-        const allocationMap = new Map(allocations.map((a) => [a.itemId, a]));
-
-        const insufficientStockItems = salesOrder.items
-          .map((orderItem) => {
-            const allocation = allocationMap.get(orderItem.itemId);
-            const allocatedQty = allocation?.allocatedQty || 0;
-            const orderedQty = Number(orderItem.quantity);
-            const shortfall = allocation?.shortfallQty || orderedQty;
-
-            if (shortfall > 0) {
-              return {
-                itemCode: orderItem.item.itemCode,
-                itemName: orderItem.item.name,
-                required: orderedQty,
-                available: allocatedQty,
-                shortfall,
-              };
-            }
-            return null;
-          })
-          .filter((item) => item !== null);
+        const insufficientStockItems = itemAllocations
+          .filter((item) => item.shortfall > 0)
+          .map((item) => ({
+            itemCode: item.orderItem.item.itemCode,
+            itemName: item.orderItem.item.name,
+            required: item.orderedQty,
+            available: item.allocatedQty,
+            shortfall: item.shortfall,
+          }));
 
         return NextResponse.json(
           {

@@ -117,14 +117,27 @@ export async function GET(request: Request) {
       const allocationMap = new Map(
         allocations.map((a) => [a.itemId, a])
       );
-
-      // Calculate stock status based on allocation
-      const stockStatus = calculateOrderStockStatus(allocations);
+      const expectsAllocation = order.status === 'OPEN' || order.status === 'HOLD';
+      let usedFallbackForOrder = false;
 
       const itemsWithStock = order.items.map((orderItem) => {
         const allocation = allocationMap.get(orderItem.itemId);
-        const allocatedQty = allocation?.allocatedQty || 0;
-        const shortfallQty = allocation?.shortfallQty || 0;
+        const orderedQty = Number(orderItem.quantity);
+        const physicalStock = Number(orderItem.item.inventory?.physicalStock || 0);
+        const reservedQuantity = Number(orderItem.item.inventory?.reservedQuantity || 0);
+        const fallbackAvailableStock = Math.max(0, physicalStock - reservedQuantity);
+
+        const useFallback = expectsAllocation && !allocation;
+        if (useFallback) {
+          usedFallbackForOrder = true;
+        }
+
+        const allocatedQty = useFallback
+          ? Math.min(orderedQty, fallbackAvailableStock)
+          : allocation?.allocatedQty || 0;
+        const shortfallQty = useFallback
+          ? Math.max(0, orderedQty - allocatedQty)
+          : allocation?.shortfallQty || 0;
         const hasStock = shortfallQty === 0;
 
         return {
@@ -135,6 +148,13 @@ export async function GET(request: Request) {
           shortfallQty,
         };
       });
+
+      let stockStatus: 'Available' | 'Partial' | 'Unavailable' = calculateOrderStockStatus(allocations);
+      if (usedFallbackForOrder) {
+        const allFullyAllocated = itemsWithStock.every((item) => item.shortfallQty === 0);
+        const someAllocated = itemsWithStock.some((item) => item.allocatedQty > 0);
+        stockStatus = allFullyAllocated ? 'Available' : someAllocated ? 'Partial' : 'Unavailable';
+      }
 
       // Create summary for stock
       const stockSummary = {
