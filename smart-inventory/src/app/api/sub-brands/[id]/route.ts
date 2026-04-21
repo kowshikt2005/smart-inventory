@@ -82,16 +82,32 @@ export async function PUT(
       }
     }
 
-    const updatedSubBrand = await db.subBrand.update({
-      where: { id },
-      data: {
-        name: body.name !== undefined ? body.name : existingSubBrand.name,
-        discountPercent: body.discountPercent !== undefined
-          ? (body.discountPercent === null ? null : parseFloat(body.discountPercent))
-          : existingSubBrand.discountPercent,
-        logoUrl: body.logoUrl !== undefined ? (body.logoUrl || null) : existingSubBrand.logoUrl,
-        isActive: body.isActive !== undefined ? body.isActive : existingSubBrand.isActive,
-      },
+    const deactivating = body.isActive === false && existingSubBrand.isActive === true;
+    const reactivating = body.isActive === true && existingSubBrand.isActive === false;
+
+    const updatedSubBrand = await db.$transaction(async (tx) => {
+      const subBrand = await tx.subBrand.update({
+        where: { id },
+        data: {
+          name: body.name !== undefined ? body.name : existingSubBrand.name,
+          discountPercent: body.discountPercent !== undefined
+            ? (body.discountPercent === null ? null : parseFloat(body.discountPercent))
+            : existingSubBrand.discountPercent,
+          logoUrl: body.logoUrl !== undefined ? (body.logoUrl || null) : existingSubBrand.logoUrl,
+          isActive: body.isActive !== undefined ? body.isActive : existingSubBrand.isActive,
+        },
+      });
+
+      // Cascade sub-brand deactivation/reactivation to child items.
+      if (deactivating) {
+        await tx.item.updateMany({ where: { subBrandId: id }, data: { isActive: false } });
+      }
+
+      if (reactivating) {
+        await tx.item.updateMany({ where: { subBrandId: id }, data: { isActive: true } });
+      }
+
+      return subBrand;
     });
 
     return NextResponse.json(updatedSubBrand);

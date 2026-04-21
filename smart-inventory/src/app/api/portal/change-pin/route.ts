@@ -29,6 +29,10 @@ function clearAttempts(key: string): void {
   cache.delete(key);
 }
 
+function isBcryptHash(value: string): boolean {
+  return value.startsWith("$2a$") || value.startsWith("$2b$") || value.startsWith("$2y$");
+}
+
 export async function POST(request: NextRequest) {
   const auth = await getPortalCustomer(request);
   if (auth.error) return auth.error;
@@ -86,14 +90,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Please choose a PIN different from the default" }, { status: 400 });
       }
     } else {
-      const isCurrentValid = await verifyPassword(currentPin, customer.portalPassword);
+      const isCurrentValid = isBcryptHash(customer.portalPassword)
+        ? await verifyPassword(currentPin, customer.portalPassword)
+        : currentPin === customer.portalPassword;
       if (!isCurrentValid) {
         recordFailed(rateLimitKey);
         return NextResponse.json({ error: "Current PIN is incorrect" }, { status: 401 });
       }
 
       // Prevent reuse of current PIN
-      const isSame = await verifyPassword(newPin, customer.portalPassword);
+      const isSame = isBcryptHash(customer.portalPassword)
+        ? await verifyPassword(newPin, customer.portalPassword)
+        : newPin === customer.portalPassword;
       if (isSame) {
         return NextResponse.json(
           { error: "New PIN must be different from current PIN" },

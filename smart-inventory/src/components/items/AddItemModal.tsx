@@ -30,6 +30,20 @@ interface UOMConversion {
   factor: string;
 }
 
+function normalizeGstRateValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric)) return String(numeric);
+  return raw;
+}
+
+function normalizeUnitValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value).trim().toUpperCase();
+}
+
 interface EditItem {
   id: string;
   itemCode: string;
@@ -110,6 +124,24 @@ export function AddItemModal({
     openingStock: "0",
   });
   const [uomConversions, setUomConversions] = useState<UOMConversion[]>([]);
+  const gstOptionLabels: Record<string, string> = {
+    "0": "0%",
+    "5": "5%",
+    "12": "12%",
+    "18": "18%",
+    "28": "28%",
+  };
+  const unitOptionLabels: Record<string, string> = {
+    PCS: "PCS (Pieces)",
+    CTN: "CTN (Cartons)",
+    KG: "KG (Kilograms)",
+    LTR: "LTR (Liters)",
+    MTR: "MTR (Meters)",
+    BOX: "BOX (Boxes)",
+    SET: "SET (Sets)",
+  };
+  const normalizedGstRate = normalizeGstRateValue(formData.gstRate);
+  const normalizedUnit = normalizeUnitValue(formData.unit);
 
   // Use SWR to cache brands and sub-brands - NO N+1 queries!
   const { data: brandsData, isLoading: _brandsLoading } = useSWR(isOpen ? "/api/brands?activeOnly=true" : null);
@@ -166,14 +198,14 @@ export function AddItemModal({
         brandId: editItem.brand?.id || "",
         subBrandId: editItem.subBrand?.id || "",
         hsnCode: editItem.hsnCode || "",
-        gstRate: editItem.gstRate !== undefined && editItem.gstRate !== null ? String(Number(editItem.gstRate)) : "18",
+        gstRate: editItem.gstRate !== undefined && editItem.gstRate !== null ? normalizeGstRateValue(editItem.gstRate) : "18",
         purchasePrice: editItem.purchasePrice !== undefined && editItem.purchasePrice !== null ? String(editItem.purchasePrice) : "0",
         mrp: editItem.mrp !== undefined && editItem.mrp !== null ? String(editItem.mrp) : "0",
         sellingPrice: editItem.sellingPrice !== undefined && editItem.sellingPrice !== null ? String(editItem.sellingPrice) : "0",
         margin: editItem.margin !== undefined && editItem.margin !== null ? String(editItem.margin) : "",
         marginType: editItem.marginType || "PERCENTAGE",
         minStock: String(editItem.inventory?.minStockLevel ?? 0),
-        unit: editItem.unit || "PCS",
+        unit: normalizeUnitValue(editItem.unit) || "PCS",
         openingStock: String(editItem.inventory?.openingStock ?? 0),
       });
       setUomConversions(
@@ -774,13 +806,18 @@ export function AddItemModal({
                   GST Rate (%) <span className="text-red-500">*</span>
                 </label>
                 <Select
-                  value={formData.gstRate}
+                  value={normalizedGstRate}
                   onValueChange={(value) => handleSelectChange("gstRate", value)}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select GST Rate">
+                      {normalizedGstRate ? (gstOptionLabels[normalizedGstRate] || `${normalizedGstRate}%`) : ""}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
+                    {normalizedGstRate && !['0', '5', '12', '18', '28'].includes(normalizedGstRate) && (
+                      <SelectItem value={normalizedGstRate}>{normalizedGstRate}% (Current)</SelectItem>
+                    )}
                     <SelectItem value="0">0%</SelectItem>
                     <SelectItem value="5">5%</SelectItem>
                     <SelectItem value="12">12%</SelectItem>
@@ -938,13 +975,18 @@ export function AddItemModal({
                   Unit of Measurement <span className="text-red-500">*</span>
                 </label>
                 <Select
-                  value={formData.unit}
+                  value={normalizedUnit}
                   onValueChange={(value) => handleSelectChange("unit", value)}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select Unit">
+                      {normalizedUnit ? (unitOptionLabels[normalizedUnit] || `${normalizedUnit} (Current)`) : ""}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
+                    {normalizedUnit && !['PCS', 'CTN', 'KG', 'LTR', 'MTR', 'BOX', 'SET'].includes(normalizedUnit) && (
+                      <SelectItem value={normalizedUnit}>{normalizedUnit} (Current)</SelectItem>
+                    )}
                     <SelectItem value="PCS">PCS (Pieces)</SelectItem>
                     <SelectItem value="CTN">CTN (Cartons)</SelectItem>
                     <SelectItem value="KG">KG (Kilograms)</SelectItem>

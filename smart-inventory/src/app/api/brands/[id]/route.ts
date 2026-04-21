@@ -82,6 +82,7 @@ export async function PUT(
     }
 
     const deactivating = body.isActive === false && existingBrand.isActive === true;
+    const activating = body.isActive === true && existingBrand.isActive === false;
 
     const updatedBrand = await db.$transaction(async (tx) => {
       const brand = await tx.brand.update({
@@ -103,6 +104,12 @@ export async function PUT(
       if (deactivating) {
         await tx.subBrand.updateMany({ where: { brandId: id }, data: { isActive: false } });
         await tx.item.updateMany({ where: { brandId: id }, data: { isActive: false } });
+      }
+
+      // Cascade activation: bring sub-brands and items back when the brand is reactivated
+      if (activating) {
+        await tx.subBrand.updateMany({ where: { brandId: id }, data: { isActive: true } });
+        await tx.item.updateMany({ where: { brandId: id }, data: { isActive: true } });
       }
 
       return brand;
