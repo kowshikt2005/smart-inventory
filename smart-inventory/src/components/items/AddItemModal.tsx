@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,33 @@ interface UOMConversion {
 
 function normalizeGstRateValue(value: unknown): string {
   if (value === null || value === undefined) return "";
+
+  if (typeof value === "object") {
+    const recordValue = value as Record<string, unknown>;
+    const objectCandidates = [
+      recordValue.$numberDecimal,
+      recordValue.value,
+      recordValue.amount,
+    ];
+
+    for (const candidate of objectCandidates) {
+      if (candidate !== null && candidate !== undefined) {
+        return normalizeGstRateValue(candidate);
+      }
+    }
+
+    if (typeof recordValue.toString === "function") {
+      const objectString = recordValue.toString().trim();
+      if (objectString && objectString !== "[object Object]") {
+        const numericObjectString = Number(objectString);
+        if (Number.isFinite(numericObjectString)) return String(numericObjectString);
+        return objectString;
+      }
+    }
+
+    return "";
+  }
+
   const raw = String(value).trim();
   if (!raw) return "";
   const numeric = Number(raw);
@@ -42,6 +69,23 @@ function normalizeGstRateValue(value: unknown): string {
 function normalizeUnitValue(value: unknown): string {
   if (value === null || value === undefined) return "";
   return String(value).trim().toUpperCase();
+}
+
+function resolveEditGstRate(editItem: EditItem): string {
+  const candidateItem = editItem as unknown as Record<string, unknown>;
+  const candidates = [
+    candidateItem.gstRate,
+    candidateItem.gst,
+    candidateItem.taxRate,
+    (candidateItem.tax as Record<string, unknown> | undefined)?.gstRate,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeGstRateValue(candidate);
+    if (normalized) return normalized;
+  }
+
+  return "";
 }
 
 interface EditItem {
@@ -88,6 +132,56 @@ interface AddItemModalProps {
   prefillData?: PrefillData;
 }
 
+function createDefaultFormData(prefillData?: PrefillData) {
+  const hasInvoicePrefill = !!(prefillData?.name || prefillData?.quantity);
+
+  return {
+    name: prefillData?.name || "",
+    userCode: "",
+    barcode: "",
+    description: "",
+    brandId: "",
+    subBrandId: "",
+    hsnCode: prefillData?.hsnCode || "",
+    gstRate: prefillData?.gstRate || "",
+    purchasePrice: prefillData?.purchasePrice || "0",
+    mrp: prefillData?.mrp || "0",
+    sellingPrice: prefillData?.sellingPrice || "0",
+    margin: "",
+    marginType: "PERCENTAGE",
+    minStock: "0",
+    unit: prefillData?.unit || (hasInvoicePrefill ? "CTN" : "PCS"),
+    openingStock: "0",
+  };
+}
+
+function createEditFormData(editItem: EditItem) {
+  return {
+    name: editItem.name || "",
+    userCode: editItem.userCode || "",
+    barcode: editItem.barcode || "",
+    description: editItem.description || "",
+    brandId: editItem.brand?.id || "",
+    subBrandId: editItem.subBrand?.id || "",
+    hsnCode: editItem.hsnCode || "",
+    gstRate: resolveEditGstRate(editItem),
+    purchasePrice:
+      editItem.purchasePrice !== undefined && editItem.purchasePrice !== null
+        ? String(editItem.purchasePrice)
+        : "0",
+    mrp: editItem.mrp !== undefined && editItem.mrp !== null ? String(editItem.mrp) : "0",
+    sellingPrice:
+      editItem.sellingPrice !== undefined && editItem.sellingPrice !== null
+        ? String(editItem.sellingPrice)
+        : "0",
+    margin: editItem.margin !== undefined && editItem.margin !== null ? String(editItem.margin) : "",
+    marginType: editItem.marginType || "PERCENTAGE",
+    minStock: String(editItem.inventory?.minStockLevel ?? 0),
+    unit: normalizeUnitValue(editItem.unit) || "PCS",
+    openingStock: String(editItem.inventory?.openingStock ?? 0),
+  };
+}
+
 export function AddItemModal({
   isOpen,
   onClose,
@@ -105,32 +199,8 @@ export function AddItemModal({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const [formData, setFormData] = useState({
-    name: "",
-    userCode: "",
-    barcode: "",
-    description: "",
-    brandId: "",
-    subBrandId: "",
-    hsnCode: "",
-    gstRate: "18",
-    purchasePrice: "0", // Cost price
-    mrp: "0", // Maximum Retail Price
-    sellingPrice: "0", // Actual selling price
-    margin: "",
-    marginType: "PERCENTAGE",
-    minStock: "0",
-    unit: "PCS",
-    openingStock: "0",
-  });
+  const [formData, setFormData] = useState(() => createDefaultFormData(prefillData));
   const [uomConversions, setUomConversions] = useState<UOMConversion[]>([]);
-  const gstOptionLabels: Record<string, string> = {
-    "0": "0%",
-    "5": "5%",
-    "12": "12%",
-    "18": "18%",
-    "28": "28%",
-  };
   const unitOptionLabels: Record<string, string> = {
     PCS: "PCS (Pieces)",
     CTN: "CTN (Cartons)",
@@ -140,6 +210,7 @@ export function AddItemModal({
     BOX: "BOX (Boxes)",
     SET: "SET (Sets)",
   };
+  const gstOptions = ["0", "5", "12", "18", "28"];
   const normalizedGstRate = normalizeGstRateValue(formData.gstRate);
   const normalizedUnit = normalizeUnitValue(formData.unit);
 
@@ -158,27 +229,10 @@ export function AddItemModal({
 
   // Reset form when opening for a new item — must NOT depend on brandsData/subBrandsData
   // or it will re-run (and wipe user input) every time SWR revalidates those queries.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!editItem && isOpen) {
-      const hasInvoicePrefill = !!(prefillData?.name || prefillData?.quantity);
-      setFormData({
-        name: prefillData?.name || "",
-        userCode: "",
-        barcode: "",
-        description: "",
-        brandId: "",
-        subBrandId: "",
-        hsnCode: prefillData?.hsnCode || "",
-        gstRate: prefillData?.gstRate || "18",
-        purchasePrice: prefillData?.purchasePrice || "0",
-        mrp: prefillData?.mrp || "0",
-        sellingPrice: prefillData?.sellingPrice || "0",
-        margin: "",
-        marginType: "PERCENTAGE",
-        minStock: "0",
-        unit: prefillData?.unit || (hasInvoicePrefill ? "CTN" : "PCS"),
-        openingStock: "0",
-      });
+      isInitialRender.current = true; // Reset so margin effect skips on initial mount
+      setFormData(createDefaultFormData(prefillData));
       setUomConversions([]);
       setImageUrl(null);
       setUploadDebugLog(null);
@@ -188,26 +242,10 @@ export function AddItemModal({
   // Populate form when editing — populate immediately so the user sees existing data.
   // Brand/sub-brand dropdowns will catch up once SWR loads (the brands memo ensures
   // the current brand is always in the list even if it hasn't loaded yet).
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (editItem && isOpen) {
-      setFormData({
-        name: editItem.name || "",
-        userCode: editItem.userCode || "",
-        barcode: editItem.barcode || "",
-        description: editItem.description || "",
-        brandId: editItem.brand?.id || "",
-        subBrandId: editItem.subBrand?.id || "",
-        hsnCode: editItem.hsnCode || "",
-        gstRate: editItem.gstRate !== undefined && editItem.gstRate !== null ? normalizeGstRateValue(editItem.gstRate) : "18",
-        purchasePrice: editItem.purchasePrice !== undefined && editItem.purchasePrice !== null ? String(editItem.purchasePrice) : "0",
-        mrp: editItem.mrp !== undefined && editItem.mrp !== null ? String(editItem.mrp) : "0",
-        sellingPrice: editItem.sellingPrice !== undefined && editItem.sellingPrice !== null ? String(editItem.sellingPrice) : "0",
-        margin: editItem.margin !== undefined && editItem.margin !== null ? String(editItem.margin) : "",
-        marginType: editItem.marginType || "PERCENTAGE",
-        minStock: String(editItem.inventory?.minStockLevel ?? 0),
-        unit: normalizeUnitValue(editItem.unit) || "PCS",
-        openingStock: String(editItem.inventory?.openingStock ?? 0),
-      });
+      isInitialRender.current = true; // Reset so margin effect skips on initial mount
+      setFormData(createEditFormData(editItem));
       setUomConversions(
         (editItem.uomConversions || []).map((c) => ({
           name: c.name,
@@ -246,8 +284,17 @@ export function AddItemModal({
     }
   }, [formData.brandId, formData.subBrandId, filteredSubBrands, subBrandsData]);
 
+  // Track if this is the first render to skip auto-calc on mount
+  const isInitialRender = useRef(true);
+
   // Auto-calculate selling price from purchase price + margin
+  // Only triggers when user changes margin/purchase price AFTER initial render
   useEffect(() => {
+    if (isInitialRender.current) {
+      isInitialRender.current = false;
+      return; // Skip calculation on initial mount
+    }
+
     const marginVal = parseFloat(formData.margin);
     const purchaseVal = parseFloat(formData.purchasePrice);
     if (!isNaN(marginVal) && marginVal > 0 && !isNaN(purchaseVal)) {
@@ -444,24 +491,7 @@ export function AddItemModal({
       onClose();
 
       // Reset form
-      setFormData({
-        name: "",
-        userCode: "",
-        barcode: "",
-        description: "",
-        brandId: "",
-        subBrandId: "",
-        hsnCode: "",
-        gstRate: "18",
-        purchasePrice: "0",
-        mrp: "0",
-        sellingPrice: "0",
-        margin: "",
-        marginType: "PERCENTAGE",
-        minStock: "0",
-        unit: "PCS",
-        openingStock: "0",
-      });
+      setFormData(createDefaultFormData());
       setUomConversions([]);
       setImageUrl(null);
       setUploadDebugLog(null);
@@ -805,26 +835,24 @@ export function AddItemModal({
                 >
                   GST Rate (%) <span className="text-red-500">*</span>
                 </label>
-                <Select
+                <select
+                  id="item-gst"
                   value={normalizedGstRate}
-                  onValueChange={(value) => handleSelectChange("gstRate", value)}
+                  onChange={(e) => handleSelectChange("gstRate", e.target.value)}
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select GST Rate">
-                      {normalizedGstRate ? (gstOptionLabels[normalizedGstRate] || `${normalizedGstRate}%`) : ""}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {normalizedGstRate && !['0', '5', '12', '18', '28'].includes(normalizedGstRate) && (
-                      <SelectItem value={normalizedGstRate}>{normalizedGstRate}% (Current)</SelectItem>
-                    )}
-                    <SelectItem value="0">0%</SelectItem>
-                    <SelectItem value="5">5%</SelectItem>
-                    <SelectItem value="12">12%</SelectItem>
-                    <SelectItem value="18">18%</SelectItem>
-                    <SelectItem value="28">28%</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <option value="" disabled>
+                    Select GST Rate
+                  </option>
+                  {normalizedGstRate && !gstOptions.includes(normalizedGstRate) && (
+                    <option value={normalizedGstRate}>{normalizedGstRate}% (Current)</option>
+                  )}
+                  {gstOptions.map((rate) => (
+                    <option key={rate} value={rate}>
+                      {rate}%
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>

@@ -189,13 +189,25 @@ function ItemsContent() {
     router.push(`/masters/items/${itemId}`);
   };
 
-  const handleEditItem = (itemId: string) => {
+  const handleEditItem = async (itemId: string) => {
     const items = data?.items || [];
     const item = items.find((i: Item) => i.id === itemId);
-    if (item) {
-      setEditingItem(item);
-      setShowAddModal(true);
+    if (!item) return;
+
+    let itemForEdit: Item = item;
+
+    try {
+      const response = await fetch(`/api/items/${itemId}`);
+      if (response.ok) {
+        const fullItem = await response.json();
+        itemForEdit = fullItem;
+      }
+    } catch {
+      // Fallback to list-row data if full fetch fails.
     }
+
+    setEditingItem(itemForEdit);
+    setShowAddModal(true);
   };
 
   const handleDeleteItem = (item: Item) => {
@@ -629,8 +641,11 @@ function ItemsContent() {
             setEditingItem(null);
           }}
           onSuccess={async (item) => {
+            const wasEditing = !!editingItem;
             mutate();
-            setCurrentPage(1);
+            if (!wasEditing) {
+              setCurrentPage(1);
+            }
             setEditingItem(null);
             // If opened from an invoice, link the new item and redirect back
             if (returnTo && invoiceItemId && invoiceType) {
