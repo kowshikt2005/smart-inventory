@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { readFile, stat } from 'fs/promises';
 import path from 'path';
 import { checkAuth } from '@/lib/api-auth';
+import { getPortalCustomer } from '@/lib/portal-auth';
 
 const MIME_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg',
@@ -16,8 +17,11 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    const { error } = await checkAuth();
-    if (error) return error;
+    const auth = await checkAuth();
+    if (auth.error) {
+      const portalAuth = await getPortalCustomer(request);
+      if (portalAuth.error) return portalAuth.error;
+    }
 
     const { path: segments } = await params;
     const filePath = segments.join('/');
