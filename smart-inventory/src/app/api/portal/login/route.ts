@@ -5,8 +5,22 @@ import { hashPassword, verifyPassword } from "@/lib/auth-utils";
 import { cache } from "@/lib/cache";
 
 const MAX_LOGIN_ATTEMPTS = 5;
-const LOGIN_LOCKOUT_SECONDS = 900; // 15 minutes
+const LOGIN_LOCKOUT_SECONDS = 300; // 5 minutes
 const PORTAL_LOGIN_PREFIX = "portal_login:";
+
+const MAX_IP_LOGIN_ATTEMPTS = 10;
+const IP_LOCKOUT_SECONDS = 900; // 15 minutes
+const PORTAL_IP_LOGIN_PREFIX = "portal_ip_login:";
+
+function getClientIP(request: NextRequest): string {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) return forwardedFor.split(",")[0].trim();
+  const realIP = request.headers.get("x-real-ip");
+  if (realIP) return realIP;
+  const cf = request.headers.get("cf-connecting-ip");
+  if (cf) return cf;
+  return "unknown";
+}
 
 /** Extract last 10 digits — strips country codes (+91, 91, etc.) */
 function extractLast10(phone: string): string {
@@ -24,17 +38,36 @@ function getRateLimitKey(phone: string): string {
   return `${PORTAL_LOGIN_PREFIX}${extractLast10(phone)}`;
 }
 
-function checkRateLimit(key: string): string | null {
+function checkRateLimit(key: string, ip: string): { message: string; remainingSeconds: number } | null {
   const attempts = cache.get<number>(key) ?? 0;
   if (attempts >= MAX_LOGIN_ATTEMPTS) {
-    return "Too many login attempts. Please try again in 15 minutes.";
+    const remaining = cache.getTTL(key);
+    const secs = remaining > 0 ? remaining : LOGIN_LOCKOUT_SECONDS;
+    const mins = Math.floor(secs / 60);
+    const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+    return { message: `Too many login attempts. Please wait ${timeStr} before trying again.`, remainingSeconds: secs };
   }
+
+  const ipKey = `${PORTAL_IP_LOGIN_PREFIX}${ip}`;
+  const ipAttempts = cache.get<number>(ipKey) ?? 0;
+  if (ipAttempts >= MAX_IP_LOGIN_ATTEMPTS) {
+    const remaining = cache.getTTL(ipKey);
+    const secs = remaining > 0 ? remaining : IP_LOCKOUT_SECONDS;
+    const mins = Math.floor(secs / 60);
+    const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+    return { message: `Too many login attempts. Please wait ${timeStr} before trying again.`, remainingSeconds: secs };
+  }
+
   return null;
 }
 
-function recordFailedAttempt(key: string): void {
+function recordFailedAttempt(key: string, ip: string): void {
   const attempts = (cache.get<number>(key) ?? 0) + 1;
   cache.set(key, attempts, LOGIN_LOCKOUT_SECONDS);
+
+  const ipKey = `${PORTAL_IP_LOGIN_PREFIX}${ip}`;
+  const ipAttempts = (cache.get<number>(ipKey) ?? 0) + 1;
+  cache.set(ipKey, ipAttempts, IP_LOCKOUT_SECONDS);
 }
 
 function clearAttempts(key: string): void {
@@ -106,10 +139,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const ip = getClientIP(request);
     const rateLimitKey = getRateLimitKey(phone.trim());
-    const rateLimitError = checkRateLimit(rateLimitKey);
-    if (rateLimitError) {
-      return NextResponse.json({ error: rateLimitError }, { status: 429 });
+    const rateLimitResult = checkRateLimit(rateLimitKey, ip);
+    if (rateLimitResult) {
+      return NextResponse.json({ error: rateLimitResult.message, remainingSeconds: rateLimitResult.remainingSeconds }, { status: 429 });
     }
 
     // Fetch potential matches and pick the strongest canonical match.
@@ -138,7 +172,7 @@ export async function POST(request: NextRequest) {
     const customer = pickBestCustomerMatch(candidates, phone.trim(), last10, normalized);
 
     if (!customer) {
-      recordFailedAttempt(rateLimitKey);
+      recordFailedAttempt(rateLimitKey, ip);
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
@@ -152,7 +186,7 @@ export async function POST(request: NextRequest) {
     // No PIN set — allow first-time default "123456"
     if (!customer.portalPassword) {
       if (pin !== "123456") {
-        recordFailedAttempt(rateLimitKey);
+        recordFailedAttempt(rateLimitKey, ip);
         return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
       }
     } else {
@@ -172,7 +206,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (!isValid) {
-        recordFailedAttempt(rateLimitKey);
+        recordFailedAttempt(rateLimitKey, ip);
         return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
       }
     }

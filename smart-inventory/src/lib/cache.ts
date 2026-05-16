@@ -89,6 +89,17 @@ class SimpleCache {
   }
 
   /**
+   * Get remaining TTL for a key in seconds. Returns -1 if key doesn't exist or expired.
+   */
+  getTTL(key: string): number {
+    const entry = this.cache.get(key) as CacheEntry<unknown> | undefined;
+    if (entry && entry.expiresAt > Date.now()) {
+      return Math.ceil((entry.expiresAt - Date.now()) / 1000);
+    }
+    return -1;
+  }
+
+  /**
    * Delete a single cache entry by exact key
    */
   delete(key: string): void {

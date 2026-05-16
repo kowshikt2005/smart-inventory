@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Loader2, Phone, KeyRound } from "lucide-react";
 
@@ -12,13 +12,29 @@ export default function PortalLoginPage() {
   const [pin, setPin] = useState("");
   const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (lockoutSeconds === null || lockoutSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setLockoutSeconds((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lockoutSeconds]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!phone.trim() || !pin) return;
     setLoading(true);
     setError(null);
+    setLockoutSeconds(null);
     try {
       const res = await fetch("/api/portal/login", {
         method: "POST",
@@ -27,6 +43,9 @@ export default function PortalLoginPage() {
       });
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 429 && data.remainingSeconds) {
+          setLockoutSeconds(data.remainingSeconds);
+        }
         setError(data.error || "Invalid credentials. Please try again.");
         return;
       }
@@ -109,7 +128,7 @@ export default function PortalLoginPage() {
                   {/* Error */}
                   {error && (
                     <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm text-red-300">
-                      {error}
+                      {lockoutSeconds !== null ? `Too many login attempts. Please wait ${Math.floor(lockoutSeconds / 60)}m ${lockoutSeconds % 60}s before trying again.` : error}
                     </div>
                   )}
 

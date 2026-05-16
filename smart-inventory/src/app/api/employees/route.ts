@@ -129,6 +129,12 @@ export async function POST(request: Request) {
     // Hash password before transaction (CPU-bound, no DB connection needed)
     const hashedPassword = await hashPassword(body.password);
 
+    // Normalize phone to +91XXXXXXXXXX for consistent lookup
+    const rawPhone = body.phone ? String(body.phone).replace(/[\s-]/g, "") : null;
+    const normalizedPhone = rawPhone
+      ? `+91${rawPhone.replace(/\D/g, "").slice(-10)}`
+      : null;
+
     // Create employee and user in transaction (single DB connection throughout)
     const result = await transaction(async (tx) => {
       // Generate employee number inside the transaction so it uses the same
@@ -141,6 +147,7 @@ export async function POST(request: Request) {
           email: body.email,
           name: body.name,
           password: hashedPassword,
+          phone: normalizedPhone,
           roleId: body.roleId,
           isActive: true,
         },

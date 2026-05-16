@@ -109,6 +109,12 @@ export async function PUT(
       }
     }
 
+    // Normalize phone to +91XXXXXXXXXX for consistent lookup
+    const rawPhone = body.phone !== undefined ? (body.phone ? String(body.phone).replace(/[\s-]/g, "") : null) : undefined;
+    const resolvedPhone = rawPhone === undefined ? existingEmployee.phone
+      : rawPhone === null ? null
+      : `+91${rawPhone.replace(/\D/g, "").slice(-10)}`;
+
     // Update employee and user in transaction
     const result = await transaction(async (tx) => {
       // Update employee record
@@ -117,7 +123,7 @@ export async function PUT(
         data: {
           name: body.name || existingEmployee.name,
           email: body.email || existingEmployee.email,
-          phone: body.phone !== undefined ? body.phone : existingEmployee.phone,
+          phone: resolvedPhone,
           designation: body.designation !== undefined ? body.designation : existingEmployee.designation,
           department: body.department !== undefined ? body.department : existingEmployee.department,
           salary: body.salary !== undefined ? (body.salary ? Number(body.salary) : null) : existingEmployee.salary,
@@ -126,10 +132,10 @@ export async function PUT(
         },
       });
 
-      // Build user update data
       const userUpdateData: Record<string, unknown> = {
         name: body.name || existingEmployee.name,
         email: body.email || existingEmployee.email,
+        phone: resolvedPhone,
         isActive: body.isActive !== undefined ? body.isActive : existingEmployee.isActive,
       };
 
@@ -141,12 +147,15 @@ export async function PUT(
         userUpdateData.password = await hashPassword(body.password);
       }
 
-      // Update user account if email exists
+      // Update user account if linked user exists
       if (existingEmployee.email) {
-        await tx.user.update({
-          where: { email: existingEmployee.email },
-          data: userUpdateData,
-        });
+        const linkedUser = await tx.user.findUnique({ where: { email: existingEmployee.email }, select: { id: true } });
+        if (linkedUser) {
+          await tx.user.update({
+            where: { email: existingEmployee.email },
+            data: userUpdateData,
+          });
+        }
       }
 
       // Fetch the updated role name

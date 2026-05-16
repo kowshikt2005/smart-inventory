@@ -8,22 +8,68 @@ import { fillMissingPermissions, ALL_PERMISSION_KEYS, type RolePermissions } fro
 import { cache } from "@/lib/cache";
 
 const MAX_LOGIN_ATTEMPTS = 5;
-const LOGIN_LOCKOUT_SECONDS = 900; // 15 minutes
+const LOGIN_LOCKOUT_SECONDS = 300; // 5 minutes
 const LOGIN_ATTEMPTS_PREFIX = "login_attempts:";
 
-function checkLoginRateLimit(identifier: string): string | null {
-  const key = `${LOGIN_ATTEMPTS_PREFIX}${identifier}`;
-  const attempts = cache.get<number>(key) ?? 0;
-  if (attempts >= MAX_LOGIN_ATTEMPTS) {
-    return "Too many login attempts. Please try again in 15 minutes.";
-  }
-  return null;
+const MAX_IP_LOGIN_ATTEMPTS = 10;
+const IP_LOCKOUT_SECONDS = 900; // 15 minutes
+const IP_LOGIN_PREFIX = "ip_login_attempts:";
+
+function getClientIP(request?: Request): string {
+  if (!request) return "unknown";
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) return forwardedFor.split(",")[0].trim();
+  const realIP = request.headers.get("x-real-ip");
+  if (realIP) return realIP;
+  const cf = request.headers.get("cf-connecting-ip");
+  if (cf) return cf;
+  return "unknown";
 }
 
-function recordFailedLogin(identifier: string): void {
+function checkLoginRateLimit(identifier: string): boolean {
   const key = `${LOGIN_ATTEMPTS_PREFIX}${identifier}`;
-  const attempts = (cache.get<number>(key) ?? 0) + 1;
-  cache.set(key, attempts, LOGIN_LOCKOUT_SECONDS);
+  const attempts = cache.get<number>(key) ?? 0;
+  return attempts >= MAX_LOGIN_ATTEMPTS;
+}
+
+function checkIPRateLimit(ip: string): boolean {
+  const key = `${IP_LOGIN_PREFIX}${ip}`;
+  const attempts = cache.get<number>(key) ?? 0;
+  return attempts >= MAX_IP_LOGIN_ATTEMPTS;
+}
+
+export function getLoginLockoutRemaining(identifier: string, ip?: string): number {
+  let maxRemaining = 0;
+
+  const idKey = `${LOGIN_ATTEMPTS_PREFIX}${identifier}`;
+  const idAttempts = cache.get<number>(idKey) ?? 0;
+  if (idAttempts >= MAX_LOGIN_ATTEMPTS) {
+    const remaining = cache.getTTL(idKey);
+    if (remaining > 0) maxRemaining = Math.max(maxRemaining, remaining);
+  }
+
+  if (ip) {
+    const ipKey = `${IP_LOGIN_PREFIX}${ip}`;
+    const ipAttempts = cache.get<number>(ipKey) ?? 0;
+    if (ipAttempts >= MAX_IP_LOGIN_ATTEMPTS) {
+      const remaining = cache.getTTL(ipKey);
+      if (remaining > 0) maxRemaining = Math.max(maxRemaining, remaining);
+    }
+  }
+
+  return maxRemaining;
+}
+
+function recordFailedLogin(identifier: string, ip?: string): void {
+  const idKey = `${LOGIN_ATTEMPTS_PREFIX}${identifier}`;
+  const idAttempts = (cache.get<number>(idKey) ?? 0) + 1;
+  cache.set(idKey, idAttempts, LOGIN_LOCKOUT_SECONDS);
+
+  if (ip) {
+    const ipKey = `${IP_LOGIN_PREFIX}${ip}`;
+    const ipAttempts = (cache.get<number>(ipKey) ?? 0) + 1;
+    cache.set(ipKey, ipAttempts, IP_LOCKOUT_SECONDS);
+  }
 }
 
 function clearLoginAttempts(identifier: string): void {
@@ -95,39 +141,46 @@ export const authConfig: NextAuthConfig = {
       id: "credentials",
       name: "credentials",
       credentials: {
-        email: { label: "Email", type: "email" },
+        email: { label: "Email or Phone", type: "text" },
         password: { label: "Password", type: "password" }
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
 
-        const email = (credentials.email as string).toLowerCase();
+        const identifier = (credentials.email as string).toLowerCase().trim();
+        const isPhone = !identifier.includes("@");
+        const rateLimitId = isPhone ? identifier.replace(/\D/g, "") : identifier;
+        const ip = getClientIP(request);
 
-        const rateLimitError = checkLoginRateLimit(email);
-        if (rateLimitError) {
-          throw new Error(rateLimitError);
+        if (checkLoginRateLimit(rateLimitId) || checkIPRateLimit(ip)) {
+          return null;
         }
 
         try {
-          const user = await db.user.findUnique({
-            where: { email },
-          });
+          let user;
+          if (isPhone) {
+            const digits = rateLimitId;
+            const last10 = digits.length > 10 ? digits.slice(-10) : digits;
+            user = await db.user.findUnique({ where: { phone: `+91${last10}` } });
+          } else {
+            user = await db.user.findUnique({ where: { email: identifier } });
+          }
 
           if (!user || !user.isActive) {
-            recordFailedLogin(email);
+            recordFailedLogin(rateLimitId, ip);
             return null;
           }
 
           const isValidPassword = await verifyPassword(credentials.password as string, user.password);
 
           if (!isValidPassword) {
-            recordFailedLogin(email);
+            recordFailedLogin(rateLimitId, ip);
             return null;
           }
 
-          clearLoginAttempts(email);
+          clearLoginAttempts(rateLimitId);
 
           const roleData = await loadUserRole(user);
 
@@ -142,7 +195,6 @@ export const authConfig: NextAuthConfig = {
           };
         } catch (error) {
           console.error("Auth error:", error);
-          if (error instanceof Error && error.message.startsWith("Too many")) throw error;
           return null;
         }
       }
@@ -154,17 +206,17 @@ export const authConfig: NextAuthConfig = {
         phone: { label: "Phone", type: "tel" },
         otp: { label: "OTP", type: "text" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         if (!credentials?.phone || !credentials?.otp) {
           return null;
         }
 
-        const phone = (credentials.phone as string).replace(/[\s-]/g, "");
-        const phoneKey = `phone:${phone}`;
+        const rawPhone = (credentials.phone as string).replace(/[\s-]/g, "");
+        const phoneDigits = rawPhone.replace(/\D/g, "");
+        const ip = getClientIP(request);
 
-        const rateLimitError = checkLoginRateLimit(phoneKey);
-        if (rateLimitError) {
-          throw new Error(rateLimitError);
+        if (checkLoginRateLimit(phoneDigits) || checkIPRateLimit(ip)) {
+          return null;
         }
 
         try {
@@ -174,12 +226,12 @@ export const authConfig: NextAuthConfig = {
           );
 
           if (!isValid) {
-            recordFailedLogin(phoneKey);
+            recordFailedLogin(phoneDigits, ip);
             return null;
           }
 
           // Normalize phone for lookup
-          let normalizedPhone = phone;
+          let normalizedPhone = rawPhone;
           if (!normalizedPhone.startsWith("+")) {
             normalizedPhone = "+91" + normalizedPhone;
           }
@@ -189,11 +241,11 @@ export const authConfig: NextAuthConfig = {
           });
 
           if (!user || !user.isActive) {
-            recordFailedLogin(phoneKey);
+            recordFailedLogin(phoneDigits, ip);
             return null;
           }
 
-          clearLoginAttempts(phoneKey);
+          clearLoginAttempts(phoneDigits);
 
           const roleData = await loadUserRole(user);
 
@@ -208,7 +260,6 @@ export const authConfig: NextAuthConfig = {
           };
         } catch (error) {
           console.error("Phone OTP auth error:", error);
-          if (error instanceof Error && error.message.startsWith("Too many")) throw error;
           return null;
         }
       }

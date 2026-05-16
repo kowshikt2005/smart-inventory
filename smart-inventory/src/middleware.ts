@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { PATH_TO_PERMISSION } from "@/types/permissions";
 import type { RolePermissions } from "@/types/permissions";
-import { verifyPortalToken, PORTAL_COOKIE_NAME } from "@/lib/portal-auth";
+import { verifyPortalToken, PORTAL_COOKIE_NAME } from "@/lib/portal-jwt";
 
 const useSecureCookies = process.env.NEXTAUTH_URL?.startsWith("https://") ?? false;
 const cookieName = useSecureCookies
