@@ -75,7 +75,7 @@ export async function GET(
 
   // Apply rate sheet pricing to each item
   const pricedItems = items.map((item) => {
-    const { rate } = isEffective
+    const { rate, discountPercent } = isEffective
       ? getEffectiveRateV2(
           {
             id: item.id,
@@ -95,7 +95,7 @@ export async function GET(
             excludedSubBrandIds: (rateSheet!.excludedSubBrandIds as string[]) ?? [],
           }
         )
-      : { rate: Number(item.sellingPrice) };
+      : { rate: Number(item.sellingPrice), discountPercent: 0 };
 
     return {
       id: item.id,
@@ -103,6 +103,7 @@ export async function GET(
       itemCode: item.itemCode,
       mrp: item.mrp,
       sellingPrice: rate,
+      discountPercent,
       unit: item.unit,
       imageUrl: item.imageUrl,
       description: item.description,

@@ -39,6 +39,8 @@ export function GSTFilingModal({
   const [step, setStep] = useState<Step>("credentials");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const [alreadyFiled, setAlreadyFiled] = useState(false);
 
   // Session
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -66,6 +68,8 @@ export function GSTFilingModal({
     setStep("credentials");
     setLoading(false);
     setError(null);
+    setErrorDetail(null);
+    setAlreadyFiled(false);
     setSessionId(null);
     setUsername("");
     setPassword("");
@@ -133,6 +137,7 @@ export function GSTFilingModal({
     if (!username.trim() || !password.trim()) return;
     setLoading(true);
     setError(null);
+    setErrorDetail(null);
     try {
       const res = await fetch("/api/gst-portal/start", {
         method: "POST",
@@ -140,7 +145,7 @@ export function GSTFilingModal({
         body: JSON.stringify({ username: username.trim(), password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to connect to GST portal");
+      if (!res.ok) throw new Error(data.detail ? `${data.error} — ${data.detail}` : (data.error || "Failed to connect to GST portal"));
       setSessionId(data.sessionId);
       setCaptchaImage(data.captchaImage);
       setStep("captcha");
@@ -156,6 +161,7 @@ export function GSTFilingModal({
     if (!captchaCode.trim()) return;
     setLoading(true);
     setError(null);
+    setErrorDetail(null);
     try {
       const res = await fetch("/api/gst-portal/captcha", {
         method: "POST",
@@ -170,7 +176,7 @@ export function GSTFilingModal({
         if (data.captchaImage) setCaptchaImage(data.captchaImage);
         return;
       }
-      if (!res.ok) throw new Error(data.error || "Captcha verification failed");
+      if (!res.ok) throw new Error(data.detail ? `${data.error} — ${data.detail}` : (data.error || "Captcha verification failed"));
 
       if (data.step === "logged_in") {
         setStep("uploading");
@@ -190,6 +196,7 @@ export function GSTFilingModal({
     if (!loginOtp.trim()) return;
     setLoading(true);
     setError(null);
+    setErrorDetail(null);
     try {
       const res = await fetch("/api/gst-portal/login-otp", {
         method: "POST",
@@ -197,7 +204,7 @@ export function GSTFilingModal({
         body: JSON.stringify({ sessionId, otp: loginOtp.trim() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "OTP verification failed");
+      if (!res.ok) throw new Error(data.detail ? `${data.error} — ${data.detail}` : (data.error || "OTP verification failed"));
 
       setStep("uploading");
       setLoading(false);
@@ -212,6 +219,8 @@ export function GSTFilingModal({
   const handleUpload = async () => {
     setLoading(true);
     setError(null);
+    setErrorDetail(null);
+    setAlreadyFiled(false);
     try {
       const res = await fetch("/api/gst-portal/upload", {
         method: "POST",
@@ -219,11 +228,16 @@ export function GSTFilingModal({
         body: JSON.stringify({ sessionId, govJson, month, year }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
+      if (!res.ok) {
+        if (data.alreadyFiled) setAlreadyFiled(true);
+        throw new Error(data.detail ? `${data.error} — ${data.detail}` : (data.error || "Upload failed"));
+      }
 
       setStep("evc_otp");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      setError(msg);
+      setErrorDetail(msg.includes("already filed") ? "This GSTR-1 period has already been filed on the GST portal." : null);
       setStep("error");
     } finally {
       setLoading(false);
@@ -236,6 +250,8 @@ export function GSTFilingModal({
     setStep("filing");
     setLoading(true);
     setError(null);
+    setErrorDetail(null);
+    setAlreadyFiled(false);
     try {
       const res = await fetch("/api/gst-portal/file", {
         method: "POST",
@@ -243,7 +259,10 @@ export function GSTFilingModal({
         body: JSON.stringify({ sessionId, evcOtp: evcOtp.trim() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Filing failed");
+      if (!res.ok) {
+        if (data.alreadyFiled) setAlreadyFiled(true);
+        throw new Error(data.detail ? `${data.error} — ${data.detail}` : (data.error || "Filing failed"));
+      }
 
       setArn(data.arn || "Filed successfully");
       setStep("done");
@@ -591,10 +610,31 @@ export function GSTFilingModal({
               {step === "error" && (
                 <div className="flex flex-col items-center py-4 gap-3">
                   <AlertCircle className="h-10 w-10 text-red-400" />
-                  <p className="text-sm text-gray-700 text-center">
-                    The filing process encountered an issue. You may need to
-                    complete the filing manually on the portal.
-                  </p>
+                  {alreadyFiled ? (
+                    <>
+                      <p className="text-sm font-medium text-amber-700 text-center">
+                        GSTR-1 already filed for this period.
+                      </p>
+                      <p className="text-xs text-gray-500 text-center">
+                        The return has already been submitted on the GST portal. No action needed.
+                        Check the ARN on the portal if needed.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-gray-900 text-center">
+                        {error || "Something went wrong during the filing process"}
+                      </p>
+                      {errorDetail && (
+                        <p className="text-xs text-gray-500 text-center max-w-xs">
+                          {errorDetail}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-400 text-center mt-1">
+                        You may need to complete the filing manually on the portal.
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
 

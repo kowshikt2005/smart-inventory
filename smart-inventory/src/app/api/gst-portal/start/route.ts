@@ -62,11 +62,29 @@ export async function POST(req: NextRequest) {
     updateSession(sessionId, { step: "awaiting_captcha" });
 
     return NextResponse.json({ sessionId, captchaImage });
-  } catch (err) {
+  } catch (err: any) {
     console.error("[gst-portal/start] error:", err);
     if (sessionId) deleteSession(sessionId);
+
+    const msg = err?.message || "";
+    if (msg.includes("net::ERR_NAME_NOT_RESOLVED") || msg.includes("net::ERR_CONNECTION_REFUSED") || msg.includes("net::ERR_CONNECTION_TIMED_OUT")) {
+      return NextResponse.json({ error: "Cannot reach GST portal (services.gst.gov.in). Check your internet connection or AWS outbound rules.", detail: msg }, { status: 502 });
+    }
+    if (msg.includes("net::ERR_SSL") || msg.includes("certificate")) {
+      return NextResponse.json({ error: "SSL error connecting to GST portal. Possible network/proxy issue.", detail: msg }, { status: 502 });
+    }
+    if (msg.includes("waitForSelector") || msg.includes("captcha")) {
+      return NextResponse.json({ error: "GST portal did not show captcha after login. The portal UI may have changed or credentials were rejected immediately.", detail: msg }, { status: 502 });
+    }
+    if (msg.includes("fill") || msg.includes("click") || msg.includes("Locator")) {
+      return NextResponse.json({ error: "GST portal login page structure changed. Could not find username/password fields.", detail: msg }, { status: 502 });
+    }
+    if (msg.includes("timeout") || msg.includes("Timeout")) {
+      return NextResponse.json({ error: "GST portal timed out. The portal may be slow or unreachable.", detail: msg }, { status: 504 });
+    }
+
     return NextResponse.json(
-      { error: "Failed to open GST portal login" },
+      { error: "Failed to connect to GST portal", detail: msg },
       { status: 500 }
     );
   }

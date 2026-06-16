@@ -122,7 +122,12 @@ export function RateSheetEditor({ value, onChange, compact }: RateSheetEditorPro
 
   const update = (partial: Partial<RateSheetFormData>) => onChange({ ...value, ...partial });
 
-  const { inclusionDiscounts } = value;
+  const raw = value.inclusionDiscounts || {};
+  const inclusionDiscounts = {
+    brands: raw.brands ?? [],
+    subBrands: raw.subBrands ?? [],
+    items: raw.items ?? [],
+  };
   const totalInclusions =
     inclusionDiscounts.brands.length +
     inclusionDiscounts.subBrands.length +

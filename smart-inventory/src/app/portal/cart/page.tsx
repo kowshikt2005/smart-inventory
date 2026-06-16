@@ -13,11 +13,10 @@ export default function CartPage() {
   const [error, setError] = useState<string | null>(null);
 
   const subtotal = totalAmount;
-  // Compute actual GST per item using real rates stored in cart
-  const gstAmount = items.reduce(
-    (sum, i) => sum + (i.sellingPrice * i.quantity * (i.gstRate ?? 0)) / 100,
-    0
-  );
+  const gstAmount = items.reduce((sum, i) => {
+    if ((i.discountPercent ?? 0) > 0) return sum;
+    return sum + (i.sellingPrice * i.quantity * (i.gstRate ?? 0)) / 100;
+  }, 0);
   const grandTotal = subtotal + gstAmount;
 
   async function handlePlaceOrder() {

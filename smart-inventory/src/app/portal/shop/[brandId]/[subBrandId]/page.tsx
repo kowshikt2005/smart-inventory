@@ -17,7 +17,7 @@ interface Item {
   imageUrl: string | null;
   description: string | null;
   gstRate: string;
-  discountPercent?: number;
+  discountPercent: number;
 }
 
 interface SubBrandDetail {
@@ -66,6 +66,7 @@ function ItemCard({ item }: { item: Item }) {
       unit: item.unit,
       imageUrl: item.imageUrl,
       gstRate,
+      discountPercent: item.discountPercent ?? 0,
     });
   }
 

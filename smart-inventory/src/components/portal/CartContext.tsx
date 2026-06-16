@@ -12,6 +12,7 @@ export interface CartItem {
   imageUrl: string | null;
   quantity: number;
   gstRate: number;
+  discountPercent: number;
 }
 
 interface CartContextValue {
