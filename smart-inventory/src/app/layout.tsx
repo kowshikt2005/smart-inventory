@@ -4,6 +4,7 @@ import "./globals.css";
 import { SWRProvider } from "@/lib/swr-provider";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import DevBadge from "@/components/DevBadge";
+import { Toaster } from "sonner";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -33,7 +34,10 @@ export default function RootLayout({
         className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}
       >
         <SessionProvider>
-          <SWRProvider>{children}</SWRProvider>
+          <SWRProvider>
+            {children}
+            <Toaster richColors closeButton position="top-right" />
+          </SWRProvider>
         </SessionProvider>
         <DevBadge />
       </body>

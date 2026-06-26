@@ -157,7 +157,7 @@ function AccountSheet({ onClose }: { onClose: () => void }) {
         .filter((k) => k.startsWith("portal-cart"))
         .forEach((k) => localStorage.removeItem(k));
     } catch { /* ignore */ }
-    await fetch("/api/portal/logout", { method: "POST" });
+    fetch("/api/portal/logout", { method: "POST" }).catch(() => {});
     window.location.href = "/portal/login";
   }
 

@@ -16,6 +16,7 @@ type ExtendedPrismaClient = PrismaClient & {
   stockReorderItem: any
   salesOrderReorder: any
   emailRecipient: any
+  notification: any
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 

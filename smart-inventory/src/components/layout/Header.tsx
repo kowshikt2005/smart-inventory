@@ -17,6 +17,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { LogOut, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 export const Header = memo(function Header() {
   const { data: session } = useSession();
@@ -107,6 +108,8 @@ export const Header = memo(function Header() {
           <div className="w-72">
             <GlobalSearch placeholder="Search... (Ctrl+K)" />
           </div>
+
+          <NotificationBell />
 
           {session?.user ? (
             <DropdownMenu>

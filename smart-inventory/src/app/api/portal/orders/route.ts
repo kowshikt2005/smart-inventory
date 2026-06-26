@@ -205,6 +205,15 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    db.notification.create({
+      data: {
+        type: "NEW_PORTAL_ORDER",
+        title: `New Portal Order - ${orderNumber}`,
+        message: `Placed by ${auth.name}`,
+        link: `/sales/orders/${order.id}`,
+      },
+    }).catch((err: unknown) => console.error("Failed to create notification:", err));
+
     return NextResponse.json({ order }, { status: 201 });
   } catch (err) {
     console.error("Portal order error:", err);

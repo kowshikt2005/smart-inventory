@@ -196,7 +196,7 @@ export function PortalTopbar() {
     } catch {
       // ignore
     }
-    await fetch("/api/portal/logout", { method: "POST" });
+    fetch("/api/portal/logout", { method: "POST" }).catch(() => {});
     window.location.href = "/portal/login";
   }
 
