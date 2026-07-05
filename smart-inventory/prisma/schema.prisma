@@ -24,6 +24,7 @@ model User {
   orderStatusHistory OrderStatusHistory[]
   salesOrders        SalesOrder[]
   stockJournals      StockJournal[]
+  notifications      Notification[]
 
   @@index([roleId])
   @@map("users")
@@ -1030,6 +1031,7 @@ model EmailRecipient {
 
 model Notification {
   id        String   @id @default(uuid())
+  userId    String?
   type      String
   title     String
   message   String?  @db.Text
@@ -1037,7 +1039,9 @@ model Notification {
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  @@index([read, createdAt])
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId, read, createdAt])
   @@map("notifications")
 }
 

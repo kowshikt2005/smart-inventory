@@ -84,19 +84,22 @@ export function NotificationBell() {
 
   useEffect(() => {
     if (unreadCount > prevUnreadRef.current && prevUnreadRef.current > 0) {
-      const newNotif = notifications.find((n) => !n.read && !seenIds.current.has(n.id));
-      if (newNotif) {
-        seenIds.current.add(newNotif.id);
-        toast(newNotif.title, {
-          description: newNotif.message ?? undefined,
-          action: newNotif.link
-            ? { label: "View", onClick: () => { window.location.href = newNotif.link!; } }
-            : undefined,
-          duration: 6000,
-        });
-        playChime();
-        sendBrowserNotification(newNotif);
-      }
+      let hasNew = false;
+      notifications.forEach((n) => {
+        if (!n.read && !seenIds.current.has(n.id)) {
+          seenIds.current.add(n.id);
+          hasNew = true;
+          toast(n.title, {
+            description: n.message ?? undefined,
+            action: n.link
+              ? { label: "View", onClick: () => { window.location.href = n.link!; } }
+              : undefined,
+            duration: 6000,
+          });
+          sendBrowserNotification(n);
+        }
+      });
+      if (hasNew) playChime();
     }
     prevUnreadRef.current = unreadCount;
   }, [unreadCount, notifications]);

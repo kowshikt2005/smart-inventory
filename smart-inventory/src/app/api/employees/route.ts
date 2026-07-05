@@ -91,6 +91,11 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
+    // Trim string fields
+    if (typeof body.email === 'string') body.email = body.email.trim();
+    if (typeof body.name === 'string') body.name = body.name.trim();
+    if (typeof body.password === 'string') body.password = body.password.trim();
+
     // Validate required fields
     const requiredFields = ['name', 'email', 'password', 'roleId'];
     for (const field of requiredFields) {
@@ -114,20 +119,18 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if email already exists
-    const existingUser = await db.user.findUnique({
-      where: { email: body.email },
-    });
+    // Check if email already exists in User or Employee table
+    const [existingUser, existingEmployeeEmail] = await Promise.all([
+      db.user.findUnique({ where: { email: body.email } }),
+      db.employee.findUnique({ where: { email: body.email } }),
+    ]);
 
-    if (existingUser) {
+    if (existingUser || existingEmployeeEmail) {
       return NextResponse.json(
         { error: 'Email already exists' },
         { status: 400 }
       );
     }
-
-    // Hash password before transaction (CPU-bound, no DB connection needed)
-    const hashedPassword = await hashPassword(body.password);
 
     // Normalize phone to +91XXXXXXXXXX for consistent lookup
     const rawPhone = body.phone ? String(body.phone).replace(/[\s-]/g, "") : null;
@@ -135,56 +138,90 @@ export async function POST(request: Request) {
       ? `+91${rawPhone.replace(/\D/g, "").slice(-10)}`
       : null;
 
-    // Create employee and user in transaction (single DB connection throughout)
-    const result = await transaction(async (tx) => {
-      // Generate employee number inside the transaction so it uses the same
-      // connection as the INSERT — prevents the GET_LOCK connection-split bug
-      const employeeNumber = await generateEmployeeNumber(tx);
-
-      // Create user account with roleId
-      const user = await (tx.user.create as any)({
-        data: {
-          email: body.email,
-          name: body.name,
-          password: hashedPassword,
-          phone: normalizedPhone,
-          roleId: body.roleId,
-          isActive: true,
-        },
+    // Check if phone already exists in User table (User.phone is @unique)
+    if (normalizedPhone) {
+      const existingPhone = await db.user.findUnique({
+        where: { phone: normalizedPhone },
       });
+      if (existingPhone) {
+        return NextResponse.json(
+          { error: 'Phone number already in use' },
+          { status: 400 }
+        );
+      }
+    }
 
-      // Create employee record
-      const employee = await tx.employee.create({
-        data: {
-          employeeNumber,
-          name: body.name,
-          email: body.email,
-          phone: body.phone || null,
-          designation: body.designation || null,
-          department: body.department || null,
-          salary: body.salary ? Number(body.salary) : null,
-          joinDate: body.joinDate ? new Date(body.joinDate) : new Date(),
-          isActive: true,
-        },
-      });
+    // Hash password before transaction (CPU-bound, no DB connection needed)
+    const hashedPassword = await hashPassword(body.password);
 
-      return { user, employee };
-    });
+    // Create employee and user in transaction with retry for race condition
+    const MAX_RETRIES = 3;
+    let lastError: unknown;
 
-    return NextResponse.json({
-      id: result.employee.id,
-      employeeNumber: result.employee.employeeNumber,
-      name: result.employee.name,
-      email: result.employee.email,
-      phone: result.employee.phone,
-      designation: result.employee.designation,
-      department: result.employee.department,
-      salary: result.employee.salary,
-      joinDate: result.employee.joinDate,
-      roleName: role.name,
-      isActive: result.employee.isActive,
-      createdAt: result.employee.createdAt,
-    }, { status: 201 });
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const result = await transaction(async (tx) => {
+          const employeeNumber = await generateEmployeeNumber(tx);
+
+          // Create user account with roleId
+          const user = await (tx.user.create as any)({
+            data: {
+              email: body.email,
+              name: body.name,
+              password: hashedPassword,
+              phone: normalizedPhone,
+              roleId: body.roleId,
+              isActive: true,
+            },
+          });
+
+          // Create employee record
+          const employee = await tx.employee.create({
+            data: {
+              employeeNumber,
+              name: body.name,
+              email: body.email,
+              phone: body.phone || null,
+              designation: body.designation || null,
+              department: body.department || null,
+              salary: body.salary !== null && body.salary !== undefined && body.salary !== '' ? Number(body.salary) : null,
+              joinDate: body.joinDate ? new Date(body.joinDate) : new Date(),
+              isActive: true,
+            },
+          });
+
+          return { user, employee };
+        });
+
+        return NextResponse.json({
+          id: result.employee.id,
+          employeeNumber: result.employee.employeeNumber,
+          name: result.employee.name,
+          email: result.employee.email,
+          phone: result.employee.phone,
+          designation: result.employee.designation,
+          department: result.employee.department,
+          salary: result.employee.salary,
+          joinDate: result.employee.joinDate,
+          roleName: role.name,
+          isActive: result.employee.isActive,
+          createdAt: result.employee.createdAt,
+        }, { status: 201 });
+      } catch (error) {
+        lastError = error;
+        const prismaError = error as { code?: string; meta?: { target?: string | string[] } };
+        // Only retry on employeeNumber unique constraint violation (race condition)
+        if (
+          prismaError?.code === 'P2002' &&
+          String(prismaError?.meta?.target ?? '').includes('employeeNumber')
+        ) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw lastError;
   } catch (error) {
     console.error('Error creating employee:', error);
     return NextResponse.json(

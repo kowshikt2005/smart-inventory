@@ -120,7 +120,7 @@ export function AddVendorModal({
   const handleGstinVerified = (result: GstinVerifyResult) => {
     setFormData((prev) => ({
       ...prev,
-      name: prev.name.trim() ? prev.name : result.legalName,
+      name: prev.name.trim() ? prev.name : (result.tradeName || result.legalName),
       address: prev.address.trim() ? prev.address : result.address,
       city: prev.city.trim() ? prev.city : result.city,
       pincode: prev.pincode.trim() ? prev.pincode : result.pincode,

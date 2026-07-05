@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    db.notification.create({
+    await db.notification.create({
       data: {
         type: "NEW_PORTAL_ORDER",
         title: `New Portal Order - ${orderNumber}`,

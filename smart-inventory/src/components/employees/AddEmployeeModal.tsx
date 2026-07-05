@@ -96,24 +96,22 @@ export function AddEmployeeModal({
     joinDate: new Date().toISOString().split("T")[0],
   });
 
-  // Set default roleId when roles load
+  // Set default roleId when roles load (runs on open and on roles fetch)
   useEffect(() => {
-    if (roles?.length && !formData.roleId) {
+    if (isOpen && roles?.length && !formData.roleId) {
       const salesman = roles.find((r) => r.name === "SALESMAN");
       setFormData((prev) => ({ ...prev, roleId: salesman?.id || roles[0].id }));
     }
-  }, [roles, formData.roleId]);
+  }, [isOpen, roles, formData.roleId]);
 
-  // Reset form when modal opens
+  // Reset form when modal opens (roleId is set by the effect above)
   useEffect(() => {
     if (isOpen) {
-      const defaultRoleId =
-        roles?.find((r) => r.name === "SALESMAN")?.id || roles?.[0]?.id || "";
       setFormData({
         name: "",
         email: "",
         password: "",
-        roleId: defaultRoleId,
+        roleId: "",
         phone: "",
         designation: "",
         department: "",
@@ -129,7 +127,7 @@ export function AddEmployeeModal({
       setDocLabel("");
       setDocError("");
     }
-  }, [isOpen, roles]);
+  }, [isOpen]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -175,14 +173,14 @@ export function AddEmployeeModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
+          name: formData.name.trim(),
+          email: formData.email.trim(),
           password: formData.password,
           roleId: formData.roleId,
           phone: formData.phone || null,
           designation: formData.designation || null,
           department: formData.department || null,
-          salary: formData.salary ? parseFloat(formData.salary) : null,
+          salary: formData.salary !== '' ? parseFloat(formData.salary) : null,
           joinDate: formData.joinDate,
         }),
       });
@@ -192,27 +190,35 @@ export function AddEmployeeModal({
 
       const employeeId: string = data.id;
 
-      // Step 2: Upload profile photo (non-fatal if it fails)
+      // Step 2: Upload profile photo
       if (photoFile) {
         setSubmitStep("Uploading profile photo…");
         const photoForm = new FormData();
         photoForm.append("photo", photoFile);
-        await fetch(`/api/employees/${employeeId}/photo`, {
+        const photoRes = await fetch(`/api/employees/${employeeId}/photo`, {
           method: "POST",
           body: photoForm,
         });
+        if (!photoRes.ok) {
+          const photoErr = await photoRes.json().catch(() => null);
+          throw new Error(photoErr?.error || "Failed to upload photo");
+        }
       }
 
-      // Step 3: Upload documents sequentially (non-fatal)
+      // Step 3: Upload documents sequentially
       for (let i = 0; i < pendingDocs.length; i++) {
         setSubmitStep(`Uploading document ${i + 1} of ${pendingDocs.length}…`);
         const docForm = new FormData();
         docForm.append("file", pendingDocs[i].file);
         docForm.append("label", pendingDocs[i].label);
-        await fetch(`/api/employees/${employeeId}/documents`, {
+        const docRes = await fetch(`/api/employees/${employeeId}/documents`, {
           method: "POST",
           body: docForm,
         });
+        if (!docRes.ok) {
+          const docErr = await docRes.json().catch(() => null);
+          throw new Error(docErr?.error || `Failed to upload document "${pendingDocs[i].label}"`);
+        }
       }
 
       onSuccess?.();
@@ -620,7 +626,7 @@ export function AddEmployeeModal({
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !formData.roleId}
               className="bg-teal-500 hover:bg-teal-600 text-white min-w-[140px]"
             >
               {isSubmitting ? (
@@ -628,6 +634,8 @@ export function AddEmployeeModal({
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   {submitStep || "Creating…"}
                 </>
+              ) : !formData.roleId ? (
+                "Loading roles…"
               ) : (
                 "Create Employee"
               )}

@@ -4,11 +4,15 @@ import { checkAuth } from "@/lib/api-auth";
 
 export async function GET() {
   try {
-    const { error } = await checkAuth();
+    const { error, session } = await checkAuth();
     if (error) return error;
+
+    const userId = session.user.id;
+    const userFilter = [{ userId: null }, { userId }];
 
     const [notifications, unreadCount] = await Promise.all([
       db.notification.findMany({
+        where: { OR: userFilter },
         orderBy: { createdAt: "desc" },
         take: 20,
         select: {
@@ -21,7 +25,9 @@ export async function GET() {
           createdAt: true,
         },
       }),
-      db.notification.count({ where: { read: false } }),
+      db.notification.count({
+        where: { AND: [{ read: false }, { OR: userFilter }] },
+      }),
     ]);
 
     return NextResponse.json({ notifications, unreadCount });
@@ -33,20 +39,23 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { error } = await checkAuth();
+    const { error, session } = await checkAuth();
     if (error) return error;
+
+    const userId = session.user.id;
+    const userFilter = [{ userId: null }, { userId }];
 
     const body = await request.json();
     const { ids } = body as { ids?: string[] };
 
     if (ids && ids.length > 0) {
       await db.notification.updateMany({
-        where: { id: { in: ids } },
+        where: { id: { in: ids }, OR: userFilter },
         data: { read: true },
       });
     } else {
       await db.notification.updateMany({
-        where: { read: false },
+        where: { read: false, OR: userFilter },
         data: { read: true },
       });
     }
