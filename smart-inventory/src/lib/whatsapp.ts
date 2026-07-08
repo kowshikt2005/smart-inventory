@@ -190,6 +190,23 @@ export async function sendTemplateWithImage(
 }
 
 /**
+ * Send a plain text message.
+ * Only works within 24-hour conversation window (recipient must have messaged first).
+ */
+export async function sendTextMessage(
+  phone: string,
+  text: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const to = normalizePhone(phone);
+  return postMessage({
+    messaging_product: "whatsapp",
+    to,
+    type: "text",
+    text: { preview_url: false, body: text },
+  });
+}
+
+/**
  * Send a direct image message with caption.
  * Only works within 24-hour conversation window (customer messaged first).
  * Falls back gracefully if window is closed.
