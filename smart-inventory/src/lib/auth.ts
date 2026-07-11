@@ -3,7 +3,6 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { db } from "@/lib/db";
 import { verifyPassword } from "@/lib/auth-utils";
-import { verifyOTP } from "@/lib/otp";
 import { fillMissingPermissions, ALL_PERMISSION_KEYS, type RolePermissions } from "@/types/permissions";
 import { cache } from "@/lib/cache";
 
@@ -142,10 +141,10 @@ export const authConfig: NextAuthConfig = {
       name: "credentials",
       credentials: {
         email: { label: "Email or Phone", type: "text" },
-        password: { label: "Password", type: "password" }
+        pin: { label: "PIN", type: "password" }
       },
       async authorize(credentials, request) {
-        if (!credentials?.email || !credentials?.password) {
+        if (!credentials?.email || !credentials?.pin) {
           return null;
         }
 
@@ -173,9 +172,21 @@ export const authConfig: NextAuthConfig = {
             return null;
           }
 
-          const isValidPassword = await verifyPassword(credentials.password as string, user.password);
+          // Verify PIN: if user.pin is null, accept default PIN "123456"
+          const enteredPin = (credentials.pin as string).replace(/\D/g, "");
+          if (enteredPin.length !== 6) {
+            recordFailedLogin(rateLimitId, ip);
+            return null;
+          }
 
-          if (!isValidPassword) {
+          let isValidPin = false;
+          if (!user.pin) {
+            isValidPin = enteredPin === "123456";
+          } else {
+            isValidPin = await verifyPassword(enteredPin, user.pin);
+          }
+
+          if (!isValidPin) {
             recordFailedLogin(rateLimitId, ip);
             return null;
           }
@@ -192,74 +203,10 @@ export const authConfig: NextAuthConfig = {
             roleId: roleData.roleId,
             roleName: roleData.roleName,
             permissions: roleData.permissions,
+            isDefaultPin: !user.pin,
           };
         } catch (error) {
           console.error("Auth error:", error);
-          return null;
-        }
-      }
-    }),
-    CredentialsProvider({
-      id: "phone-otp",
-      name: "Phone OTP",
-      credentials: {
-        phone: { label: "Phone", type: "tel" },
-        otp: { label: "OTP", type: "text" },
-      },
-      async authorize(credentials, request) {
-        if (!credentials?.phone || !credentials?.otp) {
-          return null;
-        }
-
-        const rawPhone = (credentials.phone as string).replace(/[\s-]/g, "");
-        const phoneDigits = rawPhone.replace(/\D/g, "");
-        const ip = getClientIP(request);
-
-        if (checkLoginRateLimit(phoneDigits) || checkIPRateLimit(ip)) {
-          return null;
-        }
-
-        try {
-          const isValid = await verifyOTP(
-            credentials.phone as string,
-            credentials.otp as string
-          );
-
-          if (!isValid) {
-            recordFailedLogin(phoneDigits, ip);
-            return null;
-          }
-
-          // Normalize phone for lookup
-          let normalizedPhone = rawPhone;
-          if (!normalizedPhone.startsWith("+")) {
-            normalizedPhone = "+91" + normalizedPhone;
-          }
-
-          const user = await db.user.findUnique({
-            where: { phone: normalizedPhone },
-          });
-
-          if (!user || !user.isActive) {
-            recordFailedLogin(phoneDigits, ip);
-            return null;
-          }
-
-          clearLoginAttempts(phoneDigits);
-
-          const roleData = await loadUserRole(user);
-
-          return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: roleData.roleName,
-            roleId: roleData.roleId,
-            roleName: roleData.roleName,
-            permissions: roleData.permissions,
-          };
-        } catch (error) {
-          console.error("Phone OTP auth error:", error);
           return null;
         }
       }
@@ -320,6 +267,7 @@ export const authConfig: NextAuthConfig = {
         token.roleId = user.roleId;
         token.roleName = user.roleName;
         token.permissions = user.permissions;
+        token.isDefaultPin = (user as unknown as Record<string, unknown>).isDefaultPin as boolean;
       }
       return token;
     },
@@ -330,6 +278,7 @@ export const authConfig: NextAuthConfig = {
         session.user.roleId = token.roleId;
         session.user.roleName = token.roleName;
         session.user.permissions = token.permissions;
+        session.user.isDefaultPin = token.isDefaultPin as boolean;
       }
       return session;
     },

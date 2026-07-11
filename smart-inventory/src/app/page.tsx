@@ -4,8 +4,10 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
+import { ChangePINModal } from "@/components/employees/ChangePINModal";
 import {
   Calendar,
   ChevronDown,
@@ -334,6 +336,28 @@ const PRESETS = [
   { key: "all-time", label: "All Time" },
 ];
 
+function ChangePINHandler() {
+  const searchParams = useSearchParams();
+  const [showChangePIN, setShowChangePIN] = useState(false);
+  const { update: updateSession } = useSession();
+
+  useEffect(() => {
+    if (searchParams.get("changePIN") === "1") {
+      setShowChangePIN(true);
+    }
+  }, [searchParams]);
+
+  return showChangePIN ? (
+    <ChangePINModal
+      onClose={() => setShowChangePIN(false)}
+      onSuccess={() => {
+        setShowChangePIN(false);
+        updateSession();
+      }}
+    />
+  ) : null;
+}
+
 export default function HomePage() {
   const { data: session } = useSession();
   const firstName = session?.user?.name?.split(" ")[0] || "there";
@@ -430,6 +454,7 @@ export default function HomePage() {
   const presetLabel = PRESETS.find((p) => p.key === activePreset)?.label || "Custom";
 
   return (
+    <>
     <DashboardLayout>
       <div className="p-8 animate-fade-in-up">
         {/* Header */}
@@ -900,6 +925,11 @@ export default function HomePage() {
           </>
         );
       })()}
-    </DashboardLayout>
+      </DashboardLayout>
+
+      <Suspense fallback={null}>
+        <ChangePINHandler />
+      </Suspense>
+    </>
   );
 }

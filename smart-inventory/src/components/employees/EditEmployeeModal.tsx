@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { X, Loader2, User, Upload, Eye, EyeOff } from "lucide-react";
+import { X, Loader2, User, Upload } from "lucide-react";
 import useSWR from "swr";
 import { EmployeeDocuments } from "./EmployeeDocuments";
 import { useSession } from "next-auth/react";
@@ -57,7 +57,6 @@ export function EditEmployeeModal({
   const { data: session } = useSession();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
   const firstInputRef = useRef<HTMLInputElement>(null);
   const canEditDocs = session?.user?.permissions?.masters_employees?.edit === true;
 
@@ -76,7 +75,7 @@ export function EditEmployeeModal({
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    password: "",
+    pin: "",
     roleId: "",
     phone: "",
     designation: "",
@@ -101,7 +100,7 @@ export function EditEmployeeModal({
       setFormData({
         name: employee.name || "",
         email: employee.email || "",
-        password: "",
+        pin: "",
         roleId,
         phone: employee.phone || "",
         designation: employee.designation || "",
@@ -180,8 +179,14 @@ export function EditEmployeeModal({
         isActive: formData.isActive,
       };
 
-      if (formData.password.trim()) {
-        updateData.password = formData.password;
+      const pinDigits = formData.pin.replace(/\D/g, "");
+      if (formData.pin.trim()) {
+        if (pinDigits.length !== 6) {
+          setError("PIN must be exactly 6 digits");
+          setIsSubmitting(false);
+          return;
+        }
+        updateData.pin = pinDigits;
       }
 
       const response = await fetch(`/api/employees/${employee.id}`, {
@@ -311,14 +316,9 @@ export function EditEmployeeModal({
                 <Input id="email" type="email" name="email" value={formData.email} onChange={handleChange} required placeholder="Enter email address" />
               </div>
               <div>
-                <Label htmlFor="password">New Password</Label>
-                <div className="relative">
-                  <Input id="password" type={showPassword ? "text" : "password"} name="password" value={formData.password} onChange={handleChange} placeholder="Leave blank to keep current" minLength={6} className="pr-10" />
-                  <button type="button" onClick={() => setShowPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Leave blank to keep current password</p>
+                <Label htmlFor="pin">New PIN</Label>
+                <Input id="pin" type="password" name="pin" value={formData.pin} onChange={handleChange} placeholder="Leave blank to keep current" maxLength={6} inputMode="numeric" pattern="[0-9]*" />
+                <p className="text-xs text-gray-500 mt-1">Leave blank to keep current PIN. Enter 6 digits to change.</p>
               </div>
               <div>
                 <Label htmlFor="phone">Phone Number</Label>

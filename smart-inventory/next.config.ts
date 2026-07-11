@@ -133,6 +133,8 @@ const nextConfig: NextConfig = {
 export default withPWA({
   dest: "public",
   disable: process.env.NODE_ENV === "development",
+  // Scope SW to /portal/ so it doesn't interfere with admin pages
+  scope: "/portal/",
   fallbacks: {
     // Shown instead of browser error page when user is offline and tries to navigate
     document: "/portal/offline",

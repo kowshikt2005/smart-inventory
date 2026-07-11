@@ -8,11 +8,11 @@ export async function POST(request: Request) {
     if (error) return error;
 
     const body = await request.json();
-    const { phone, name, email, password } = body;
+    const { phone, name, email, pin } = body;
 
-    if (!phone || !name || !email || !password) {
+    if (!phone || !name || !email || !pin) {
       return NextResponse.json(
-        { error: "Missing required fields: phone, name, email, password" },
+        { error: "Missing required fields: phone, name, email, pin" },
         { status: 400 }
       );
     }
@@ -22,9 +22,9 @@ export async function POST(request: Request) {
 Your account has been created. Here are your login credentials:
 
 Email: ${email}
-Password: ${password}
+PIN: ${pin}
 
-Please login and change your password after first login.`;
+Please login and change your PIN after first login.`;
 
     const result = await sendTextMessage(phone, message);
 

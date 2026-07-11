@@ -115,6 +115,18 @@ export async function PUT(
       : rawPhone === null ? null
       : `+91${rawPhone.replace(/\D/g, "").slice(-10)}`;
 
+    // Validate and hash PIN outside transaction
+    let hashedPin: string | undefined;
+    if (body.pin) {
+      const pinStr = String(body.pin).replace(/\D/g, '');
+      if (pinStr.length !== 6) {
+        return NextResponse.json(
+          { error: 'PIN must be exactly 6 digits' },
+          { status: 400 }
+        );
+      }
+      hashedPin = await hashPassword(pinStr);
+    }
     // Update employee and user in transaction
     const result = await transaction(async (tx) => {
       // Update employee record
@@ -143,8 +155,9 @@ export async function PUT(
         userUpdateData.roleId = body.roleId;
       }
 
-      if (body.password) {
-        userUpdateData.password = await hashPassword(body.password);
+      if (hashedPin) {
+        userUpdateData.pin = hashedPin;
+        userUpdateData.password = await hashPassword('123456');
       }
 
       // Update user account if linked user exists

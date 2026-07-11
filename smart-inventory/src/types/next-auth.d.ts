@@ -10,6 +10,7 @@ declare module "next-auth" {
       roleId: string;
       roleName: string;
       permissions: RolePermissions;
+      isDefaultPin?: boolean;
     } & DefaultSession["user"];
   }
 
@@ -18,6 +19,7 @@ declare module "next-auth" {
     roleId: string;
     roleName: string;
     permissions: RolePermissions;
+    isDefaultPin?: boolean;
   }
 }
 
@@ -28,5 +30,6 @@ declare module "next-auth/jwt" {
     roleId: string;
     roleName: string;
     permissions: RolePermissions;
+    isDefaultPin?: boolean;
   }
 }

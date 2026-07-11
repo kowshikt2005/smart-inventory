@@ -19,8 +19,6 @@ import {
   Plus,
   FileText,
   Image as ImageIcon,
-  Eye,
-  EyeOff,
   CheckCircle2,
   MessageSquare,
 } from "lucide-react";
@@ -63,7 +61,6 @@ export function AddEmployeeModal({
   onSuccess,
 }: AddEmployeeModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [submitStep, setSubmitStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
@@ -89,7 +86,7 @@ export function AddEmployeeModal({
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    password: "",
+    pin: "",
     roleId: "",
     phone: "",
     designation: "",
@@ -102,7 +99,7 @@ export function AddEmployeeModal({
     name: string;
     email: string;
     phone: string;
-    password: string;
+    pin: string;
   } | null>(null);
 
   const [whatsappStatus, setWhatsappStatus] = useState<"idle" | "sending" | "sent" | "error" | "no-phone">("idle");
@@ -122,7 +119,7 @@ export function AddEmployeeModal({
       setFormData({
         name: "",
         email: "",
-        password: "",
+        pin: "",
         roleId: "",
         phone: "",
         designation: "",
@@ -184,13 +181,18 @@ export function AddEmployeeModal({
 
     try {
       // Step 1: Create employee record
+      const pinDigits = formData.pin.replace(/\D/g, "");
+      if (pinDigits && pinDigits.length !== 6) {
+        throw new Error("PIN must be exactly 6 digits");
+      }
+
       const res = await fetch("/api/employees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formData.name.trim(),
           email: formData.email.trim(),
-          password: formData.password,
+          pin: pinDigits || null,
           roleId: formData.roleId,
           phone: formData.phone || null,
           designation: formData.designation || null,
@@ -239,7 +241,7 @@ export function AddEmployeeModal({
       setCreatedEmployee({
         name: formData.name,
         email: formData.email,
-        password: formData.password,
+        pin: pinDigits || "123456",
         phone: formData.phone,
       });
       setWhatsappStatus(formData.phone ? "idle" : "no-phone");
@@ -513,25 +515,21 @@ export function AddEmployeeModal({
                 />
               </div>
               <div>
-                <Label htmlFor="password">
-                  Password <span className="text-red-500">*</span>
+                <Label htmlFor="pin">
+                  PIN <span className="text-red-500">*</span>
                 </Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    required
-                    placeholder="Enter password"
-                    minLength={6}
-                    className="pr-10"
-                  />
-                  <button type="button" onClick={() => setShowPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
+                <Input
+                  id="pin"
+                  type="password"
+                  name="pin"
+                  value={formData.pin}
+                  onChange={handleChange}
+                  placeholder="6-digit PIN (leave blank for default 123456)"
+                  maxLength={6}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                />
+                <p className="text-xs text-gray-500 mt-1">Leave blank to use default PIN <strong>123456</strong></p>
               </div>
               <div>
                 <Label htmlFor="phone">Phone Number</Label>

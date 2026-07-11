@@ -94,10 +94,9 @@ export async function POST(request: Request) {
     // Trim string fields
     if (typeof body.email === 'string') body.email = body.email.trim();
     if (typeof body.name === 'string') body.name = body.name.trim();
-    if (typeof body.password === 'string') body.password = body.password.trim();
 
     // Validate required fields
-    const requiredFields = ['name', 'email', 'password', 'roleId'];
+    const requiredFields = ['name', 'email', 'roleId'];
     for (const field of requiredFields) {
       if (!body[field]) {
         return NextResponse.json(
@@ -105,6 +104,18 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+    }
+
+    // Validate PIN if provided
+    if (body.pin) {
+      const pinStr = String(body.pin).replace(/\D/g, '');
+      if (pinStr.length !== 6) {
+        return NextResponse.json(
+          { error: 'PIN must be exactly 6 digits' },
+          { status: 400 }
+        );
+      }
+      body.pin = pinStr;
     }
 
     // Validate roleId exists
@@ -151,8 +162,9 @@ export async function POST(request: Request) {
       }
     }
 
-    // Hash password before transaction (CPU-bound, no DB connection needed)
-    const hashedPassword = await hashPassword(body.password);
+    // Hash PIN and fallback password before transaction (CPU-bound, no DB connection needed)
+    const hashedPin = body.pin ? await hashPassword(body.pin) : null;
+    const placeholderPassword = await hashPassword('123456');
 
     // Create employee and user in transaction with retry for race condition
     const MAX_RETRIES = 3;
@@ -163,12 +175,13 @@ export async function POST(request: Request) {
         const result = await transaction(async (tx) => {
           const employeeNumber = await generateEmployeeNumber(tx);
 
-          // Create user account with roleId
+          // Create user account with PIN
           const user = await (tx.user.create as any)({
             data: {
               email: body.email,
               name: body.name,
-              password: hashedPassword,
+              password: placeholderPassword,
+              pin: hashedPin || null,
               phone: normalizedPhone,
               roleId: body.roleId,
               isActive: true,

@@ -3526,7 +3526,7 @@ async function main() {
 
   console.log('\n🔐 Test Login Credentials:');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('Admin:    admin@example.com / password123    | Phone OTP: +918639347263');
+  console.log('Admin:    admin@example.com / PIN: 123456    | Phone: +918639347263');
   console.log('Salesman: salesman@example.com / password123 | Phone OTP: +919030437915');
 }
 

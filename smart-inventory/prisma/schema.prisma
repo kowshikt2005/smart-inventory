@@ -12,7 +12,8 @@ model User {
   id                 String               @id @default(uuid())
   email              String               @unique
   name               String
-  password           String
+  password           String               @db.VarChar(191)
+  pin                String?              @db.VarChar(191)
   phone              String?              @unique
   googleId           String?              @unique
   role               UserRole             @default(SALESMAN)
