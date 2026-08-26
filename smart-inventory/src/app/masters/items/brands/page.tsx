@@ -289,6 +289,7 @@ function BrandsContent() {
           <Table aria-label="Brands list">
             <TableHeader>
               <TableRow className="bg-gray-50">
+                <TableHead className="font-semibold text-center w-[60px]">S.No.</TableHead>
                 <TableHead className="font-semibold w-16">Logo</TableHead>
                 <TableHead className="font-semibold">Name</TableHead>
                 <TableHead className="font-semibold text-center">Status</TableHead>
@@ -324,8 +325,9 @@ function BrandsContent() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedBrands.map((brand) => (
+                paginatedBrands.map((brand, rowIndex) => (
                   <TableRow key={brand.id} className={!brand.isActive ? "opacity-60" : ""}>
+                    <TableCell className="text-center text-gray-500">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                     <TableCell>
                       {brand.logoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element

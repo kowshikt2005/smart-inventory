@@ -475,7 +475,8 @@ export default function PurchaseOrdersPage() {
           <div className="overflow-x-auto">
             <Table aria-label="Purchase orders list">
               <TableHeader>
-                <TableRow className="bg-gray-50">
+              <TableRow className="bg-gray-50">
+                  <TableHead scope="col" className="font-semibold text-center w-[60px]">S.No.</TableHead>
                   <TableHead scope="col" className="font-semibold">Date</TableHead>
                   <TableHead scope="col" className="font-semibold">Order #</TableHead>
                   <TableHead scope="col" className="font-semibold">Vendor</TableHead>
@@ -515,8 +516,9 @@ export default function PurchaseOrdersPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  (data?.purchaseOrders || []).map((order: PurchaseOrder) => (
+                  (data?.purchaseOrders || []).map((order: PurchaseOrder, rowIndex: number) => (
                     <TableRow key={order.id} className="hover:bg-gray-50">
+                      <TableCell className="text-center text-gray-500">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                       <TableCell className="text-sm">{formatDate(order.date)}</TableCell>
                       <TableCell>
                         <button

@@ -481,7 +481,8 @@ export default function PurchaseInvoicesPage() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-gray-50">
+              <TableRow className="bg-gray-50">
+                  <TableHead scope="col" className="font-semibold text-center w-[60px]">S.No.</TableHead>
                   <TableHead className="font-semibold">Date</TableHead>
                   <TableHead className="font-semibold">Invoice #</TableHead>
                   <TableHead className="font-semibold">Vendor</TableHead>
@@ -520,8 +521,9 @@ export default function PurchaseInvoicesPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  (data?.purchaseInvoices || []).map((invoice: PurchaseInvoice) => (
+                  (data?.purchaseInvoices || []).map((invoice: PurchaseInvoice, rowIndex: number) => (
                     <TableRow key={invoice.id} className={invoice.isImported ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-gray-50"}>
+                      <TableCell className="text-center text-gray-500">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                       <TableCell className="text-sm">{formatDate(invoice.date)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1.5">

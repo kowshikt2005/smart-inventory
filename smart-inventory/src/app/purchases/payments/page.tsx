@@ -151,6 +151,7 @@ export default function VendorPaymentsPage() {
             <Table aria-label="Vendor payments list">
               <TableHeader>
                 <TableRow className="bg-gray-50">
+                  <TableHead className="font-semibold text-center w-[60px]">S.No.</TableHead>
                   <TableHead className="font-semibold w-[100px]">Date</TableHead>
                   <TableHead className="font-semibold w-[120px]">Payment #</TableHead>
                   <TableHead className="font-semibold w-[100px]">Type</TableHead>
@@ -169,8 +170,9 @@ export default function VendorPaymentsPage() {
                 ) : (data?.vendorPayments || []).length === 0 ? (
                   <TableRow><TableCell colSpan={8} className="text-center text-gray-500 py-8">{searchQuery ? "No payments found" : "No vendor payments yet."}</TableCell></TableRow>
                 ) : (
-                  (data?.vendorPayments || []).map((payment: VendorPayment) => (
+                  (data?.vendorPayments || []).map((payment: VendorPayment, rowIndex: number) => (
                     <TableRow key={payment.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedPayment(payment)}>
+                      <TableCell className="text-center text-gray-500">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                       <TableCell className="text-sm">{formatDate(payment.date)}</TableCell>
                       <TableCell>
                         <button onClick={(e) => { e.stopPropagation(); setSelectedPayment(payment); }} className="font-medium text-teal-600 hover:text-teal-800 hover:underline">{payment.paymentNumber}</button>

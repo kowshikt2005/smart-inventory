@@ -447,6 +447,7 @@ function ItemsContent() {
           <Table aria-label="Items list">
             <TableHeader>
               <TableRow className="bg-muted/30">
+                <TableHead className="font-semibold text-center w-[60px]">S.No.</TableHead>
                 <TableHead scope="col" className="font-semibold">Code</TableHead>
                 <TableHead scope="col" className="font-semibold">Name</TableHead>
                 <TableHead scope="col" className="font-semibold">Brand</TableHead>
@@ -493,12 +494,13 @@ function ItemsContent() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedItems.map((item: Item) => (
+                paginatedItems.map((item: Item, rowIndex) => (
                   <TableRow key={item.id} className={
                     !item.isActive ? "opacity-50 bg-muted/20" :
                     (item.isImported && !item.brand) ? "bg-yellow-50 hover:bg-yellow-100" :
                     undefined
                   }>
+                    <TableCell className="text-center text-muted-foreground">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                     <TableCell className="font-mono">{item.itemCode}</TableCell>
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell>{item.brand?.name || item.importedBrandName || "N/A"}</TableCell>

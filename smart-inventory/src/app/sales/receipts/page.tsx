@@ -362,6 +362,7 @@ export default function PaymentsPage() {
             <Table aria-label="Payments list">
               <TableHeader>
                 <TableRow className="bg-muted/30">
+                  <TableHead scope="col" className="font-semibold text-center w-[60px]">S.No.</TableHead>
                   <TableHead scope="col" className="font-semibold w-[100px]">Date</TableHead>
                   <TableHead scope="col" className="font-semibold w-[120px]">Payment #</TableHead>
                   <TableHead scope="col" className="font-semibold">Customer</TableHead>
@@ -402,8 +403,9 @@ export default function PaymentsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  payments.map((payment: Payment) => (
+                  payments.map((payment: Payment, rowIndex: number) => (
                     <TableRow key={payment.id} className="hover:bg-muted/20 cursor-pointer" onClick={() => setSelectedPayment(payment)}>
+                      <TableCell className="text-center text-muted-foreground">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                       <TableCell className="text-sm">
                         {formatDate(payment.paymentDate)}
                       </TableCell>

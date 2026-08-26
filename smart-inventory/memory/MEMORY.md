@@ -1,40 +1,64 @@
 # Smart Inventory Project Memory
 
-## Project Stack
-- Next.js 15 App Router + Prisma ORM + MySQL + shadcn/ui + Tailwind CSS 4
-- Path alias: `@/*` → `./src/*`
-- Rules: No bash commands, no .env edits, no src/generated/ edits
+**Last refreshed:** 2026-08-26
 
-## Key Architectural Decisions
+## Project
 
-### Reference IDs (added 2026-03-05)
-- SalesOrder has `referenceNumber String?` — shown as "Reference" column in /sales/orders
-- PurchaseOrder has `referenceNumber String?` — added 2026-03-05, shown as "Reference" column in /purchases/orders
-- SalesInvoice has `orderNumber String?` — shown as "Order #" column in /sales/invoices (serves as reference)
-- PurchaseInvoice shows linked PO's orderNumber as "Reference (PO#)" in /purchases/invoices
+- Active application: `C:\Users\kowsh\Desktop\ledger\smart-inventory`
+- Next.js 15 App Router, React 19, TypeScript, Prisma 6, MySQL
+- Tailwind CSS 4, shadcn/ui, Radix UI, SWR
+- Path alias: `@/*` -> `./src`
+- Do not edit `.env`, `node_modules`, lock files, or `src/generated/prisma`
 
-### Reorders → Reports (moved 2026-03-05)
-- Reorders moved from /purchases/reorders → /reports/reorders
-- Old pages still exist at /purchases/reorders (not deleted, just unused)
-- New pages: /reports/reorders/page.tsx and /reports/reorders/[id]/page.tsx
-- Sidebar: Reorders removed from Purchases section, added under Analytics alongside Reports
-- Reports hub (/reports/page.tsx): Reorders card added at top
-- Permissions: purchases_reorders permission still used for Reorders at new path
-- PATH_TO_PERMISSION updated with /reports/reorders → purchases_reorders
+## Current scale
 
-## Permission System
-- File: src/types/permissions.ts
-- RBAC with view/edit per page, 86 protected API routes
-- Sidebar uses canView() / canViewAny() from session.user.permissions
-- PATH_TO_PERMISSION maps exact page paths to permission keys
-- Dynamic paths (e.g. /reports/reorders/[id]) fall through middleware unchecked
+- 129 API route files
+- 80 page files
+- 82 shared component files
+- 30 library modules
+- 43 Prisma models and 15 Prisma enums
+- No conventional automated test suite; current checks are TypeScript, ESLint, workflow scripts, and manual/browser testing
 
-## Import System
-- src/lib/import-utils.ts — ENTITY_FIELDS defines importable fields per type
-- src/app/api/import/execute/route.ts — handles validation + import
-- Importable: CUSTOMER, VENDOR, ITEM, STOCK_JOURNAL, PAYMENT, VENDOR_PAYMENT, SALES_INVOICE, PURCHASE_INVOICE
-- NOT importable: SALES_ORDER, PURCHASE_ORDER
+## Architecture
 
-## Schema Changes Requiring Migration
-- After adding fields, run: `npx prisma db push` (then `npx prisma generate` if needed)
-- 2026-03-05: Added PurchaseOrder.referenceNumber String?
+- Staff authentication: NextAuth JWT with email/phone plus PIN; Google OAuth is limited to existing users.
+- Customer authentication: separate `portal-token` JWT with database status revalidation.
+- Middleware protects admin pages, portal pages, and portal APIs.
+- Route handlers independently enforce `checkPermission()` / `checkAuth()` or portal authentication.
+- SWR is the standard client-side data-fetching layer.
+- Business rules live in `src/lib/`.
+
+## Domain rules
+
+- Sales orders reserve inventory; sales invoices consume physical stock and release reservations.
+- Purchase invoices add physical stock; returns reverse inventory and financial effects.
+- Customer, vendor, and bank ledgers are updated with their corresponding financial transactions.
+- Sales pricing uses customer rate sheets and GST-inclusive calculations; purchases use tax-exclusive calculations.
+- FIFO helpers reconstruct stock cost and allocate payments.
+- Stock scans create pending purchase reorders from allocation shortfalls.
+
+## Portal
+
+- `/portal` supports customer login, brand/item browsing, rate-sheet pricing, cart, order placement, and order history.
+- The portal PWA is implemented: manifest, icons, offline page, service-worker generation, and `/portal/` scope are present.
+- Portal inactivity logout is implemented through `src/components/portal/InactivityGuard.tsx`.
+
+## Imports and integrations
+
+Importable entities include customers, vendors, items, stock journals, payments, vendor payments, sales invoices, and purchase invoices. Integrations include GST portal helpers, WhatsApp, email, PDF/XLSX import/export, and invoice PDF generation.
+
+## Known gaps
+
+- Partial invoicing is represented in the schema but is not fully supported by the current sales-invoice route.
+- Some API routes expose raw error messages.
+- Upload validation trusts the browser MIME type rather than file signatures.
+- `ioredis` and `src/lib/redis.ts` remain legacy-looking after the active cache moved in-memory.
+
+## Current worktree
+
+The branch is `main` and is aligned with `origin/main`. There are 18 uncommitted UI-only files changing table serial-number display and a purchase-return table colspan. These changes are user work and must not be reverted.
+
+## Verification baseline
+
+- `npm run typecheck`: passed on 2026-08-26
+- `npm run lint`: passed with 0 errors and 210 warnings on 2026-08-26

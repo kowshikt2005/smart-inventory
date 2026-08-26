@@ -198,6 +198,7 @@ export default function EmployeesPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
+                <TableHead className="font-semibold text-center w-[60px]">S.No.</TableHead>
                 <TableHead className="font-semibold">Employee #</TableHead>
                 <TableHead className="font-semibold">Name</TableHead>
                 <TableHead className="font-semibold">Email</TableHead>
@@ -240,8 +241,9 @@ export default function EmployeesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                employees.map((employee) => (
+                employees.map((employee, rowIndex) => (
                   <TableRow key={employee.id} className="hover:bg-gray-50">
+                    <TableCell className="text-center text-gray-500">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                     <TableCell className="font-mono font-medium">
                       {employee.employeeNumber}
                     </TableCell>

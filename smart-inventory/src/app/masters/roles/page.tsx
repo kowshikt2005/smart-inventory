@@ -83,6 +83,7 @@ export default function RolesPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="text-center w-[60px]">S.No.</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-center">Users</TableHead>
@@ -93,19 +94,20 @@ export default function RolesPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-10">
+                  <TableCell colSpan={6} className="text-center py-10">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : !roles?.length ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
                     No roles found
                   </TableCell>
                 </TableRow>
               ) : (
-                roles.map((role) => (
+                roles.map((role, rowIndex) => (
                   <TableRow key={role.id}>
+                    <TableCell className="text-center text-muted-foreground">{rowIndex + 1}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Shield className="h-4 w-4 text-muted-foreground" />

@@ -312,6 +312,7 @@ export default function RateSheetsPage() {
           <Table aria-label="Rate sheets list">
             <TableHeader>
               <TableRow className="bg-gray-50">
+                <TableHead scope="col" className="font-semibold text-center w-[60px]">S.No.</TableHead>
                 <TableHead scope="col" className="font-semibold">
                   Name
                 </TableHead>
@@ -381,7 +382,7 @@ export default function RateSheetsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedRateSheets.map((rateSheet: RateSheet) => {
+                paginatedRateSheets.map((rateSheet: RateSheet, rowIndex: number) => {
                   const totalExclusions = getTotalExclusions(rateSheet);
                   const isExpired =
                     rateSheet.validTo && new Date(rateSheet.validTo) < new Date();
@@ -390,6 +391,7 @@ export default function RateSheetsPage() {
 
                   return (
                     <TableRow key={rateSheet.id}>
+                      <TableCell className="text-center text-gray-500">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                       <TableCell className="font-medium">
                         {rateSheet.name}
                       </TableCell>

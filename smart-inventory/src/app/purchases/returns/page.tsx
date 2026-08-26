@@ -175,7 +175,8 @@ export default function PurchaseReturnsPage() {
           <div className="overflow-x-auto">
             <Table aria-label="Purchase returns list">
               <TableHeader>
-                <TableRow className="bg-gray-50">
+              <TableRow className="bg-gray-50">
+                  <TableHead scope="col" className="font-semibold text-center w-[60px]">S.No.</TableHead>
                   <TableHead className="font-semibold w-[100px]">Date</TableHead>
                   <TableHead className="font-semibold w-[110px]">Return #</TableHead>
                   <TableHead className="font-semibold">Vendor</TableHead>
@@ -187,14 +188,15 @@ export default function PurchaseReturnsPage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={7} className="text-center text-gray-500 py-12"><div className="flex items-center justify-center gap-2"><Loader2 className="h-5 w-5 animate-spin" /><span>Loading returns...</span></div></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center text-gray-500 py-12"><div className="flex items-center justify-center gap-2"><Loader2 className="h-5 w-5 animate-spin" /><span>Loading returns...</span></div></TableCell></TableRow>
                 ) : error ? (
-                  <TableRow><TableCell colSpan={7} className="text-center text-red-600 py-8"><p>Error: {error.message || "Failed to load returns"}</p><Button onClick={() => mutate()} variant="outline" size="sm" className="mt-2">Try Again</Button></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center text-red-600 py-8"><p>Error: {error.message || "Failed to load returns"}</p><Button onClick={() => mutate()} variant="outline" size="sm" className="mt-2">Try Again</Button></TableCell></TableRow>
                 ) : (data?.purchaseReturns || []).length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center text-gray-500 py-8">{searchQuery || statusFilter !== "ALL" ? "No returns found matching your filters" : "No purchase returns yet."}</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center text-gray-500 py-8">{searchQuery || statusFilter !== "ALL" ? "No returns found matching your filters" : "No purchase returns yet."}</TableCell></TableRow>
                 ) : (
-                  (data?.purchaseReturns || []).map((ret: PurchaseReturn) => (
+                  (data?.purchaseReturns || []).map((ret: PurchaseReturn, rowIndex: number) => (
                     <TableRow key={ret.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedReturn(ret)}>
+                      <TableCell className="text-center text-gray-500">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                       <TableCell className="text-sm">{formatDate(ret.date)}</TableCell>
                       <TableCell>
                         <button onClick={(e) => { e.stopPropagation(); setSelectedReturn(ret); }} className="font-medium text-teal-600 hover:text-teal-800 hover:underline">{ret.returnNumber}</button>

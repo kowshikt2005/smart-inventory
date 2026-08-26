@@ -327,6 +327,7 @@ function SubBrandsContent() {
           <Table aria-label="Sub-brands list">
             <TableHeader>
               <TableRow className="bg-gray-50">
+                <TableHead className="font-semibold text-center w-[60px]">S.No.</TableHead>
                 <TableHead scope="col" className="font-semibold w-16">
                   Logo
                 </TableHead>
@@ -380,8 +381,9 @@ function SubBrandsContent() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedSubBrands.map((subBrand) => (
+                paginatedSubBrands.map((subBrand, rowIndex) => (
                   <TableRow key={subBrand.id} className={!subBrand.isActive ? "opacity-60" : ""}>
+                    <TableCell className="text-center text-gray-500">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                     <TableCell>
                       {subBrand.logoUrl ? (
                         /* eslint-disable-next-line @next/next/no-img-element */

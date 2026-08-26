@@ -662,6 +662,7 @@ export default function SalesInvoicesPage() {
             <Table aria-label="Sales invoices list">
               <TableHeader>
                 <TableRow className="bg-muted/30">
+                  <TableHead scope="col" className="font-semibold text-center w-[60px]">S.No.</TableHead>
                   <TableHead scope="col" className="w-10">
                     <Checkbox
                       checked={
@@ -714,8 +715,9 @@ export default function SalesInvoicesPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  invoices.map((invoice) => (
+                  invoices.map((invoice, rowIndex) => (
                     <TableRow key={invoice.id} className={invoice.isImported ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-muted/20"}>
+                      <TableCell className="text-center text-muted-foreground">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                       <TableCell>
                         <Checkbox
                           checked={selectedIds.has(invoice.id)}

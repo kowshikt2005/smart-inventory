@@ -1,155 +1,78 @@
-# Smart Inventory & Business Management System
+# Smart Inventory
 
-> A comprehensive, GST-compliant business management system for small to mid-sized businesses in India.
+Smart Inventory is a GST-aware inventory, sales, purchasing, ledger, and customer-portal system for Indian wholesale businesses.
 
-## 🚀 Quick Start
+## What is implemented
 
-```bash
-# Install dependencies
+### Internal application
+
+- Dashboard, global search, notifications, and role-filtered navigation
+- Customer, vendor, employee, item, brand, sub-brand, rate-sheet, role, and bank-account masters
+- Sales orders, invoices, dummy invoices, receipts, and sales returns
+- Purchase orders, purchase invoices, vendor payments, purchase returns, and reorders
+- Stock reservations, stock journals, movement history, FIFO cost helpers, and stock scans
+- Customer/vendor ledgers and bank ledgers
+- Sales, purchase, profit, outstanding, closing, claim, and GST reports
+- Excel/PDF import and export, invoice PDF generation, email, WhatsApp, and GST portal helpers
+
+### Customer portal
+
+The `/portal` application has separate customer authentication, brand/item browsing, customer-specific rate-sheet pricing, cart management, order placement, order history, inactivity logout, and installable PWA behavior. The PWA is scoped to `/portal/` so it does not cache or control the internal application.
+
+## Architecture
+
+```text
+Next.js pages/components
+        -> middleware authentication and page permissions
+        -> API route handlers
+        -> checkPermission/checkAuth or portal authentication
+        -> business utilities in src/lib
+        -> Prisma
+        -> MySQL
+```
+
+The staff application uses NextAuth JWT sessions. The customer portal uses a separate `portal-token` JWT and rechecks that the customer is active. API handlers enforce authorization independently of the UI.
+
+Inventory separates `physicalStock` from `reservedQuantity`. Sales orders reserve stock; sales invoices consume physical stock and release reservations; purchase invoices add stock; returns and stock journals create compensating movements. Customer, vendor, and bank ledger entries are created alongside the relevant financial transactions.
+
+The current schema is in [`prisma/schema.prisma`](./prisma/schema.prisma). Business calculations and workflow rules are primarily in [`src/lib/`](./src/lib/), especially `order-utils.ts`, `purchase-utils.ts`, `stock-allocation.ts`, `fifo-utils.ts`, and `gst-report-utils.ts`.
+
+## Development
+
+Run commands from this directory:
+
+```powershell
 npm install
-
-# Run development server
 npm run dev
-
-# Open browser
-# http://localhost:3000
 ```
 
-## 📚 Important Files
+Checks:
 
-- **[PRD.md](./PRD.md)** - Complete Product Requirements Document
-- **[PROJECT_MEMORY.md](./PROJECT_MEMORY.md)** - Project context, decisions, and progress ⭐ **READ THIS FIRST!**
-
-## 🏗️ Current Status
-
-**Phase**: Initial Setup & UI Development
-**Version**: 0.1.0
-**Last Updated**: January 6, 2026
-
-### ✅ Completed
-- Next.js 15 + React 19 + TypeScript setup
-- Tailwind CSS 4 + shadcn/ui components
-- Dashboard UI with metric cards
-- Sidebar navigation with Masters menu
-- Layout components (Sidebar, Header, DashboardLayout)
-
-### 🔄 In Progress
-- None
-
-### ⏳ Next Steps
-1. Install SQL Server Express
-2. Configure Prisma ORM
-3. Create database schema
-4. Build Customer management module
-
-## 🛠️ Tech Stack
-
-- **Frontend**: Next.js 15, React 19, TypeScript 5, Tailwind CSS 4
-- **UI Components**: shadcn/ui, Radix UI, Lucide Icons
-- **Database**: Microsoft SQL Server (not yet configured)
-- **ORM**: Prisma (not yet configured)
-- **Authentication**: None (Phase 1), NextAuth.js v5 (planned)
-
-## 📖 Documentation
-
-For complete project context, architecture, decisions, and progress, see:
-👉 **[PROJECT_MEMORY.md](./PROJECT_MEMORY.md)**
-
-## 🎯 Core Features (Planned)
-
-### Phase 1: Core Operations
-- ✅ Dashboard UI
-- ⏳ Customer onboarding with GST validation
-- ⏳ Sales order management (4-state workflow)
-- ⏳ Virtual inventory counter system
-- ⏳ Invoice generation
-- ⏳ Payment processing
-
-### Phase 2: Advanced Features
-- Returns and adjustments
-- Comprehensive reporting
-- Bank reconciliation
-- Advanced inventory features
-
-## 🏛️ Architecture
-
-```
-smart-inventory/
-├── src/
-│   ├── app/              # Next.js App Router pages
-│   ├── components/       # React components
-│   │   ├── layout/       # Layout components (Sidebar, Header)
-│   │   └── ui/           # shadcn/ui components
-│   ├── lib/              # Utilities
-│   └── types/            # TypeScript types (to be created)
-├── prisma/               # Database schema (to be created)
-├── PRD.md                # Product Requirements
-├── PROJECT_MEMORY.md     # Project context & decisions
-└── README.md             # This file
+```powershell
+npm run typecheck
+npm run lint
+npm run check
 ```
 
-## 📝 Key Business Logic
+`typecheck` runs TypeScript without emitting files. `lint` reports ESLint issues. `check` runs both. None of these commands changes the database.
 
-### Virtual Inventory Counter
-```
-virtual_available = physical_stock - reserved_quantity
-```
+Database setup and seed behavior are documented in [`SEEDING.md`](./SEEDING.md). Database schema commands can change shared database state, so review the target `DATABASE_URL` before using them.
 
-### Sales Order States
-1. **OPEN** - Order created, stock reserved
-2. **DELIVER** - Ready for fulfillment
-3. **HOLD** - Paused (credit/approval issues)
-4. **REJECT** - Cancelled
+## Current repository facts
 
-### Credit Validation
-```
-if (outstanding + order_amount) > credit_limit:
-    status = HOLD
-    requires_manager_approval = true
-```
+- 129 API route files
+- 80 page files
+- 82 shared component files
+- 43 Prisma models and 15 Prisma enums
+- No conventional automated test suite; validation currently uses typecheck, lint, workflow scripts, and manual/browser checks
 
-## 🔗 Navigation
+The source code, schema, and configuration are authoritative. Historical implementation plans and summaries that no longer describe current behavior have been removed.
 
-- **Dashboard**: `/` - Main dashboard with metrics
-- **Masters**: `/masters` - Master data overview
-  - Customers: `/masters/customers` (to be created)
-  - Vendors: `/masters/vendors` (to be created)
-  - Employees: `/masters/employees` (to be created)
-  - Rate Sheets: `/masters/rate-sheets` (to be created)
-  - Items: `/masters/items` (to be created)
-    - Brands: `/masters/items/brands` (to be created)
-    - Sub-brands: `/masters/items/sub-brands` (to be created)
+## Project guidance
 
-## 🎨 Design Reference
-
-- **Primary**: OutputBooks (https://demo.outputbooks.com)
-- **Secondary**: LedgerZen dashboard
-- **Style**: Clean, minimal, professional
-
-## ⚙️ Environment Variables (To Be Created)
-
-```env
-# Database
-DATABASE_URL="sqlserver://localhost:1433;database=smart_inventory;..."
-
-# Authentication (Phase 2)
-NEXTAUTH_SECRET="your-secret-key"
-NEXTAUTH_URL="http://localhost:3000"
-
-# GST API (when available)
-GST_API_KEY="your-api-key"
-GST_API_URL="https://gst-api-url.com"
-```
-
-## 👥 Team
-
-- **Developer**: Building with Claude Code
-- **Business Owner**: Product vision and requirements
-
-## 📄 License
-
-Private project - All rights reserved
-
----
-
-**For detailed project information, see [PROJECT_MEMORY.md](./PROJECT_MEMORY.md)**
+- [`CLAUDE.md`](./CLAUDE.md) - architecture and repository rules
+- [`PORTAL-PWA-SPEC.md`](./PORTAL-PWA-SPEC.md) - current portal PWA behavior
+- [`SEEDING.md`](./SEEDING.md) - database setup and sample data
+- [`SEED_DATA_DATES.md`](./SEED_DATA_DATES.md) - seeded transaction dates
+- [`AWS_INFRASTRUCTURE.md`](./AWS_INFRASTRUCTURE.md) - infrastructure notes
+- [`EC2_DEPLOYMENT_PLAN.md`](./EC2_DEPLOYMENT_PLAN.md) - deployment preparation notes

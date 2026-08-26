@@ -307,6 +307,7 @@ export default function SalesReturnsPage() {
             <Table aria-label="Sales returns list">
               <TableHeader>
                 <TableRow className="bg-muted/30">
+                  <TableHead scope="col" className="font-semibold text-center w-[60px]">S.No.</TableHead>
                   <TableHead scope="col" className="font-semibold w-[100px]">Date</TableHead>
                   <TableHead scope="col" className="font-semibold w-[110px]">Return #</TableHead>
                   <TableHead scope="col" className="font-semibold">Customer</TableHead>
@@ -345,8 +346,9 @@ export default function SalesReturnsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  (data?.salesReturns || []).map((ret: SalesReturn) => (
+                  (data?.salesReturns || []).map((ret: SalesReturn, rowIndex: number) => (
                     <TableRow key={ret.id} className="hover:bg-muted/20 cursor-pointer" onClick={() => setSelectedReturn(ret)}>
+                      <TableCell className="text-center text-muted-foreground">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                       <TableCell className="text-sm">{formatDate(ret.returnDate)}</TableCell>
                       <TableCell>
                         <button

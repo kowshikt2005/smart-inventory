@@ -557,6 +557,7 @@ export default function SalesOrdersPage() {
             <Table aria-label="Sales orders list">
               <TableHeader>
                 <TableRow className="bg-muted/30">
+                  <TableHead scope="col" className="font-semibold text-center w-[60px]">S.No.</TableHead>
                   <TableHead scope="col" className="font-semibold">
                     Date
                   </TableHead>
@@ -626,8 +627,9 @@ export default function SalesOrdersPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  (data?.salesOrders || []).map((order: SalesOrder) => (
+                  (data?.salesOrders || []).map((order: SalesOrder, rowIndex: number) => (
                     <TableRow key={order.id} className="hover:bg-muted/20">
+                      <TableCell className="text-center text-muted-foreground">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                       <TableCell className="text-sm">
                         {formatDate(order.orderDate)}
                       </TableCell>

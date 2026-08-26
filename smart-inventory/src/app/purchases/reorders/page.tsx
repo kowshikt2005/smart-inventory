@@ -226,6 +226,7 @@ export default function ReordersPage() {
           <Table aria-label="Reorders list">
             <TableHeader>
               <TableRow className="bg-gray-50">
+                <TableHead className="font-semibold text-center w-[60px]">S.No.</TableHead>
                 <TableHead className="font-semibold">Reorder No.</TableHead>
                 <TableHead className="font-semibold">Created At</TableHead>
                 <TableHead className="font-semibold text-center">Items</TableHead>
@@ -260,8 +261,9 @@ export default function ReordersPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                reorders.map((ro) => (
+                reorders.map((ro, rowIndex) => (
                   <TableRow key={ro.id} className="hover:bg-gray-50">
+                    <TableCell className="text-center text-gray-500">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                     <TableCell>
                       <button
                         onClick={() => router.push(`/purchases/reorders/${ro.id}`)}

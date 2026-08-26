@@ -254,6 +254,7 @@ function CustomersContent() {
           <Table aria-label="Customer list">
             <TableHeader>
               <TableRow className="bg-muted/30">
+                <TableHead className="font-semibold text-center w-[60px]">S.No.</TableHead>
                 <TableHead className="font-semibold">Name</TableHead>
                 <TableHead className="font-semibold">GSTIN</TableHead>
                 <TableHead className="font-semibold">City</TableHead>
@@ -290,13 +291,14 @@ function CustomersContent() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedCustomers.map((customer) => {
+                paginatedCustomers.map((customer, rowIndex) => {
                   const inactive = customer.status === "INACTIVE";
                   return (
                     <TableRow
                       key={customer.id}
                       className={inactive ? "opacity-50 bg-muted/20" : undefined}
                     >
+                      <TableCell className="text-center text-muted-foreground">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                       <TableCell className="font-medium">{customer.name}</TableCell>
                       <TableCell className="font-mono text-sm">{customer.gstin || "-"}</TableCell>
                       <TableCell>{customer.city || "-"}</TableCell>

@@ -200,6 +200,7 @@ export default function DummyInvoicesPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-gray-50">
+                    <TableHead className="font-semibold text-center w-[60px]">S.No.</TableHead>
                     <TableHead className="font-semibold">Invoice Date</TableHead>
                     <TableHead className="font-semibold">Invoice #</TableHead>
                     <TableHead className="font-semibold">Customer</TableHead>
@@ -211,8 +212,9 @@ export default function DummyInvoicesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {invoices.map((inv) => (
+                  {invoices.map((inv, rowIndex) => (
                     <TableRow key={inv.id} className="hover:bg-gray-50">
+                      <TableCell className="text-center text-gray-500">{rowIndex + 1}</TableCell>
                       <TableCell className="text-gray-600">{fmtDate(inv.invoiceDate)}</TableCell>
                       <TableCell className="font-medium text-gray-900">{inv.invoiceNumber}</TableCell>
                       <TableCell>

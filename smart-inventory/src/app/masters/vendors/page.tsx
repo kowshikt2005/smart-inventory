@@ -279,6 +279,7 @@ function VendorsContent() {
           <Table aria-label="Vendor list">
             <TableHeader>
               <TableRow className="bg-muted/30">
+                <TableHead className="font-semibold text-center w-[60px]">S.No.</TableHead>
                 <TableHead className="font-semibold">Name</TableHead>
                 <TableHead className="font-semibold">GSTIN</TableHead>
                 <TableHead className="font-semibold">City</TableHead>
@@ -315,11 +316,12 @@ function VendorsContent() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedVendors.map((vendor: Vendor) => (
+                paginatedVendors.map((vendor: Vendor, rowIndex) => (
                   <TableRow
                     key={vendor.id}
                     className={!vendor.isActive ? "opacity-50 bg-muted/20" : undefined}
                   >
+                    <TableCell className="text-center text-muted-foreground">{(currentPage - 1) * itemsPerPage + rowIndex + 1}</TableCell>
                     <TableCell className="font-medium">{vendor.name}</TableCell>
                     <TableCell className="font-mono text-sm">{vendor.gstin || "-"}</TableCell>
                     <TableCell>{vendor.city || "-"}</TableCell>
