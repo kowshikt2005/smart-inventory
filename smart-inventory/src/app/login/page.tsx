@@ -4,8 +4,10 @@ import { useState, useEffect, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Mail, KeyRound } from "lucide-react";
-import { TypewriterEffectSmooth } from "@/components/ui/aceternity/typewriter-effect";
 import { AnimatedGridBackground } from "@/components/ui/aceternity/animated-background";
+import { CompanyBrand } from "@/components/branding/CompanyBrand";
+import { PoweredByCard } from "@/components/branding/PoweredByCard";
+import { StaffDocumentTitle } from "@/components/branding/StaffDocumentTitle";
 
 function LoginPageContent() {
   const router = useRouter();
@@ -95,14 +97,9 @@ function LoginPageContent() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const typewriterWords = [
-    { text: "SRI", className: "text-slate-800" },
-    { text: "BALAJI", className: "text-slate-800" },
-    { text: "ENTERPRISES", className: "text-slate-800" },
-  ];
-
   return (
     <AnimatedGridBackground className="flex items-center justify-center min-h-screen px-6 lg:px-16">
+      <StaffDocumentTitle />
       <div className="w-full max-w-6xl flex items-center justify-between gap-12 lg:gap-24">
 
         {/* Left Side - Branding with Visual Anchoring */}
@@ -112,10 +109,10 @@ function LoginPageContent() {
             <p className="text-sm uppercase tracking-[0.25em] text-slate-400 font-medium">
               welcome to
             </p>
-            <TypewriterEffectSmooth
-              words={typewriterWords}
-              className="justify-start"
-              cursorClassName="bg-amber-500"
+            <CompanyBrand
+              className="max-w-xl"
+              buttonClassName="text-4xl font-bold tracking-tight text-slate-800 hover:text-indigo-800 xl:text-5xl"
+              description="Company identity configured by staff."
             />
             <div className="flex items-center gap-4 pt-2">
               <span className="text-5xl xl:text-6xl font-bold text-amber-500 tracking-tight">
@@ -248,9 +245,7 @@ function LoginPageContent() {
 
             {/* Card Footer */}
             <div className="border-t border-white/[0.06] bg-indigo-950/40 px-10 py-4 flex items-center justify-between">
-              <p className="text-xs text-white/30">
-                powered by <span className="text-white/50 font-medium">ksolutions</span>
-              </p>
+              <PoweredByCard variant="link" />
               <a
                 href="/portal/login"
                 className="text-xs text-amber-400/60 hover:text-amber-400 transition-colors font-medium"
@@ -263,9 +258,11 @@ function LoginPageContent() {
           {/* Mobile Branding */}
           <div className="lg:hidden mt-8 text-center">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400 font-medium">welcome to</p>
-            <h1 className="text-2xl font-bold text-slate-800 mt-1">
-              SRI BALAJI ENTERPRISES
-            </h1>
+            <CompanyBrand
+              className="mt-1"
+              buttonClassName="text-center text-2xl font-bold text-slate-800 hover:text-indigo-800"
+              description="Company identity configured by staff."
+            />
             <h2 className="text-xl font-bold text-amber-500">
               ERP
             </h2>

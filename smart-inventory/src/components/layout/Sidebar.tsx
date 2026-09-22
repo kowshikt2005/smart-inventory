@@ -32,6 +32,8 @@ import {
 } from "lucide-react";
 import { useState, memo, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { CompanyBrand } from "@/components/branding/CompanyBrand";
+import { PoweredByCard } from "@/components/branding/PoweredByCard";
 
 function CollapsibleSection({
   isOpen,
@@ -209,12 +211,12 @@ export const Sidebar = memo(function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-[230px] bg-gradient-to-b from-[#2D2A5E] via-[#272462] to-[#1A1740] flex flex-col shadow-xl">
-      {/* Logo */}
-      <div className="flex items-center justify-center px-3 py-2 border-b border-white/[0.12]">
-        <div className="w-full rounded-lg bg-white px-2 py-1.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-sbe.jpg" alt="Sri Balaji Enterprises" width={180} height={36} className="w-full h-auto object-contain max-h-8" />
-        </div>
+      {/* Company identity */}
+      <div className="border-b border-white/[0.12] px-4 py-4">
+        <CompanyBrand
+          className="min-w-0"
+          buttonClassName="w-full truncate text-white hover:text-amber-200 focus:ring-offset-[#2D2A5E]"
+        />
       </div>
 
       {/* Navigation */}
@@ -373,9 +375,8 @@ export const Sidebar = memo(function Sidebar() {
       </nav>
 
       {/* Footer - KSolutions branding */}
-      <div className="border-t border-white/[0.12] bg-black/20">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-ksolutions.jpg" alt="KSolutions - Your Gateway to Digital Excellence" width={230} height={40} className="w-full h-auto object-cover" />
+      <div className="border-t border-white/[0.12] bg-black/20 p-3">
+        <PoweredByCard />
       </div>
     </aside>
   );

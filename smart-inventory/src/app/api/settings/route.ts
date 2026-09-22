@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { checkPermission } from "@/lib/api-auth";
+import { isCompanyLogoUploadPath } from "@/lib/company-branding-contract";
 
 // GET /api/settings - Get all settings or a specific setting by key
 export async function GET(request: NextRequest) {
@@ -55,6 +56,7 @@ const ALLOWED_SETTING_KEYS = new Set([
   'company_pan',
   'company_msme',
   'company_fssai',
+  'company_logo_url',
 ]);
 
 // PUT /api/settings - Update a setting
@@ -76,6 +78,13 @@ export async function PUT(request: NextRequest) {
     if (!ALLOWED_SETTING_KEYS.has(key)) {
       return NextResponse.json(
         { error: `Invalid setting key: '${key}'` },
+        { status: 400 }
+      );
+    }
+
+    if (key === 'company_logo_url' && !isCompanyLogoUploadPath(String(value))) {
+      return NextResponse.json(
+        { error: "Company logo must be an image uploaded through Company Settings" },
         { status: 400 }
       );
     }

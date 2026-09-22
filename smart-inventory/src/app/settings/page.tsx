@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Settings, Loader2, AlertTriangle, Trash2, X, ShieldAlert, Save, Building2, Sliders } from "lucide-react";
+import { Settings, Loader2, AlertTriangle, Trash2, X, ShieldAlert, Save, Building2, Sliders, ImageIcon, Upload } from "lucide-react";
 
 interface AppSetting {
   id: string;
@@ -20,7 +20,7 @@ const COMPANY_FIELDS: {
   maxLength?: number;
   transform?: (v: string) => string;
 }[] = [
-  { key: "company_name", label: "Company Name", type: "text", placeholder: "e.g. Sri Balaji Enterprises" },
+  { key: "company_name", label: "Company Name", type: "text", placeholder: "e.g. Acme Wholesale" },
   { key: "company_address", label: "Address", type: "textarea", placeholder: "Door No, Street, Area" },
   { key: "company_city", label: "City", type: "text", placeholder: "e.g. Chennai" },
   { key: "company_state", label: "State", type: "text", placeholder: "e.g. Tamil Nadu" },
@@ -47,6 +47,12 @@ const COMPANY_FIELDS: {
   { key: "company_fssai", label: "FSSAI No.", type: "text", placeholder: "e.g. 10020041000123" },
 ];
 
+const COMPANY_LOGO_KEY = "company_logo_url";
+const COMPANY_SAVE_FIELDS = [
+  ...COMPANY_FIELDS.map(({ key, label }) => ({ key, label })),
+  { key: COMPANY_LOGO_KEY, label: "Company Logo" },
+];
+
 export default function SettingsPage() {
   const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState<"app" | "system">("app");
@@ -60,6 +66,8 @@ export default function SettingsPage() {
   const [companyEdits, setCompanyEdits] = useState<Record<string, string>>({});
   const [companyDirty, setCompanyDirty] = useState(false);
   const [companySaving, setCompanySaving] = useState(false);
+  const [companyLogoUploading, setCompanyLogoUploading] = useState(false);
+  const companyLogoInputRef = useRef<HTMLInputElement>(null);
 
   // Reset data state
   const [showResetModal, setShowResetModal] = useState(false);
@@ -81,6 +89,8 @@ export default function SettingsPage() {
         const existing = settings.find((s) => s.key === field.key);
         edits[field.key] = existing?.value || "";
       }
+      const logoSetting = settings.find((s) => s.key === COMPANY_LOGO_KEY);
+      edits[COMPANY_LOGO_KEY] = logoSetting?.value || "";
       setCompanyEdits(edits);
       setCompanyDirty(false);
     }
@@ -135,7 +145,7 @@ export default function SettingsPage() {
     setSuccessMessage(null);
 
     try {
-      for (const field of COMPANY_FIELDS) {
+      for (const field of COMPANY_SAVE_FIELDS) {
         const val = companyEdits[field.key] ?? "";
         const existing = settings.find((s) => s.key === field.key);
         // Only save if changed
@@ -152,6 +162,55 @@ export default function SettingsPage() {
     } finally {
       setCompanySaving(false);
     }
+  };
+
+  const handleCompanyLogoUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Company logo must be a JPEG, PNG, or WebP image");
+      return;
+    }
+
+    try {
+      setCompanyLogoUploading(true);
+      setError(null);
+      setSuccessMessage(null);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", "company");
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (!response.ok || typeof data.url !== "string") {
+        throw new Error(data.error || "Failed to upload company logo");
+      }
+
+      setCompanyEdits((previous) => ({
+        ...previous,
+        [COMPANY_LOGO_KEY]: data.url,
+      }));
+      setCompanyDirty(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload company logo");
+    } finally {
+      setCompanyLogoUploading(false);
+    }
+  };
+
+  const handleRemoveCompanyLogo = () => {
+    setCompanyEdits((previous) => ({
+      ...previous,
+      [COMPANY_LOGO_KEY]: "",
+    }));
+    setCompanyDirty(true);
   };
 
   const getSettingValue = (key: string): string => {
@@ -290,6 +349,62 @@ export default function SettingsPage() {
                 </button>
               </div>
               <div className="px-6 py-5">
+                <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                    <div className="flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-indigo-100 bg-white">
+                      {companyEdits[COMPANY_LOGO_KEY] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={companyEdits[COMPANY_LOGO_KEY]}
+                          alt="Current company logo preview"
+                          className="h-full w-full object-contain p-2"
+                        />
+                      ) : (
+                        <ImageIcon className="h-7 w-7 text-indigo-300" aria-hidden="true" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-semibold text-gray-900">Company logo</h3>
+                      <p className="mt-1 text-sm text-gray-500">
+                        JPEG, PNG, or WebP up to 10 MB. The logo appears only after someone clicks the company name.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <input
+                          ref={companyLogoInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={handleCompanyLogoUpload}
+                          className="sr-only"
+                          aria-label="Choose company logo"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => companyLogoInputRef.current?.click()}
+                          disabled={companyLogoUploading || companySaving}
+                          className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {companyLogoUploading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Upload className="h-4 w-4" />
+                          )}
+                          {companyEdits[COMPANY_LOGO_KEY] ? "Replace image" : "Choose image"}
+                        </button>
+                        {companyEdits[COMPANY_LOGO_KEY] && (
+                          <button
+                            type="button"
+                            onClick={handleRemoveCompanyLogo}
+                            disabled={companyLogoUploading || companySaving}
+                            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {COMPANY_FIELDS.map((field) => (
                     <div

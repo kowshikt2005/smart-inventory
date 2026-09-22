@@ -2,6 +2,7 @@ import { utils, writeFileXLSX } from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { CompanySettings, BankAccountInfo } from "./invoice-pdf";
+import { DEFAULT_COMPANY_NAME } from "./company-branding-contract";
 
 // ── Types ──────────────────────────────────────────────────────
 interface SheetConfig {
@@ -37,7 +38,7 @@ export async function fetchCompanySettings(): Promise<{
   bank: BankAccountInfo | null;
 }> {
   const emptyCompany: CompanySettings = {
-    company_name: "",
+    company_name: DEFAULT_COMPANY_NAME,
     company_address: "",
     company_city: "",
     company_state: "",
@@ -102,7 +103,7 @@ export async function fetchCompanySettings(): Promise<{
   }
 
   const company: CompanySettings = {
-    company_name: settingsMap.company_name || "",
+    company_name: settingsMap.company_name?.trim() || DEFAULT_COMPANY_NAME,
     company_address: settingsMap.company_address || "",
     company_city: settingsMap.company_city || "",
     company_state: settingsMap.company_state || "",
@@ -253,7 +254,7 @@ function buildPDFDocument({
     // ── Fallback: simple centered header (legacy behavior) ───
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.text(companyName || "Company", pw / 2, 15, { align: "center" });
+    doc.text(companyName || DEFAULT_COMPANY_NAME, pw / 2, 15, { align: "center" });
 
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");

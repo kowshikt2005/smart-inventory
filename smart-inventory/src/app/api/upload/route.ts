@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import path from 'path';
-import { checkAuth } from '@/lib/api-auth';
+import { checkAuth, checkPermission } from '@/lib/api-auth';
 
 const ALLOWED_TYPES: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -23,6 +23,28 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
+    folder = (formData.get('folder') as string) || 'items';
+    const VALID_FOLDERS = ['items', 'brands', 'employees', 'company'];
+
+    if (!VALID_FOLDERS.includes(folder)) {
+      return NextResponse.json(
+        {
+          error: `Invalid folder. Allowed: ${VALID_FOLDERS.join(', ')}`,
+          code: 'UPLOAD_INVALID_FOLDER',
+          requestId,
+          diagnostics: {
+            folder,
+            allowedFolders: VALID_FOLDERS,
+          },
+        },
+        { status: 400 }
+      );
+    }
+
+    if (folder === 'company') {
+      const { error: permissionError } = await checkPermission('settings', 'edit');
+      if (permissionError) return permissionError;
+    }
 
     if (!file) {
       return NextResponse.json(
@@ -59,6 +81,17 @@ export async function POST(request: Request) {
       );
     }
 
+    if (folder === 'company' && file.type === 'application/pdf') {
+      return NextResponse.json(
+        {
+          error: 'Company logos must be JPEG, PNG, or WebP images.',
+          code: 'UPLOAD_INVALID_COMPANY_LOGO_TYPE',
+          requestId,
+        },
+        { status: 400 }
+      );
+    }
+
     // Validate file size
     if (file.size > MAX_SIZE) {
       return NextResponse.json(
@@ -70,24 +103,6 @@ export async function POST(request: Request) {
             fileName: file.name,
             fileSize: file.size,
             maxSize: MAX_SIZE,
-          },
-        },
-        { status: 400 }
-      );
-    }
-
-    // Determine upload folder
-    folder = (formData.get('folder') as string) || 'items';
-    const VALID_FOLDERS = ['items', 'brands', 'employees'];
-    if (!VALID_FOLDERS.includes(folder)) {
-      return NextResponse.json(
-        {
-          error: `Invalid folder. Allowed: ${VALID_FOLDERS.join(', ')}`,
-          code: 'UPLOAD_INVALID_FOLDER',
-          requestId,
-          diagnostics: {
-            folder,
-            allowedFolders: VALID_FOLDERS,
           },
         },
         { status: 400 }

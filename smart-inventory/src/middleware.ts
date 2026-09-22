@@ -69,8 +69,13 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Allow access to login page and auth API routes
-  if (pathname === "/login" || pathname.startsWith("/api/auth/")) {
+  // Allow the staff login page to read the public branding projection.
+  // Settings and uploads remain protected by their own API authorization.
+  if (
+    pathname === "/login" ||
+    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/api/branding")
+  ) {
     return NextResponse.next();
   }
 
