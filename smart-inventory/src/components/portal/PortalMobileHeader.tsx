@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { ShoppingCart, ChevronLeft } from "lucide-react";
 import { useCart } from "@/components/portal/CartContext";
 import { portalFetcher } from "@/lib/portal-fetcher";
+import { useCompanyBranding } from "@/hooks/use-company-branding";
 
 const PAGE_TITLES: Record<string, string> = {
   "/portal": "Customer Portal",
@@ -18,7 +19,7 @@ const PAGE_TITLES: Record<string, string> = {
 function getPageTitle(pathname: string): string {
   if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
   if (pathname.startsWith("/portal/shop/")) return "Products";
-  return "SBE Portal";
+  return "Customer Portal";
 }
 
 function isDeepShopPage(pathname: string): boolean {
@@ -31,6 +32,7 @@ export function PortalMobileHeader() {
   const pathname = usePathname();
   const isLoginPage = pathname === "/portal/login";
   const { totalItems } = useCart();
+  const { branding } = useCompanyBranding();
 
   const { data } = useSWR<{ customer: { name: string } }>(
     isLoginPage ? null : "/api/portal/me",
@@ -58,12 +60,12 @@ export function PortalMobileHeader() {
           </Link>
         ) : (
           <div className="rounded-lg bg-white px-2.5 py-1.5 shadow-sm flex-shrink-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/logo-sbe.jpg"
-              alt="Sri Balaji Enterprises"
-              className="h-5 w-auto object-contain"
-            />
+            {branding.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={branding.logoUrl} alt={`${branding.companyName} logo`} className="h-5 w-auto object-contain" />
+            ) : (
+              <span className="max-w-28 truncate text-xs font-semibold text-indigo-950">{branding.companyName}</span>
+            )}
           </div>
         )}
 

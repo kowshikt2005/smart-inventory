@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Loader2, Phone, KeyRound } from "lucide-react";
 
 import { AnimatedGridBackground } from "@/components/ui/aceternity/animated-background";
+import { useCompanyBranding } from "@/hooks/use-company-branding";
 
 export default function PortalLoginPage() {
   const router = useRouter();
+  const { branding } = useCompanyBranding();
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
   const [showPin, setShowPin] = useState(false);
@@ -69,14 +71,9 @@ export default function PortalLoginPage() {
               <p className="text-sm uppercase tracking-[0.25em] text-slate-400 font-medium">
                 welcome to
               </p>
-              <div className="space-y-1">
-                <p className="text-4xl xl:text-5xl font-bold text-slate-800 tracking-tight leading-tight">
-                  SRI BALAJI
-                </p>
-                <p className="text-4xl xl:text-5xl font-bold text-slate-800 tracking-tight">
-                  ENTERPRISES
-                </p>
-              </div>
+              <p className="text-4xl xl:text-5xl font-bold text-slate-800 tracking-tight leading-tight">
+                {branding.companyName}
+              </p>
               <div className="flex items-center gap-4 pt-2">
                 <span className="text-4xl xl:text-5xl font-bold text-amber-500 tracking-tight">
                   B2B
@@ -105,12 +102,12 @@ export default function PortalLoginPage() {
                 {/* Logo */}
                 <div className="flex justify-center mb-4">
                   <div className="bg-white rounded-xl px-6 py-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src="/logo-sbe.jpg?v=2"
-                      alt="Sri Balaji Enterprises"
-                      className="h-10 w-auto object-contain"
-                    />
+                    {branding.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={branding.logoUrl} alt={`${branding.companyName} logo`} className="h-10 w-auto object-contain" />
+                    ) : (
+                      <span className="text-sm font-semibold text-indigo-950">{branding.companyName}</span>
+                    )}
                   </div>
                 </div>
 

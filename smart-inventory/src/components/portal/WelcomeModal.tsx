@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, Play } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { useCompanyBranding } from "@/hooks/use-company-branding";
 
 interface WelcomeModalProps {
   customerName?: string;
@@ -11,6 +12,7 @@ interface WelcomeModalProps {
 
 export function WelcomeModal({ customerName, onClose }: WelcomeModalProps) {
   const [showVideo, setShowVideo] = useState(false);
+  const { branding } = useCompanyBranding();
 
   return (
     <AnimatePresence>
@@ -34,7 +36,7 @@ export function WelcomeModal({ customerName, onClose }: WelcomeModalProps) {
           <div className="bg-gradient-to-r from-[#2D2A5E] to-[#1E1B4B] px-6 py-5 flex items-center justify-between">
             <div>
               <p className="text-amber-400 text-xs font-semibold uppercase tracking-widest mb-1">
-                Welcome to SBE Portal
+                Welcome to {branding.companyName}
               </p>
               <h2 className="text-white text-lg font-bold">
                 {customerName ? `Hello, ${customerName}!` : "Hello!"}
@@ -51,7 +53,7 @@ export function WelcomeModal({ customerName, onClose }: WelcomeModalProps) {
           {/* Content */}
           <div className="px-6 py-5 space-y-4">
             <p className="text-gray-600 text-sm leading-relaxed">
-              Thank you for using the <span className="font-semibold text-gray-800">Sri Balaji Enterprises</span> ordering portal.
+              Thank you for using the <span className="font-semibold text-gray-800">{branding.companyName}</span> ordering portal.
               Here&apos;s a quick guide to get you started:
             </p>
 

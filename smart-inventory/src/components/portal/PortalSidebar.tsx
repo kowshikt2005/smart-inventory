@@ -9,6 +9,7 @@ import { ShoppingCart, Package, ChevronDown, Layers, Search, ArrowUpDown } from 
 import { useCart } from "@/components/portal/CartContext";
 import { cn } from "@/lib/utils";
 import { portalFetcher } from "@/lib/portal-fetcher";
+import { useCompanyBranding } from "@/hooks/use-company-branding";
 
 interface SubBrandNav {
   id: string;
@@ -27,6 +28,7 @@ export function PortalSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { totalItems } = useCart();
+  const { branding } = useCompanyBranding();
   const isLoginPage = pathname === "/portal/login";
 
   // Skip API call entirely on login page — user isn't authenticated yet
@@ -65,12 +67,12 @@ export function PortalSidebar() {
       {/* Logo */}
       <div className="flex items-center justify-center px-3 py-3 border-b border-white/[0.12]">
         <div className="w-full rounded-lg bg-white px-3 py-2 flex items-center justify-center min-h-[48px]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo-sbe.jpg?v=2"
-            alt="Sri Balaji Enterprises"
-            className="w-full h-auto object-contain max-h-9"
-          />
+          {branding.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={branding.logoUrl} alt={`${branding.companyName} logo`} className="w-full h-auto object-contain max-h-9" />
+          ) : (
+            <span className="text-center text-sm font-semibold text-indigo-950">{branding.companyName}</span>
+          )}
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 {
-  "name": "Sri Balaji Enterprises — Customer Portal",
-  "short_name": "SBE Portal",
+  "name": "Customer Portal",
+  "short_name": "Portal",
   "id": "/portal/",
   "description": "Order products, track your orders, and manage your account.",
   "start_url": "/portal/",
